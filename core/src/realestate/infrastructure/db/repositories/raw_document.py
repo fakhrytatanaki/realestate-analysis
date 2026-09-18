@@ -1,0 +1,85 @@
+"""Tortoise-backed raw document repository."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
+
+from realestate.domain.enums import RawDocumentStatus
+from realestate.domain.models import BlobRef, RawDocument, RawPayload
+from realestate.domain.ports.repositories import RawDocumentRepository
+from realestate.infrastructure.db.mappers import to_raw_document
+from realestate.infrastructure.db.models import RawDocumentModel
+
+
+class TortoiseRawDocumentRepository(RawDocumentRepository):
+    """Tracks archived payloads and their parse state."""
+
+    async def create(
+        self,
+        *,
+        source_key: str,
+        payload: RawPayload,
+        blob: BlobRef,
+        scrape_run_id: UUID | None = None,
+    ) -> RawDocument:
+        row = await RawDocumentModel.create(
+            id=uuid4(),
+            source_key=source_key,
+            external_id=payload.external_id,
+            kind=payload.kind,
+            status=RawDocumentStatus.PENDING,
+            blob_key=blob.key,
+            blob_uri=blob.uri,
+            content_type=blob.content_type,
+            size_bytes=blob.size_bytes,
+            sha256=blob.sha256,
+            source_url=payload.source_url,
+            meta=payload.meta,
+            scrape_run_id=scrape_run_id,
+        )
+        return to_raw_document(row)
+
+    async def get(self, document_id: UUID) -> RawDocument | None:
+        row = await RawDocumentModel.get_or_none(id=document_id)
+        return to_raw_document(row) if row else None
+
+    async def list_by_status(
+        self,
+        *,
+        source_key: str | None = None,
+        status: RawDocumentStatus = RawDocumentStatus.PENDING,
+        limit: int = 100,
+        fetched_after: datetime | None = None,
+    ) -> list[RawDocument]:
+        queryset = RawDocumentModel.filter(status=status)
+        if source_key is not None:
+            queryset = queryset.filter(source_key=source_key)
+        if fetched_after is not None:
+            queryset = queryset.filter(fetched_at__gte=fetched_after)
+        rows = await queryset.order_by("fetched_at").limit(limit)
+        return [to_raw_document(row) for row in rows]
+
+    async def mark_parsed(self, document_id: UUID) -> None:
+        await RawDocumentModel.filter(id=document_id).update(
+            status=RawDocumentStatus.PARSED,
+            parsed_at=datetime.now(UTC),
+            parse_error=None,
+        )
+
+    async def mark_failed(self, document_id: UUID, error: str) -> None:
+        row = await RawDocumentModel.get_or_none(id=document_id)
+        if row is None:
+            return
+        row.status = RawDocumentStatus.FAILED
+        row.parse_error = error[:8000]
+        row.attempts += 1
+        await row.save()
+
+    async def find_by_sha256(self, source_key: str, sha256: str) -> RawDocument | None:
+        row = (
+            await RawDocumentModel.filter(source_key=source_key, sha256=sha256)
+            .order_by("-fetched_at")
+            .first()
+        )
+        return to_raw_document(row) if row else None

@@ -1,0 +1,75 @@
+{
+  "page": 1,
+  "total": 3,
+  "results": [
+    {
+      "id": "eg-sale-2001",
+      "title": "Three-bedroom apartment for sale in Sheikh Zayed",
+      "description": "Delivered apartment in a finished compound, installments available over 8 years.",
+      "purpose": "sale",
+      "category": "apartment",
+      "price": {
+        "value": 6500000,
+        "currency": "EGP",
+        "period": "installment",
+        "installment_plan": { "down_payment": 1300000, "months": 96, "monthly_amount": 54167 }
+      },
+      "area": 165,
+      "beds": 3,
+      "baths": 2,
+      "location": {
+        "name": "Sheikh Zayed City, Giza",
+        "city": "Giza",
+        "district": "Sheikh Zayed",
+        "country": "EG",
+        "lat": 30.0254,
+        "lng": 30.9762
+      },
+      "url": "https://example.test/eg/listing/2001",
+      "created_at": "2026-07-11T12:00:00+00:00",
+      "delivery_year": 2027
+    },
+    {
+      "id": "eg-sale-2002",
+      "title": "Townhouse for sale in Madinaty",
+      "description": "Corner townhouse with roof and garden, ready to move.",
+      "purpose": "sale",
+      "category": "townhouse",
+      "price": { "value": 11000000, "currency": "EGP", "period": "total" },
+      "area": 290,
+      "beds": 4,
+      "baths": 3,
+      "location": {
+        "name": "Madinaty, New Cairo",
+        "city": "Cairo",
+        "district": "Madinaty",
+        "country": "EG",
+        "lat": 30.1064,
+        "lng": 31.6394
+      },
+      "url": "https://example.test/eg/listing/2002",
+      "created_at": "2026-08-02T16:45:00+00:00"
+    },
+    {
+      "id": "eg-sale-2003",
+      "title": "Building plot in Sixth of October",
+      "description": "Residential plot with permits in place.",
+      "purpose": "sale",
+      "category": "land",
+      "price": { "value": 9000, "currency": "EGP", "period": "per-sqm" },
+      "area": 600,
+      "beds": null,
+      "baths": null,
+      "location": {
+        "name": "Sixth of October City, Giza",
+        "city": "Giza",
+        "district": "6th of October",
+        "country": "EG",
+        "lat": 29.9285,
+        "lng": 30.9188
+      },
+      "url": "https://example.test/eg/listing/2003",
+      "created_at": "2026-06-18T11:20:00+00:00"
+    }
+  ]
+}

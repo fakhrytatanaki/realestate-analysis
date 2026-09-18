@@ -1,0 +1,48 @@
+{
+  "page": 1,
+  "total": 2,
+  "results": [
+    {
+      "id": "us-rent-3001",
+      "title": "One-bedroom condo in downtown Seattle",
+      "description": "Walkable Belltown location with parking included.",
+      "purpose": "rent",
+      "category": "apartment",
+      "price": { "value": 2400, "currency": "USD", "period": "monthly" },
+      "area": 68,
+      "beds": 1,
+      "baths": 1,
+      "location": {
+        "name": "Belltown, Seattle, WA",
+        "city": "Seattle",
+        "district": "Belltown",
+        "country": "US",
+        "lat": 47.6145,
+        "lng": -122.3448
+      },
+      "url": "https://example.test/us/listing/3001",
+      "created_at": "2026-09-08T18:00:00+00:00"
+    },
+    {
+      "id": "us-sale-3002",
+      "title": "Craftsman house for sale in Portland",
+      "description": "Restored 1920s craftsman with detached studio.",
+      "purpose": "sale",
+      "category": "house",
+      "price": { "value": 785000, "currency": "USD", "period": "total" },
+      "area": 195,
+      "beds": 3,
+      "baths": 2,
+      "location": {
+        "name": "Sellwood, Portland, OR",
+        "city": "Portland",
+        "district": "Sellwood",
+        "country": "US",
+        "lat": 45.4649,
+        "lng": -122.6544
+      },
+      "url": "https://example.test/us/listing/3002",
+      "created_at": "2026-08-28T15:30:00+00:00"
+    }
+  ]
+}

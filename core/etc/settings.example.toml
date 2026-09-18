@@ -1,0 +1,43 @@
+# Copy to etc/settings.toml. Any value can be overridden by environment
+# variables using the REALESTATE__ prefix and "__" as the nesting delimiter,
+# e.g. REALESTATE__DB__URL=postgres://...
+[app]
+name = "realestate-core"
+env = "local"          # local | staging | production
+debug = true
+admin_api_key = "dev-admin-key"   # required by POST /api/v1/sources/{key}/runs
+
+[db]
+url = "postgres://realestate:realestate@127.0.0.1:5432/realestate"
+
+[blob]
+backend = "local_fs"   # local_fs (s3 is the documented extension point)
+root = "var/blob"      # relative paths resolve against the core/ directory
+
+[logging]
+level = "INFO"
+stdout_enabled = true
+stdout_json = false    # false => human-readable lines, true => JSON
+file_enabled = true
+file_path = "var/log/app.log"
+
+[scheduler]
+enabled = true
+run_in_api = false     # true => scheduler runs inside the API process too
+timezone = "UTC"
+misfire_grace_seconds = 60
+
+[sources.fixture]
+enabled = true
+interval_minutes = 60
+params = { directory = "var/fixtures" }
+
+[sources.dubizzle_eg]
+enabled = false
+interval_minutes = 180
+params = {}
+
+[sources.zillow]
+enabled = false
+interval_minutes = 180
+params = {}

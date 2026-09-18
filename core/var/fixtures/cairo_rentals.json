@@ -1,0 +1,94 @@
+{
+  "page": 1,
+  "total": 4,
+  "results": [
+    {
+      "id": "eg-rent-1001",
+      "title": "Modern 2-bedroom apartment in Maadi with Nile view",
+      "description": "Fully furnished apartment on a quiet side street in Degla, Maadi. Close to metro.",
+      "purpose": "rent",
+      "category": "apartment",
+      "price": { "value": 18000, "currency": "EGP", "period": "monthly" },
+      "area": 120,
+      "beds": 2,
+      "baths": 1,
+      "location": {
+        "name": "Degla, Maadi, Cairo",
+        "city": "Cairo",
+        "district": "Maadi",
+        "country": "EG",
+        "lat": 29.9602,
+        "lng": 31.2569
+      },
+      "url": "https://example.test/eg/listing/1001",
+      "created_at": "2026-09-01T10:00:00+00:00",
+      "furnished": true,
+      "floor": 3
+    },
+    {
+      "id": "eg-rent-1002",
+      "title": "Spacious studio in Zamalek",
+      "description": "Bright studio near 26th of July Street, walking distance to cafes.",
+      "purpose": "rent",
+      "category": "studio",
+      "price": { "value": 12500, "currency": "EGP", "period": "monthly" },
+      "area": 55,
+      "beds": 1,
+      "baths": 1,
+      "location": {
+        "name": "Zamalek, Cairo",
+        "city": "Cairo",
+        "district": "Zamalek",
+        "country": "EG",
+        "lat": 30.0614,
+        "lng": 31.2197
+      },
+      "url": "https://example.test/eg/listing/1002",
+      "created_at": "2026-09-05T08:30:00+00:00",
+      "furnished": true
+    },
+    {
+      "id": "eg-rent-1003",
+      "title": "Family villa with garden in New Cairo",
+      "description": "Five-bedroom villa in a gated compound with private garden and pool access.",
+      "purpose": "rent",
+      "category": "villa",
+      "price": { "value": 95000, "currency": "EGP", "period": "monthly" },
+      "area": 420,
+      "beds": 5,
+      "baths": 4,
+      "location": {
+        "name": "Fifth Settlement, New Cairo",
+        "city": "Cairo",
+        "district": "New Cairo",
+        "country": "EG",
+        "lat": 30.0131,
+        "lng": 31.4969
+      },
+      "url": "https://example.test/eg/listing/1003",
+      "created_at": "2026-08-20T14:15:00+00:00",
+      "compound": "Katameya Heights"
+    },
+    {
+      "id": "eg-rent-1004",
+      "title": "Office floor in Downtown Cairo",
+      "description": "Open-plan office floor suitable for 20 desks, near Tahrir Square.",
+      "purpose": "rent",
+      "category": "office",
+      "price": { "value": 40000, "currency": "EGP", "period": "monthly" },
+      "area": 210,
+      "beds": null,
+      "baths": 2,
+      "location": {
+        "name": "Downtown, Cairo",
+        "city": "Cairo",
+        "district": "Downtown",
+        "country": "EG",
+        "lat": 30.0444,
+        "lng": 31.2357
+      },
+      "url": "https://example.test/eg/listing/1004",
+      "created_at": "2026-09-10T09:00:00+00:00"
+    }
+  ]
+}

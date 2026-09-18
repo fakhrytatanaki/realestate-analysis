@@ -1,0 +1,45 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+build/
+dist/
+.Python
+
+# --- Virtualenvs ---
+venv/
+.venv/
+env/
+
+# --- Tool caches ---
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# --- Local configuration and secrets ---
+# Committed as etc/settings.example.toml and .env.example instead.
+.env
+.env.*
+!.env.example
+core/etc/settings.toml
+core/etc/logging.toml
+
+# --- Mutable runtime data (var/) ---
+# Archived scrape payloads and logs are regenerated, never committed, but the
+# directories themselves are kept so a fresh clone has somewhere to write.
+core/var/blob/*
+!core/var/blob/.gitkeep
+core/var/log/*
+!core/var/log/.gitkeep
+# core/var/fixtures/ IS committed: it is the sample data the fixture source reads.
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store

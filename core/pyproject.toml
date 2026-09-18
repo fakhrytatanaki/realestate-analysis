@@ -1,0 +1,67 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "realestate"
+version = "0.1.0"
+description = "Classifieds / real-estate data aggregator"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141",
+    "uvicorn[standard]>=0.53",
+    "pydantic>=2.13",
+    "pydantic-settings>=2.15",
+    "tortoise-orm>=1.1.8,<2",
+    "asyncpg>=0.31",
+    "aerich>=0.10.1",
+    "httpx>=0.28",
+    "apscheduler>=3.11,<4",
+    "aiofiles>=25.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=1.0",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "types-aiofiles",
+]
+
+[project.scripts]
+realestate = "realestate.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.aerich]
+tortoise_orm = "realestate.config.tortoise.TORTOISE_ORM"
+location = "./migrations"
+src_folder = "./src"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+packages = ["realestate"]
+ignore_missing_imports = true
+disallow_untyped_defs = true
+
+[tool.ruff.lint.per-file-ignores]
+# Tortoise's inner `Meta` classes are a framework convention; annotating each
+# option as ClassVar would fight the ORM for no benefit.
+"src/realestate/infrastructure/db/models.py" = ["RUF012"]
+# Tests assert against the filesystem directly; blocking IO there is fine.
+"tests/*" = ["ASYNC240"]
