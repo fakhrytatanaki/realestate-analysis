@@ -27,7 +27,7 @@ def register_default_sources(registry: DataSourceRegistry) -> DataSourceRegistry
         display_name=DubizzleEgDataSource.display_name,
         country_code=DubizzleEgDataSource.country_code,
         factory=lambda ctx: DubizzleEgDataSource(log=ctx.log, params=ctx.params),
-        implemented=False,
+        implemented=True,
     )
     registry.register(
         key=ZillowDataSource.key,

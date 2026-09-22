@@ -234,7 +234,7 @@ def test_sources_lists_stubs_as_unimplemented(client: TestClient) -> None:
     by_key = {source["key"]: source for source in body}
     assert by_key["fixture"]["implemented"] is True
     assert by_key["fixture"]["enabled"] is True
-    assert by_key["dubizzle_eg"]["implemented"] is False
+    assert by_key["dubizzle_eg"]["implemented"] is True
     assert by_key["zillow"]["implemented"] is False
 
 
@@ -270,7 +270,7 @@ def test_trigger_returns_202_with_a_run_id(client: TestClient) -> None:
 
 def test_trigger_on_an_unimplemented_source_returns_501(client: TestClient) -> None:
     response = client.post(
-        "/api/v1/sources/dubizzle_eg/runs", headers={"X-Admin-Key": ADMIN_KEY}
+        "/api/v1/sources/zillow/runs", headers={"X-Admin-Key": ADMIN_KEY}
     )
 
     assert response.status_code == 501

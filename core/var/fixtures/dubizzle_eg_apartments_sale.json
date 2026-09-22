@@ -1,0 +1,1350 @@
+{
+  "took": 13,
+  "responses": [
+    {
+      "hits": {
+        "total": {
+          "value": 94438,
+          "relation": "eq"
+        },
+        "hits": [
+          {
+            "_source": {
+              "id": 29763518,
+              "objectID": 29763518,
+              "userExternalID": "00000000-957b-801f-8000-024213371337",
+              "sourceID": 2,
+              "state": "active",
+              "purpose": "for-sale",
+              "geography": {
+                "lat": 29.99352595,
+                "lng": 31.5196573
+              },
+              "geo_point": [
+                31.5196573,
+                29.99352595
+              ],
+              "price": 0.0,
+              "product": null,
+              "productInfo": null,
+              "activeProducts": {
+                "ad_limit_bump": {
+                  "expiresAt": 1792310530.210504,
+                  "appliedAt": 1789718530.210504,
+                  "productPurchaseId": 15277983,
+                  "name": {
+                    "ar": "Post another Ad",
+                    "en": ""
+                  }
+                }
+              },
+              "title": "شقه سوبر لوكس للبيع في الاندلس",
+              "title_l1": "Super Lux Apartment for Sale in Al-Andalus",
+              "description": "شقه ١٦٠ \nمتر للبيع\nالاندلس ٢\n  دور تانى \n اسانسير\n واجهه  \nعداد كهرباء\n حصه ف الارض \nمالك أصيل\n تنازل فى الجهاز\n   ٣ نوم \n   ٢ حمام  \n مخزن + جراج\nالفيو مسجد وجاردن\n٥,٠٠٠,٠٠٠",
+              "description_l1": "Apartment 160 \nmeters for sale\nAl Andalus 2\n second floor \nelevator\n facade  \nelectric meter\n share in the land \noriginal owner\n waiver in the device\n   3 rooms \n   2 bathrooms  \nstorage + garage\nthe view mosque and garden\n5,000,000",
+              "externalID": "504114527",
+              "slug": "شقه-سوبر-لوكس-للبيع-في-الاندلس",
+              "slug_l1": "super-lux-apartment-for-sale-in-al-andalus",
+              "createdAt": 1789718530.212738,
+              "updatedAt": 1789718536.0,
+              "extraFields": {
+                "ft": 160,
+                "type": "1",
+                "price": 5000000.0,
+                "rooms": "3",
+                "bathrooms": "2",
+                "furnished": "2",
+                "price_type": "price",
+                "payment_option": "1",
+                "completion_status": "1",
+                "deliverable": "no",
+                "video": "no",
+                "featured_agency": "no",
+                "panorama": "no",
+                "seller_verified": "no",
+                "delivery": null
+              },
+              "type": "general",
+              "agency": {
+                "id": 96511,
+                "objectID": 96511,
+                "name": "4U Real Estate",
+                "name_l1": "4U Real Estate",
+                "externalID": "26425",
+                "product": null,
+                "package": null,
+                "packageRef": null,
+                "productScore": null,
+                "licenses": [],
+                "logo": {
+                  "id": 153134723,
+                  "url": "https://olx-eg-production.s3.eu-west-1.amazonaws.com/image/153134723/73e226ab478b4ddbb3189a6cb5fbdfc2"
+                },
+                "slug": "4u-real-estate-26425",
+                "slug_l1": "4u-real-estate-26425",
+                "tr": 5,
+                "tier": 5,
+                "roles": [
+                  "managed_by_external_source",
+                  "unified_agency"
+                ],
+                "active": true,
+                "createdAt": "2025-10-02T07:15:33+00:00",
+                "commercialNumber": null,
+                "shortNumber": null,
+                "type": "real-estate",
+                "campaigns": [],
+                "badges": [],
+                "isPrimeDealership": false
+              },
+              "contactInfo": {
+                "roles": [
+                  "show_phone_number"
+                ],
+                "name": "محمد علي"
+              },
+              "videoCount": 0,
+              "documentCount": 0,
+              "panoramaCount": 0,
+              "isSellerVerified": false,
+              "formattedExtraFields": [
+                {
+                  "name": "المساحة (م٢)",
+                  "name_l1": "Area (m²)",
+                  "attribute": "ft",
+                  "formattedValue": "160",
+                  "formattedValue_l1": "160"
+                },
+                {
+                  "name": "النوع",
+                  "name_l1": "Type",
+                  "attribute": "type",
+                  "formattedValue": "شقة",
+                  "formattedValue_l1": "Apartment"
+                },
+                {
+                  "name": "السعر",
+                  "name_l1": "Price",
+                  "attribute": "price",
+                  "formattedValue": "5,000,000.00",
+                  "formattedValue_l1": "5,000,000.00"
+                },
+                {
+                  "name": "غرف نوم",
+                  "name_l1": "Bedrooms",
+                  "attribute": "rooms",
+                  "formattedValue": "3",
+                  "formattedValue_l1": "3"
+                },
+                {
+                  "name": "الحمامات",
+                  "name_l1": "Bathrooms",
+                  "attribute": "bathrooms",
+                  "formattedValue": "2",
+                  "formattedValue_l1": "2"
+                },
+                {
+                  "name": "مفروش",
+                  "name_l1": "Furnished",
+                  "attribute": "furnished",
+                  "formattedValue": "لا",
+                  "formattedValue_l1": "No"
+                },
+                {
+                  "name": "نوع السعر",
+                  "name_l1": "Price Type",
+                  "attribute": "price_type",
+                  "formattedValue": "السعر",
+                  "formattedValue_l1": "Price"
+                },
+                {
+                  "name": "طريقة الدفع",
+                  "name_l1": "Payment Option",
+                  "attribute": "payment_option",
+                  "formattedValue": "كاش",
+                  "formattedValue_l1": "Cash"
+                },
+                {
+                  "name": "حالة العقار",
+                  "name_l1": "Completion status",
+                  "attribute": "completion_status",
+                  "formattedValue": "جاهز",
+                  "formattedValue_l1": "Ready"
+                }
+              ],
+              "timestamp": 1789718530.212738,
+              "productScore": 8,
+              "coverPhoto": {
+                "id": 184834175,
+                "externalID": "42005167",
+                "title": "1001335002. jpg",
+                "orderIndex": 0,
+                "nimaScore": null,
+                "main": true
+              },
+              "photoCount": 1,
+              "keywords": "2 3 Apartment Cash No Price Ready السعر جاهز شقة كاش لا",
+              "documentsTags": [],
+              "format": "lite",
+              "location.lvl0": {
+                "id": 1,
+                "level": 0,
+                "externalID": "0-1",
+                "name": "مَصر",
+                "name_l1": "Egypt",
+                "slug": "egypt",
+                "slug_l1": "egypt",
+                "type": "country"
+              },
+              "location.lvl1": {
+                "id": 2,
+                "level": 1,
+                "externalID": "1-5",
+                "name": "القاهرة",
+                "name_l1": "Cairo",
+                "slug": "cairo",
+                "slug_l1": "cairo",
+                "type": "province"
+              },
+              "location.lvl2": {
+                "id": 58,
+                "level": 2,
+                "externalID": "2-288",
+                "name": "القاهرة الجديدة",
+                "name_l1": "New Cairo",
+                "slug": "new-cairo",
+                "slug_l1": "new-cairo",
+                "type": "city"
+              },
+              "location.lvl3": {
+                "id": 2587,
+                "level": 3,
+                "externalID": "3-3094",
+                "name": "التجمع الخامس",
+                "name_l1": "5th Settlement",
+                "slug": "5th-settlement",
+                "slug_l1": "5th-settlement",
+                "type": "neighbourhood"
+              },
+              "location.lvl4": {
+                "id": 2563,
+                "level": 4,
+                "externalID": "3-3070",
+                "name": "الاندلس",
+                "name_l1": "Al Andalous",
+                "slug": "al-andalous-2",
+                "slug_l1": "al-andalous-2",
+                "type": "neighbourhood"
+              },
+              "location": [
+                {
+                  "id": 1,
+                  "level": 0,
+                  "externalID": "0-1",
+                  "name": "مَصر",
+                  "name_l1": "Egypt",
+                  "slug": "egypt",
+                  "slug_l1": "egypt",
+                  "type": "country"
+                },
+                {
+                  "id": 2,
+                  "level": 1,
+                  "externalID": "1-5",
+                  "name": "القاهرة",
+                  "name_l1": "Cairo",
+                  "slug": "cairo",
+                  "slug_l1": "cairo",
+                  "type": "province"
+                },
+                {
+                  "id": 58,
+                  "level": 2,
+                  "externalID": "2-288",
+                  "name": "القاهرة الجديدة",
+                  "name_l1": "New Cairo",
+                  "slug": "new-cairo",
+                  "slug_l1": "new-cairo",
+                  "type": "city"
+                },
+                {
+                  "id": 2587,
+                  "level": 3,
+                  "externalID": "3-3094",
+                  "name": "التجمع الخامس",
+                  "name_l1": "5th Settlement",
+                  "slug": "5th-settlement",
+                  "slug_l1": "5th-settlement",
+                  "type": "neighbourhood"
+                },
+                {
+                  "id": 2563,
+                  "level": 4,
+                  "externalID": "3-3070",
+                  "name": "الاندلس",
+                  "name_l1": "Al Andalous",
+                  "slug": "al-andalous-2",
+                  "slug_l1": "al-andalous-2",
+                  "type": "neighbourhood"
+                }
+              ],
+              "category.lvl0": {
+                "id": 2,
+                "level": 0,
+                "externalID": "138",
+                "name": "عقارات",
+                "name_l1": "Properties",
+                "slug": "properties",
+                "slug_l1": "properties",
+                "roles": [
+                  "show_phone_number",
+                  "search_type_recency_first",
+                  "allows_btt",
+                  "non_editable_location",
+                  "enabled_for_seo",
+                  "enabled_for_sitemap",
+                  "enabled_for_limited_ad_conversion",
+                  "sync_c2c_ad_with_bayut",
+                  "enabled_for_ads_sitemap"
+                ],
+                "seoName": null,
+                "seoName_l1": null,
+                "nameSingular": "عقارات",
+                "nameSingular_l1": "عقارات"
+              },
+              "category.lvl1": {
+                "id": 66,
+                "level": 1,
+                "externalID": "95",
+                "name": "شقق للبيع",
+                "name_l1": "Apartments for Sale",
+                "slug": "apartments-duplex-for-sale",
+                "slug_l1": "apartments-duplex-for-sale",
+                "roles": [
+                  "show_phone_number",
+                  "search_type_recency_first",
+                  "allows_btt",
+                  "non_editable_location",
+                  "sync_ads_to_external_source",
+                  "dpv_mosaic_images",
+                  "enabled_for_seo",
+                  "enabled_for_sitemap",
+                  "enabled_for_ads_sitemap"
+                ],
+                "seoName": "شقق للبيع",
+                "seoName_l1": "Apartments for Sale",
+                "nameSingular": "شقق للبيع",
+                "nameSingular_l1": "شقق للبيع"
+              },
+              "category": [
+                {
+                  "id": 2,
+                  "level": 0,
+                  "externalID": "138",
+                  "name": "عقارات",
+                  "name_l1": "Properties",
+                  "slug": "properties",
+                  "slug_l1": "properties",
+                  "roles": [
+                    "show_phone_number",
+                    "search_type_recency_first",
+                    "allows_btt",
+                    "non_editable_location",
+                    "enabled_for_seo",
+                    "enabled_for_sitemap",
+                    "enabled_for_limited_ad_conversion",
+                    "sync_c2c_ad_with_bayut",
+                    "enabled_for_ads_sitemap"
+                  ],
+                  "seoName": null,
+                  "seoName_l1": null,
+                  "nameSingular": "عقارات",
+                  "nameSingular_l1": "عقارات"
+                },
+                {
+                  "id": 66,
+                  "level": 1,
+                  "externalID": "95",
+                  "name": "شقق للبيع",
+                  "name_l1": "Apartments for Sale",
+                  "slug": "apartments-duplex-for-sale",
+                  "slug_l1": "apartments-duplex-for-sale",
+                  "roles": [
+                    "show_phone_number",
+                    "search_type_recency_first",
+                    "allows_btt",
+                    "non_editable_location",
+                    "sync_ads_to_external_source",
+                    "dpv_mosaic_images",
+                    "enabled_for_seo",
+                    "enabled_for_sitemap",
+                    "enabled_for_ads_sitemap"
+                  ],
+                  "seoName": "شقق للبيع",
+                  "seoName_l1": "Apartments for Sale",
+                  "nameSingular": "شقق للبيع",
+                  "nameSingular_l1": "شقق للبيع"
+                }
+              ],
+              "canApplyBadges": false,
+              "photos": [
+                {
+                  "id": 184834175,
+                  "externalID": "42005167",
+                  "title": "1001335002. jpg",
+                  "orderIndex": 0,
+                  "nimaScore": null
+                }
+              ],
+              "external_link": null,
+              "external_link_l1": null
+            }
+          },
+          {
+            "_source": {
+              "id": 28894557,
+              "objectID": 28894557,
+              "userExternalID": "74755272-80a3-442a-9734-77bc9fafdfe9",
+              "sourceID": 2,
+              "state": "active",
+              "purpose": "for-sale",
+              "geography": {
+                "lat": 30.06805,
+                "lng": 31.406379
+              },
+              "geo_point": [
+                31.406379,
+                30.06805
+              ],
+              "price": 0.0,
+              "product": "free",
+              "productInfo": null,
+              "activeProducts": {
+                "ad_limit_bump": {
+                  "expiresAt": 1792310525.606616,
+                  "appliedAt": 1789718525.606616,
+                  "productPurchaseId": 15277981,
+                  "name": {
+                    "ar": "Post another Ad",
+                    "en": ""
+                  }
+                }
+              },
+              "title": "شقة 162م بجاردن بخصم 50% عالكاش للبيع امام المطار فى تاج سيتى _ التجمع الاول _ القاهرة _ شقه Taj City",
+              "title_l1": "Apartment for sale in Taj City, First Settlement, Cairo, with a 50% discount for cash purchase. 162 sq m with a garden, located opposite the airport.",
+              "description": "شقة ارضى بجاردن للبيع فى كمبوند تاج سيتى \nاحدى مشروعات شركة مدينة مصر \nامام المطار و لة بوابة اخرى عند فندق كمبنيسكى \nمساحة الشقة 162م \nمساحة الجاردن 56م \nمكونه من \n3 غرف + 3 حمام \nفيو مميز \nالكمبوند متكامل الخدامات والمرافق \nبمقدم تعاقد 1,730,000\nسداد على 10 سنين \nللتواصل [redacted phone number]#(01006199939) + واتس \nالمبلغ الموجود سعر الكاش",
+              "description_l1": "Ground floor apartment with garden for sale in Taj City Compound\n\nA project by Madinet Misr\n\nLocated opposite the airport and with another entrance near the Kempinski Hotel\n\nApartment area: 162 sq m\n\nGarden area: 56 sq m\n\nConsists of:\n\n3 bedrooms + 3 bathrooms\n\nStunning view\n\nThe compound offers comprehensive services and amenities\n\nDown payment: 1,730,000 EGP\n\nPayment over 10 years\n\nContact: [redacted phone number]#(01006199939) (WhatsApp available)\n\nCash price",
+              "externalID": "503791100",
+              "slug": "شقة-162م-بجاردن-بخصم-50-عالكاش-للبيع-امام-المطار-فى-تاج-سيتى-_-التجمع-الاول-_-القاهرة-_-شقه-taj-city",
+              "slug_l1": "apartment-for-sale-in-taj-city-first-settlement-cairo-with-a-50-discount-for-cash-purchase-162-sq-m-with-a-garden-located-opposite-the-airport",
+              "createdAt": 1789718525.608023,
+              "updatedAt": 1789718526.0,
+              "extraFields": {
+                "ft": 162,
+                "type": "1",
+                "price": 8655000.0,
+                "rooms": "3",
+                "features": [
+                  "8",
+                  "14",
+                  "21"
+                ],
+                "bathrooms": "3",
+                "price_type": "price",
+                "down_payment": 1730000,
+                "payment_option": "1",
+                "completion_status": "1",
+                "construction_state": "2",
+                "deliverable": "no",
+                "video": "no",
+                "featured_agency": "no",
+                "panorama": "no",
+                "seller_verified": "yes",
+                "delivery": null
+              },
+              "type": "general",
+              "agency": {
+                "id": 6813,
+                "objectID": 6813,
+                "name": "Imkan Investment",
+                "name_l1": "Imkan Investment",
+                "externalID": "6169",
+                "product": "free",
+                "package": null,
+                "packageRef": null,
+                "productScore": 0,
+                "licenses": [
+                  {
+                    "number": "1",
+                    "authority": "ORN"
+                  }
+                ],
+                "logo": {
+                  "id": 81720724,
+                  "url": "https://olx-eg-production.s3.eu-west-1.amazonaws.com/image/81720724/c359b8a03e3a46e59511cbb50ccac4e7"
+                },
+                "slug": "imkan-investment-6169",
+                "slug_l1": "imkan-investment-6169",
+                "tr": 1,
+                "tier": 1,
+                "roles": [
+                  "unified_agency",
+                  "managed_by_external_source"
+                ],
+                "active": true,
+                "createdAt": "2022-06-08T15:26:30+00:00",
+                "commercialNumber": null,
+                "shortNumber": null,
+                "type": "real-estate",
+                "campaigns": [],
+                "badges": [],
+                "isPrimeDealership": false
+              },
+              "contactInfo": {
+                "roles": [
+                  "show_phone_number"
+                ],
+                "name": "mahmoud"
+              },
+              "videoCount": 0,
+              "documentCount": 0,
+              "panoramaCount": 0,
+              "isSellerVerified": true,
+              "formattedExtraFields": [
+                {
+                  "name": "المساحة (م٢)",
+                  "name_l1": "Area (m²)",
+                  "attribute": "ft",
+                  "formattedValue": "162",
+                  "formattedValue_l1": "162"
+                },
+                {
+                  "name": "النوع",
+                  "name_l1": "Type",
+                  "attribute": "type",
+                  "formattedValue": "شقة",
+                  "formattedValue_l1": "Apartment"
+                },
+                {
+                  "name": "السعر",
+                  "name_l1": "Price",
+                  "attribute": "price",
+                  "formattedValue": "8,655,000.00",
+                  "formattedValue_l1": "8,655,000.00"
+                },
+                {
+                  "name": "غرف نوم",
+                  "name_l1": "Bedrooms",
+                  "attribute": "rooms",
+                  "formattedValue": "3",
+                  "formattedValue_l1": "3"
+                },
+                {
+                  "name": "الكماليات",
+                  "name_l1": "Amenities",
+                  "attribute": "features",
+                  "formattedValue": [
+                    "حديقة خاصة",
+                    "حمام سباحة",
+                    "تليفون أرضى"
+                  ],
+                  "formattedValue_l1": [
+                    "Private Garden",
+                    "Pool",
+                    "Landline"
+                  ]
+                },
+                {
+                  "name": "الحمامات",
+                  "name_l1": "Bathrooms",
+                  "attribute": "bathrooms",
+                  "formattedValue": "3",
+                  "formattedValue_l1": "3"
+                },
+                {
+                  "name": "نوع السعر",
+                  "name_l1": "Price Type",
+                  "attribute": "price_type",
+                  "formattedValue": "السعر",
+                  "formattedValue_l1": "Price"
+                },
+                {
+                  "name": "مقدم",
+                  "name_l1": "Down Payment",
+                  "attribute": "down_payment",
+                  "formattedValue": "1,730,000",
+                  "formattedValue_l1": "1,730,000"
+                },
+                {
+                  "name": "طريقة الدفع",
+                  "name_l1": "Payment Option",
+                  "attribute": "payment_option",
+                  "formattedValue": "كاش",
+                  "formattedValue_l1": "Cash"
+                },
+                {
+                  "name": "حالة العقار",
+                  "name_l1": "Completion status",
+                  "attribute": "completion_status",
+                  "formattedValue": "جاهز",
+                  "formattedValue_l1": "Ready"
+                },
+                {
+                  "name": "شروط التسليم",
+                  "name_l1": "Delivery Term",
+                  "attribute": "construction_state",
+                  "formattedValue": "بدون تشطيب",
+                  "formattedValue_l1": "Not Finished"
+                }
+              ],
+              "timestamp": 1789718525.608023,
+              "productScore": 8,
+              "coverPhoto": {
+                "id": 178201426,
+                "externalID": "37886212",
+                "title": "WhatsApp Image 2025-11-25 at 3.33. 26 PM (1). jpeg",
+                "orderIndex": 0,
+                "nimaScore": null,
+                "main": true
+              },
+              "photoCount": 10,
+              "keywords": "3 Apartment Cash Landline Not Finished Pool Price Private Garden Ready السعر بدون تشطيب تليفون أرضى جاهز حديقة خاصة حمام سباحة شقة كاش",
+              "documentsTags": [],
+              "format": "lite",
+              "location.lvl0": {
+                "id": 1,
+                "level": 0,
+                "externalID": "0-1",
+                "name": "مَصر",
+                "name_l1": "Egypt",
+                "slug": "egypt",
+                "slug_l1": "egypt",
+                "type": "country"
+              },
+              "location.lvl1": {
+                "id": 2,
+                "level": 1,
+                "externalID": "1-5",
+                "name": "القاهرة",
+                "name_l1": "Cairo",
+                "slug": "cairo",
+                "slug_l1": "cairo",
+                "type": "province"
+              },
+              "location.lvl2": {
+                "id": 58,
+                "level": 2,
+                "externalID": "2-288",
+                "name": "القاهرة الجديدة",
+                "name_l1": "New Cairo",
+                "slug": "new-cairo",
+                "slug_l1": "new-cairo",
+                "type": "city"
+              },
+              "location.lvl3": {
+                "id": 2585,
+                "level": 3,
+                "externalID": "3-3092",
+                "name": "التجمع الاول",
+                "name_l1": "1st Settlement",
+                "slug": "1st-settlement",
+                "slug_l1": "1st-settlement",
+                "type": "neighbourhood"
+              },
+              "location.lvl4": {
+                "id": 2133,
+                "level": 4,
+                "externalID": "3-1920",
+                "name": "كومباوند تاج سيتي",
+                "name_l1": "Taj City Compound",
+                "slug": "taj-city-compound",
+                "slug_l1": "taj-city-compound",
+                "type": "neighbourhood"
+              },
+              "location": [
+                {
+                  "id": 1,
+                  "level": 0,
+                  "externalID": "0-1",
+                  "name": "مَصر",
+                  "name_l1": "Egypt",
+                  "slug": "egypt",
+                  "slug_l1": "egypt",
+                  "type": "country"
+                },
+                {
+                  "id": 2,
+                  "level": 1,
+                  "externalID": "1-5",
+                  "name": "القاهرة",
+                  "name_l1": "Cairo",
+                  "slug": "cairo",
+                  "slug_l1": "cairo",
+                  "type": "province"
+                },
+                {
+                  "id": 58,
+                  "level": 2,
+                  "externalID": "2-288",
+                  "name": "القاهرة الجديدة",
+                  "name_l1": "New Cairo",
+                  "slug": "new-cairo",
+                  "slug_l1": "new-cairo",
+                  "type": "city"
+                },
+                {
+                  "id": 2585,
+                  "level": 3,
+                  "externalID": "3-3092",
+                  "name": "التجمع الاول",
+                  "name_l1": "1st Settlement",
+                  "slug": "1st-settlement",
+                  "slug_l1": "1st-settlement",
+                  "type": "neighbourhood"
+                },
+                {
+                  "id": 2133,
+                  "level": 4,
+                  "externalID": "3-1920",
+                  "name": "كومباوند تاج سيتي",
+                  "name_l1": "Taj City Compound",
+                  "slug": "taj-city-compound",
+                  "slug_l1": "taj-city-compound",
+                  "type": "neighbourhood"
+                }
+              ],
+              "category.lvl0": {
+                "id": 2,
+                "level": 0,
+                "externalID": "138",
+                "name": "عقارات",
+                "name_l1": "Properties",
+                "slug": "properties",
+                "slug_l1": "properties",
+                "roles": [
+                  "show_phone_number",
+                  "search_type_recency_first",
+                  "allows_btt",
+                  "non_editable_location",
+                  "enabled_for_seo",
+                  "enabled_for_sitemap",
+                  "enabled_for_limited_ad_conversion",
+                  "sync_c2c_ad_with_bayut",
+                  "enabled_for_ads_sitemap"
+                ],
+                "seoName": null,
+                "seoName_l1": null,
+                "nameSingular": "عقارات",
+                "nameSingular_l1": "عقارات"
+              },
+              "category.lvl1": {
+                "id": 66,
+                "level": 1,
+                "externalID": "95",
+                "name": "شقق للبيع",
+                "name_l1": "Apartments for Sale",
+                "slug": "apartments-duplex-for-sale",
+                "slug_l1": "apartments-duplex-for-sale",
+                "roles": [
+                  "show_phone_number",
+                  "search_type_recency_first",
+                  "allows_btt",
+                  "non_editable_location",
+                  "sync_ads_to_external_source",
+                  "dpv_mosaic_images",
+                  "enabled_for_seo",
+                  "enabled_for_sitemap",
+                  "enabled_for_ads_sitemap"
+                ],
+                "seoName": "شقق للبيع",
+                "seoName_l1": "Apartments for Sale",
+                "nameSingular": "شقق للبيع",
+                "nameSingular_l1": "شقق للبيع"
+              },
+              "category": [
+                {
+                  "id": 2,
+                  "level": 0,
+                  "externalID": "138",
+                  "name": "عقارات",
+                  "name_l1": "Properties",
+                  "slug": "properties",
+                  "slug_l1": "properties",
+                  "roles": [
+                    "show_phone_number",
+                    "search_type_recency_first",
+                    "allows_btt",
+                    "non_editable_location",
+                    "enabled_for_seo",
+                    "enabled_for_sitemap",
+                    "enabled_for_limited_ad_conversion",
+                    "sync_c2c_ad_with_bayut",
+                    "enabled_for_ads_sitemap"
+                  ],
+                  "seoName": null,
+                  "seoName_l1": null,
+                  "nameSingular": "عقارات",
+                  "nameSingular_l1": "عقارات"
+                },
+                {
+                  "id": 66,
+                  "level": 1,
+                  "externalID": "95",
+                  "name": "شقق للبيع",
+                  "name_l1": "Apartments for Sale",
+                  "slug": "apartments-duplex-for-sale",
+                  "slug_l1": "apartments-duplex-for-sale",
+                  "roles": [
+                    "show_phone_number",
+                    "search_type_recency_first",
+                    "allows_btt",
+                    "non_editable_location",
+                    "sync_ads_to_external_source",
+                    "dpv_mosaic_images",
+                    "enabled_for_seo",
+                    "enabled_for_sitemap",
+                    "enabled_for_ads_sitemap"
+                  ],
+                  "seoName": "شقق للبيع",
+                  "seoName_l1": "Apartments for Sale",
+                  "nameSingular": "شقق للبيع",
+                  "nameSingular_l1": "شقق للبيع"
+                }
+              ],
+              "canApplyBadges": false,
+              "photos": [
+                {
+                  "id": 178201426,
+                  "externalID": "37886212",
+                  "title": "WhatsApp Image 2025-11-25 at 3.33. 26 PM (1). jpeg",
+                  "orderIndex": 0,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201427,
+                  "externalID": "37886213",
+                  "title": "WhatsApp Image 2024-02-07 at 4.53. 51 PM (1). jpeg",
+                  "orderIndex": 1,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201428,
+                  "externalID": "37886214",
+                  "title": "WhatsApp Image 2024-02-07 at 4.53. 58 PM (2). jpeg",
+                  "orderIndex": 2,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201429,
+                  "externalID": "37886215",
+                  "title": "WhatsApp Image 2024-02-07 at 4.53. 58 PM (1). jpeg",
+                  "orderIndex": 3,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201430,
+                  "externalID": "37886216",
+                  "title": "WhatsApp Image 2024-02-07 at 4.53. 56 PM. jpeg",
+                  "orderIndex": 4,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201431,
+                  "externalID": "37886217",
+                  "title": "WhatsApp Image 2024-02-07 at 4.54. 01 PM. jpeg",
+                  "orderIndex": 5,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201432,
+                  "externalID": "37886218",
+                  "title": "WhatsApp Image 2024-02-07 at 4.53. 43 PM. jpeg",
+                  "orderIndex": 6,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201433,
+                  "externalID": "37886219",
+                  "title": "WhatsApp Image 2024-02-07 at 4.53. 49 PM. jpeg",
+                  "orderIndex": 7,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201434,
+                  "externalID": "37886220",
+                  "title": "WhatsApp Image 2024-02-07 at 4.53. 50 PM (1). jpeg",
+                  "orderIndex": 8,
+                  "nimaScore": null
+                },
+                {
+                  "id": 178201435,
+                  "externalID": "37886221",
+                  "title": "WhatsApp Image 2024-02-07 at 4.53. 54 PM. jpeg",
+                  "orderIndex": 9,
+                  "nimaScore": null
+                }
+              ],
+              "external_link": null,
+              "external_link_l1": null
+            }
+          },
+          {
+            "_source": {
+              "id": 29719052,
+              "objectID": 29719052,
+              "userExternalID": "18eeffb7-25bc-446e-824d-ebd8e4e169cb",
+              "sourceID": 1,
+              "state": "active",
+              "purpose": "for-sale",
+              "geography": {
+                "lat": 30.09093,
+                "lng": 31.32778
+              },
+              "geo_point": [
+                31.32778,
+                30.09093
+              ],
+              "price": 0.0,
+              "product": null,
+              "productInfo": null,
+              "activeProducts": {
+                "ad_limit_bump": {
+                  "expiresAt": 1792051247.224965,
+                  "appliedAt": 1789459247.224965,
+                  "productPurchaseId": 15192779,
+                  "name": {
+                    "ar": "عقارات- اعلان اقتصادي",
+                    "en": "Property - Saver"
+                  }
+                }
+              },
+              "title": "للبيع من المالك بدون وسيط شقة 200م٢ في ارض الجولف",
+              "title_l1": "للبيع من المالك بدون وسيط شقة 200م٢ في ارض الجولف",
+              "description": "للبيع شقة في ارض الجولف شارع مختار المصري دقيقة من شارع الثورة وشارع نبيل الوقاد وامام مستشفى فلسطين كما موضح بالصور \nالمساحة : ٢٠٠م٢\n٣ قطع ريسبشن \n٣ غرف نوم \n٢ حمام\nمطبخ \nتشطيب سوبر لوكس \nالعمارة مدخل رخام بالكامل + اسانسير \nالدور الثالث \nبحري صريح \nيوجد حصة بالارض \nالبيع بدون اي ملحقات \nالتواصل للجادين فقط \nالسعر: \n7,500,000 كاش نهائي بدون اي ملحقات",
+              "description_l1": "للبيع شقة في ارض الجولف شارع مختار المصري دقيقة من شارع الثورة وشارع نبيل الوقاد وامام مستشفى فلسطين كما موضح بالصور \nالمساحة : ٢٠٠م٢\n٣ قطع ريسبشن \n٣ غرف نوم \n٢ حمام\nمطبخ \nتشطيب سوبر لوكس \nالعمارة مدخل رخام بالكامل + اسانسير \nالدور الثالث \nبحري صريح \nيوجد حصة بالارض \nالبيع بدون اي ملحقات \nالتواصل للجادين فقط \nالسعر: \n7,500,000 كاش نهائي بدون اي ملحقات",
+              "externalID": "208983073",
+              "slug": "للبيع-من-المالك-بدون-وسيط-شقة-200م٢-في-ارض-الجولف",
+              "slug_l1": "للبيع-من-المالك-بدون-وسيط-شقة-200م٢-في-ارض-الجولف",
+              "createdAt": 1789459247.226706,
+              "updatedAt": 1789467255.367836,
+              "extraFields": {
+                "ft": 170,
+                "type": "1",
+                "price": 7500000,
+                "rooms": "3",
+                "bathrooms": "2",
+                "ownership": "primary",
+                "ga_user_id": "6045C7CF590447718746BE09A75D9503",
+                "price_type": "price",
+                "floor_level": "5",
+                "ga_session_id": "1789465524",
+                "payment_option": "1",
+                "completion_status": "1",
+                "construction_state": "1",
+                "deliverable": "no",
+                "video": "no",
+                "featured_agency": "no",
+                "panorama": "no",
+                "seller_verified": "no",
+                "delivery": null
+              },
+              "type": "general",
+              "contactInfo": {
+                "roles": [
+                  "allow_chat_communication",
+                  "show_phone_number"
+                ],
+                "name": "Mm"
+              },
+              "videoCount": 0,
+              "documentCount": 0,
+              "panoramaCount": 0,
+              "isSellerVerified": false,
+              "formattedExtraFields": [
+                {
+                  "name": "المساحة (م٢)",
+                  "name_l1": "Area (m²)",
+                  "attribute": "ft",
+                  "formattedValue": "170",
+                  "formattedValue_l1": "170"
+                },
+                {
+                  "name": "النوع",
+                  "name_l1": "Type",
+                  "attribute": "type",
+                  "formattedValue": "شقة",
+                  "formattedValue_l1": "Apartment"
+                },
+                {
+                  "name": "السعر",
+                  "name_l1": "Price",
+                  "attribute": "price",
+                  "formattedValue": "7,500,000",
+                  "formattedValue_l1": "7,500,000"
+                },
+                {
+                  "name": "غرف نوم",
+                  "name_l1": "Bedrooms",
+                  "attribute": "rooms",
+                  "formattedValue": "3",
+                  "formattedValue_l1": "3"
+                },
+                {
+                  "name": "الحمامات",
+                  "name_l1": "Bathrooms",
+                  "attribute": "bathrooms",
+                  "formattedValue": "2",
+                  "formattedValue_l1": "2"
+                },
+                {
+                  "name": "ملكية",
+                  "name_l1": "Ownership",
+                  "attribute": "ownership",
+                  "formattedValue": "أول سكن",
+                  "formattedValue_l1": "Primary"
+                },
+                {
+                  "name": "نوع السعر",
+                  "name_l1": "Price Type",
+                  "attribute": "price_type",
+                  "formattedValue": "السعر",
+                  "formattedValue_l1": "Price"
+                },
+                {
+                  "name": "الطابق",
+                  "name_l1": "Level",
+                  "attribute": "floor_level",
+                  "formattedValue": "3",
+                  "formattedValue_l1": "3"
+                },
+                {
+                  "name": "طريقة الدفع",
+                  "name_l1": "Payment Option",
+                  "attribute": "payment_option",
+                  "formattedValue": "كاش",
+                  "formattedValue_l1": "Cash"
+                },
+                {
+                  "name": "حالة العقار",
+                  "name_l1": "Completion status",
+                  "attribute": "completion_status",
+                  "formattedValue": "جاهز",
+                  "formattedValue_l1": "Ready"
+                },
+                {
+                  "name": "شروط التسليم",
+                  "name_l1": "Delivery Term",
+                  "attribute": "construction_state",
+                  "formattedValue": "متشطب",
+                  "formattedValue_l1": "Finished"
+                }
+              ],
+              "timestamp": 1789718447.224965,
+              "productScore": 8,
+              "coverPhoto": {
+                "id": 184487867,
+                "externalID": "2b4fee54-0a50-44cb-9427-4133b9f80f54-fb3b33a5-2335-4cc3-94ca-536ad1f7efe3",
+                "title": null,
+                "orderIndex": 0,
+                "nimaScore": null,
+                "main": true
+              },
+              "photoCount": 15,
+              "keywords": "2 3 Apartment Cash Finished Price Primary Ready أول سكن السعر جاهز شقة كاش متشطب",
+              "documentsTags": [],
+              "format": "lite",
+              "location.lvl0": {
+                "id": 1,
+                "level": 0,
+                "externalID": "0-1",
+                "name": "مَصر",
+                "name_l1": "Egypt",
+                "slug": "egypt",
+                "slug_l1": "egypt",
+                "type": "country"
+              },
+              "location.lvl1": {
+                "id": 2,
+                "level": 1,
+                "externalID": "1-5",
+                "name": "القاهرة",
+                "name_l1": "Cairo",
+                "slug": "cairo",
+                "slug_l1": "cairo",
+                "type": "province"
+              },
+              "location.lvl2": {
+                "id": 53,
+                "level": 2,
+                "externalID": "2-263",
+                "name": "مصر الجديدة",
+                "name_l1": "Heliopolis",
+                "slug": "heliopolis",
+                "slug_l1": "heliopolis",
+                "type": "city"
+              },
+              "location.lvl3": {
+                "id": 4661,
+                "level": 3,
+                "externalID": "3453",
+                "name": "ارض الجولف",
+                "name_l1": "Ard El Golf",
+                "slug": "ard-el-golf-heliopolis",
+                "slug_l1": "ard-el-golf-heliopolis"
+              },
+              "location": [
+                {
+                  "id": 1,
+                  "level": 0,
+                  "externalID": "0-1",
+                  "name": "مَصر",
+                  "name_l1": "Egypt",
+                  "slug": "egypt",
+                  "slug_l1": "egypt",
+                  "type": "country"
+                },
+                {
+                  "id": 2,
+                  "level": 1,
+                  "externalID": "1-5",
+                  "name": "القاهرة",
+                  "name_l1": "Cairo",
+                  "slug": "cairo",
+                  "slug_l1": "cairo",
+                  "type": "province"
+                },
+                {
+                  "id": 53,
+                  "level": 2,
+                  "externalID": "2-263",
+                  "name": "مصر الجديدة",
+                  "name_l1": "Heliopolis",
+                  "slug": "heliopolis",
+                  "slug_l1": "heliopolis",
+                  "type": "city"
+                },
+                {
+                  "id": 4661,
+                  "level": 3,
+                  "externalID": "3453",
+                  "name": "ارض الجولف",
+                  "name_l1": "Ard El Golf",
+                  "slug": "ard-el-golf-heliopolis",
+                  "slug_l1": "ard-el-golf-heliopolis"
+                }
+              ],
+              "category.lvl0": {
+                "id": 2,
+                "level": 0,
+                "externalID": "138",
+                "name": "عقارات",
+                "name_l1": "Properties",
+                "slug": "properties",
+                "slug_l1": "properties",
+                "roles": [
+                  "show_phone_number",
+                  "search_type_recency_first",
+                  "allows_btt",
+                  "non_editable_location",
+                  "enabled_for_seo",
+                  "enabled_for_sitemap",
+                  "enabled_for_limited_ad_conversion",
+                  "sync_c2c_ad_with_bayut",
+                  "enabled_for_ads_sitemap"
+                ],
+                "seoName": null,
+                "seoName_l1": null,
+                "nameSingular": "عقارات",
+                "nameSingular_l1": "عقارات"
+              },
+              "category.lvl1": {
+                "id": 66,
+                "level": 1,
+                "externalID": "95",
+                "name": "شقق للبيع",
+                "name_l1": "Apartments for Sale",
+                "slug": "apartments-duplex-for-sale",
+                "slug_l1": "apartments-duplex-for-sale",
+                "roles": [
+                  "show_phone_number",
+                  "search_type_recency_first",
+                  "allows_btt",
+                  "non_editable_location",
+                  "sync_ads_to_external_source",
+                  "dpv_mosaic_images",
+                  "enabled_for_seo",
+                  "enabled_for_sitemap",
+                  "enabled_for_ads_sitemap"
+                ],
+                "seoName": "شقق للبيع",
+                "seoName_l1": "Apartments for Sale",
+                "nameSingular": "شقق للبيع",
+                "nameSingular_l1": "شقق للبيع"
+              },
+              "category": [
+                {
+                  "id": 2,
+                  "level": 0,
+                  "externalID": "138",
+                  "name": "عقارات",
+                  "name_l1": "Properties",
+                  "slug": "properties",
+                  "slug_l1": "properties",
+                  "roles": [
+                    "show_phone_number",
+                    "search_type_recency_first",
+                    "allows_btt",
+                    "non_editable_location",
+                    "enabled_for_seo",
+                    "enabled_for_sitemap",
+                    "enabled_for_limited_ad_conversion",
+                    "sync_c2c_ad_with_bayut",
+                    "enabled_for_ads_sitemap"
+                  ],
+                  "seoName": null,
+                  "seoName_l1": null,
+                  "nameSingular": "عقارات",
+                  "nameSingular_l1": "عقارات"
+                },
+                {
+                  "id": 66,
+                  "level": 1,
+                  "externalID": "95",
+                  "name": "شقق للبيع",
+                  "name_l1": "Apartments for Sale",
+                  "slug": "apartments-duplex-for-sale",
+                  "slug_l1": "apartments-duplex-for-sale",
+                  "roles": [
+                    "show_phone_number",
+                    "search_type_recency_first",
+                    "allows_btt",
+                    "non_editable_location",
+                    "sync_ads_to_external_source",
+                    "dpv_mosaic_images",
+                    "enabled_for_seo",
+                    "enabled_for_sitemap",
+                    "enabled_for_ads_sitemap"
+                  ],
+                  "seoName": "شقق للبيع",
+                  "seoName_l1": "Apartments for Sale",
+                  "nameSingular": "شقق للبيع",
+                  "nameSingular_l1": "شقق للبيع"
+                }
+              ],
+              "canApplyBadges": false,
+              "photos": [
+                {
+                  "id": 184487867,
+                  "externalID": "2b4fee54-0a50-44cb-9427-4133b9f80f54-fb3b33a5-2335-4cc3-94ca-536ad1f7efe3",
+                  "title": null,
+                  "orderIndex": 0,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487868,
+                  "externalID": "72ec7f72-ebc9-47fc-aa75-1a53a367e3bb-d71a3ee9-ce45-498d-b621-c15fc04718d0",
+                  "title": null,
+                  "orderIndex": 1,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487869,
+                  "externalID": "7fb46c52-4ab3-4c3c-9b83-b5449c181a11-b438b6c1-f21a-483e-be11-d5fee201c198",
+                  "title": null,
+                  "orderIndex": 2,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487870,
+                  "externalID": "4328f6c2-4a9e-47ff-8758-974430c7c347-c0e8faa3-d1c5-416c-be87-09577d41b6a5",
+                  "title": null,
+                  "orderIndex": 3,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487871,
+                  "externalID": "35514772-f64f-45ed-aa40-d1ca3e49fa78-cddda47d-7ebb-4b9e-94c7-a72533e2d9b7",
+                  "title": null,
+                  "orderIndex": 4,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487872,
+                  "externalID": "f0fd628b-5d93-4787-ad79-077674389e10-24cb52c7-e51d-4456-a064-58038ac0e047",
+                  "title": null,
+                  "orderIndex": 5,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487873,
+                  "externalID": "8768d1e0-255e-4dda-b5e7-8764e115713d-36d7cbd9-e078-4e7a-88c6-5fc8a867936d",
+                  "title": null,
+                  "orderIndex": 6,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487874,
+                  "externalID": "8f5c970c-5ffa-4bc5-9814-5b3899236b6f-e120f790-e114-47d6-abe3-f48cec4708f9",
+                  "title": null,
+                  "orderIndex": 7,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487875,
+                  "externalID": "bcfb3846-48ae-41a9-ab90-8416eb25493f-08f3b49d-5653-41d7-b2bb-fb4d99709511",
+                  "title": null,
+                  "orderIndex": 8,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487876,
+                  "externalID": "7bc5b99a-008d-4e79-b280-5812ec59bf08-71101e28-ae00-49f4-a6a2-499de77ac5da",
+                  "title": null,
+                  "orderIndex": 9,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487877,
+                  "externalID": "81fc8c3a-5873-48fa-ab6a-d343e686ce42-111e16a2-e5d7-4639-a3d9-61982789040b",
+                  "title": null,
+                  "orderIndex": 10,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487878,
+                  "externalID": "32740d4d-c8d3-4de7-a46b-24cc735570c7-6e87a9a4-2326-4232-bdc7-7b9a8b01cc39",
+                  "title": null,
+                  "orderIndex": 11,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487879,
+                  "externalID": "827e8a07-6877-490d-a1ff-65ed7d030680-bc3e73ad-1a34-4c03-8210-1d2748dda151",
+                  "title": null,
+                  "orderIndex": 12,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487880,
+                  "externalID": "7a44ac55-9d7e-4019-ac29-6703994beaee-b489d28e-fefb-4a02-bd91-2cff238cef02",
+                  "title": null,
+                  "orderIndex": 13,
+                  "nimaScore": null
+                },
+                {
+                  "id": 184487881,
+                  "externalID": "013caf81-92c5-4cc2-ac23-fb0bddb3e356-1ffa9ff1-001e-46b2-8459-f2f8b64fb717",
+                  "title": null,
+                  "orderIndex": 14,
+                  "nimaScore": null
+                }
+              ],
+              "external_link": null,
+              "external_link_l1": null
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
