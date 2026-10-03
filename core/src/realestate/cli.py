@@ -15,6 +15,7 @@ Archive sources (rule graphs + LLM induction):
     python -m realestate.cli archive route --source olx_eg_wayback
     python -m realestate.cli archive status --source olx_eg_wayback
     python -m realestate.cli rules induce --source olx_eg_wayback --domain navigation --max-calls 3
+    python -m realestate.cli rules seed --source dubizzle_eg_wayback
     python -m realestate.cli rules show --source olx_eg_wayback --domain extraction
     python -m realestate.cli rules gaps --source olx_eg_wayback
     python -m realestate.cli parse --source olx_eg_wayback --unrecognised
@@ -134,6 +135,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     rules = subparsers.add_parser("rules", parents=[common], help="rule graphs and induction")
     rules_commands = rules.add_subparsers(dest="rules_command", required=True)
+    seed = rules_commands.add_parser(
+        "seed", parents=[common], help="install reviewed initial rules, retaining active graphs"
+    )
+    seed.add_argument("--source", required=True)
     induce = rules_commands.add_parser(
         "induce", parents=[common], help="collect gaps and ask the LLM for rules"
     )
@@ -306,6 +311,13 @@ async def run(args: argparse.Namespace) -> int:
 
             case "rules":
                 match args.rules_command:
+                    case "seed":
+                        container.registry.descriptor(args.source)
+                        seeded = await container.rule_seeds.seed(args.source)
+                        print(
+                            f"installed: {', '.join(seeded.installed) or 'none'}; "
+                            f"retained active graphs: {', '.join(seeded.retained) or 'none'}"
+                        )
                     case "induce":
                         await _announce_llm(container, args.max_calls)
                         domain = _domain(args.domain)

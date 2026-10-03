@@ -132,6 +132,7 @@ def parse_price(
     *,
     listing_type: ListingType | None = None,
     default_currency: str | None = None,
+    default_rental_price_type: PriceType = PriceType.PER_MONTH,
 ) -> ParsedPrice:
     """Amount, currency and how to read it, from free text.
 
@@ -139,6 +140,8 @@ def parse_price(
     ``"3b , Red Sea - 126322 GBP"`` gives 126322, not 3); without a marker, the
     largest does. A zero, missing or placeholder amount (below 100, or 5 for
     per-night/week/m² prices) is ``UNKNOWN`` rather than a real price.
+    Rental amounts without explicit period text use ``default_rental_price_type``;
+    existing callers retain the monthly default, reviewed archive rules may use UNKNOWN.
     """
     raw = normalise_digits(clean_text(text))
     explicit_type: PriceType | None = None
@@ -172,7 +175,7 @@ def parse_price(
     elif explicit_type is not None and explicit_type is not PriceType.ON_REQUEST:
         price_type = explicit_type
     elif listing_type is ListingType.RENT:
-        price_type = PriceType.PER_MONTH
+        price_type = default_rental_price_type
     else:
         price_type = PriceType.TOTAL
     return ParsedPrice(

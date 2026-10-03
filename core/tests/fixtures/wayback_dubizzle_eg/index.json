@@ -1,0 +1,1935 @@
+{
+  "2023_rent": {
+    "kind": "sanitized_capture",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": "https://web.archive.org/web/20230521201125id_/https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "retrieved_at": "2026-10-03",
+    "original_bytes": 1205733,
+    "cdx_digest": null,
+    "digest_note": "CDX digest was not retained in the investigation; do not substitute fixture hash.",
+    "memento_datetime": null,
+    "expected": [
+      {
+        "external_id": "196804372",
+        "amount": "2000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "197329421",
+        "amount": "40000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "197153418",
+        "amount": "20000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "144.00"
+      },
+      {
+        "external_id": "196780734",
+        "amount": "15000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "190.00"
+      },
+      {
+        "external_id": "197303201",
+        "amount": "18000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "136.00"
+      },
+      {
+        "external_id": "195705570",
+        "amount": "1500.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "250.00"
+      },
+      {
+        "external_id": "197288649",
+        "amount": "20000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "188.00"
+      },
+      {
+        "external_id": "197219566",
+        "amount": "23000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "237.00"
+      },
+      {
+        "external_id": "197272063",
+        "amount": "17000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "180.00"
+      },
+      {
+        "external_id": "197315615",
+        "amount": "9000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "170.00"
+      },
+      {
+        "external_id": "197287861",
+        "amount": "40000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "147.00"
+      },
+      {
+        "external_id": "197260974",
+        "amount": "14000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "230.00"
+      },
+      {
+        "external_id": "197311924",
+        "amount": "7500.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "170.00"
+      },
+      {
+        "external_id": "197270348",
+        "amount": "12000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "197308355",
+        "amount": "8000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "125.00"
+      },
+      {
+        "external_id": "197287196",
+        "amount": "10500.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "197263608",
+        "amount": "35000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "197345218",
+        "amount": "19000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "190.00"
+      },
+      {
+        "external_id": "197286217",
+        "amount": "40000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "197099652",
+        "amount": "20000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "88.00"
+      },
+      {
+        "external_id": "166201252",
+        "amount": "1100.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "70.00"
+      },
+      {
+        "external_id": "197270915",
+        "amount": "14500.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "230.00"
+      },
+      {
+        "external_id": "197301300",
+        "amount": "12000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "133.00"
+      },
+      {
+        "external_id": "197344724",
+        "amount": "8500.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "167.00"
+      },
+      {
+        "external_id": "197267231",
+        "amount": "40000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "197273501",
+        "amount": "14000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "185.00"
+      },
+      {
+        "external_id": "191444813",
+        "amount": "2000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "66.00"
+      },
+      {
+        "external_id": "197303996",
+        "amount": "10000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "131.00"
+      },
+      {
+        "external_id": "197271416",
+        "amount": "12000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "171.00"
+      },
+      {
+        "external_id": "197117634",
+        "amount": "25000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "197346719",
+        "amount": "15000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "188.00"
+      },
+      {
+        "external_id": "194158444",
+        "amount": "18000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "88.00"
+      },
+      {
+        "external_id": "197147848",
+        "amount": "7000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "196870428",
+        "amount": "15000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "197349737",
+        "amount": "23000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "193.00"
+      },
+      {
+        "external_id": "197350824",
+        "amount": "16000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "400.00"
+      },
+      {
+        "external_id": "197312272",
+        "amount": "30000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "330.00"
+      },
+      {
+        "external_id": "197264848",
+        "amount": "10000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "197340119",
+        "amount": "1700.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "196634561",
+        "amount": "9500.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "165.00"
+      },
+      {
+        "external_id": "195501384",
+        "amount": "1500.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "197008228",
+        "amount": "18000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "230.00"
+      },
+      {
+        "external_id": "197253022",
+        "amount": "15000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "120.00"
+      },
+      {
+        "external_id": "197311034",
+        "amount": "250.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "170.00"
+      },
+      {
+        "external_id": "197348950",
+        "amount": "35000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "144.00"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": true,
+    "curation": "Allowlisted advert state and captured cards; contacts/runtime scripts removed. Expectations describe retained advert values, not full mapping certification.",
+    "fixture_sha256": "3887460432a6e032fe5f3f3589f87a7052a2a36ef0cdbeffed863467057a40f3",
+    "sanitized_bytes": 176729
+  },
+  "2023_detail": {
+    "kind": "sanitized_capture",
+    "url": "https://www.dubizzle.com.eg/ad/%D8%A7%D8%AC%D9%85%D9%84-%D8%A7%D9%84%D8%A7%D9%85%D8%A7%D9%83%D9%86-%D8%A8%D8%AE%D8%A7%D9%84%D8%AF-%D8%A7%D8%A8%D9%86-%D8%A7%D9%84%D9%88%D9%84%D9%8A%D8%AF-%D8%B4%D9%82%D8%A9-%D9%85%D9%81%D8%B1%D9%88%D8%B4%D8%A9-%D9%84%D9%84%D8%A7%D9%8A%D8%AC%D8%A7%D8%B1-%D8%A7%D9%84%D9%8A%D9%88%D9%85%D9%8A-ID196521164.html",
+    "requested_timestamp": "20230607095954",
+    "served_timestamp": "20230607095954",
+    "replay_url": "https://web.archive.org/web/20230607095954id_/https://www.dubizzle.com.eg/ad/%D8%A7%D8%AC%D9%85%D9%84-%D8%A7%D9%84%D8%A7%D9%85%D8%A7%D9%83%D9%86-%D8%A8%D8%AE%D8%A7%D9%84%D8%AF-%D8%A7%D8%A8%D9%86-%D8%A7%D9%84%D9%88%D9%84%D9%8A%D8%AF-%D8%B4%D9%82%D8%A9-%D9%85%D9%81%D8%B1%D9%88%D8%B4%D8%A9-%D9%84%D9%84%D8%A7%D9%8A%D8%AC%D8%A7%D8%B1-%D8%A7%D9%84%D9%8A%D9%88%D9%85%D9%8A-ID196521164.html",
+    "retrieved_at": "2026-10-03",
+    "original_bytes": 749264,
+    "cdx_digest": "EDB3MW7OW64G72ZIQW4E5STJOG6KIRFG",
+    "digest_note": null,
+    "memento_datetime": "Wed, 07 Jun 2023 09:59:54 GMT",
+    "expected": [
+      {
+        "external_id": "196521164",
+        "amount": "200.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "110.00",
+        "price_type": "PER_NIGHT"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": false,
+    "curation": "Allowlisted advert state and captured cards; contacts/runtime scripts removed. Expectations describe retained advert values, not full mapping certification.",
+    "fixture_sha256": "0592fce90f85b5d13410cb3f5f4a5b6b05dc266ddd0ac248b5542e8ceea98ae9",
+    "sanitized_bytes": 1363
+  },
+  "2023_sale": {
+    "kind": "sanitized_capture",
+    "url": "https://www.dubizzle.com.eg/en/properties/apartments-duplex-for-sale/",
+    "requested_timestamp": "20230930150202",
+    "served_timestamp": "20230930150202",
+    "replay_url": "https://web.archive.org/web/20230930150202id_/https://www.dubizzle.com.eg/en/properties/apartments-duplex-for-sale/",
+    "retrieved_at": "2026-10-03",
+    "original_bytes": 1048576,
+    "cdx_digest": null,
+    "digest_note": "CDX digest was not retained in the investigation; do not substitute fixture hash.",
+    "memento_datetime": "Sat, 30 Sep 2023 15:02:02 GMT",
+    "expected": [
+      {
+        "external_id": "198912109",
+        "amount": "1166000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "198924144",
+        "amount": "549000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "53.00"
+      },
+      {
+        "external_id": "198947474",
+        "amount": "1270000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "100.00"
+      },
+      {
+        "external_id": "193780214",
+        "amount": "1981250.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "198712443",
+        "amount": "3500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "250.00"
+      },
+      {
+        "external_id": "198888200",
+        "amount": "8509000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "225.00"
+      },
+      {
+        "external_id": "198730085",
+        "amount": "2082680.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "172.00"
+      },
+      {
+        "external_id": "198891351",
+        "amount": "2200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "60.00"
+      },
+      {
+        "external_id": "198912035",
+        "amount": "4200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "210.00"
+      },
+      {
+        "external_id": "196486781",
+        "amount": "2072700.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "197.00"
+      },
+      {
+        "external_id": "198938374",
+        "amount": "3000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "93.00"
+      },
+      {
+        "external_id": "198938015",
+        "amount": "1220000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "170.00"
+      },
+      {
+        "external_id": "198633443",
+        "amount": "9738000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "185.00"
+      },
+      {
+        "external_id": "198521756",
+        "amount": "2020000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "178.00"
+      },
+      {
+        "external_id": "198874374",
+        "amount": "1000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "128.00"
+      },
+      {
+        "external_id": "197591341",
+        "amount": "3100000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "133.00"
+      },
+      {
+        "external_id": "198633546",
+        "amount": "2200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "350.00"
+      },
+      {
+        "external_id": "198814052",
+        "amount": "3868000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "111.00"
+      },
+      {
+        "external_id": "198766180",
+        "amount": "1600000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "125.00"
+      },
+      {
+        "external_id": "198904939",
+        "amount": "2762000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "210.00"
+      },
+      {
+        "external_id": "195848201",
+        "amount": "450000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "135.00"
+      },
+      {
+        "external_id": "198914075",
+        "amount": "4000600.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "125.00"
+      },
+      {
+        "external_id": "198912591",
+        "amount": "1700000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "270.00"
+      },
+      {
+        "external_id": "198900379",
+        "amount": "2500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "157.00"
+      },
+      {
+        "external_id": "198911297",
+        "amount": "4372000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "164.00"
+      },
+      {
+        "external_id": "198934783",
+        "amount": "2700000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "130.00"
+      },
+      {
+        "external_id": "198917590",
+        "amount": "7500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "245.00"
+      },
+      {
+        "external_id": "198575139",
+        "amount": "2000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "135.00"
+      },
+      {
+        "external_id": "198729615",
+        "amount": "2750000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "123.00"
+      },
+      {
+        "external_id": "196234836",
+        "amount": "4500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "400.00"
+      },
+      {
+        "external_id": "198553187",
+        "amount": "1177092.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "193.00"
+      },
+      {
+        "external_id": "198899155",
+        "amount": "4000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "107.00"
+      },
+      {
+        "external_id": "198891854",
+        "amount": "2900000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "145.00"
+      },
+      {
+        "external_id": "198431260",
+        "amount": "1230500.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "188.00"
+      },
+      {
+        "external_id": "198890960",
+        "amount": "4600000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "125.00"
+      },
+      {
+        "external_id": "198576811",
+        "amount": "3200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "182.00"
+      },
+      {
+        "external_id": "197462420",
+        "amount": "3400000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "260.00"
+      },
+      {
+        "external_id": "198348914",
+        "amount": "2535000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "169.00"
+      },
+      {
+        "external_id": "198912838",
+        "amount": "3200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "92.00"
+      },
+      {
+        "external_id": "197681075",
+        "amount": "1646828.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "102.30"
+      },
+      {
+        "external_id": "198932759",
+        "amount": "720000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "198184413",
+        "amount": "2000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "186.00"
+      },
+      {
+        "external_id": "198891134",
+        "amount": "1560000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "100.00"
+      },
+      {
+        "external_id": "198902258",
+        "amount": "6600000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "220.00"
+      },
+      {
+        "external_id": "193629230",
+        "amount": "2636000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "175.00"
+      }
+    ],
+    "state_decodes": false,
+    "extraction_supported": false,
+    "curation": "Allowlisted advert state and captured cards; contacts/runtime scripts removed. Expectations describe retained advert values, not full mapping certification.",
+    "fixture_sha256": "5b64c9fc9d5417372004d9d555368449bdb5c7d2b336cc82d2448ed3fc90ed2c",
+    "sanitized_bytes": 108521
+  },
+  "2024_sale": {
+    "kind": "sanitized_capture",
+    "url": "https://www.dubizzle.com.eg/en/properties/apartments-duplex-for-sale/",
+    "requested_timestamp": "20240407134753",
+    "served_timestamp": "20240407134753",
+    "replay_url": "https://web.archive.org/web/20240407134753id_/https://www.dubizzle.com.eg/en/properties/apartments-duplex-for-sale/",
+    "retrieved_at": "2026-10-03",
+    "original_bytes": 1537838,
+    "cdx_digest": null,
+    "digest_note": "CDX digest was not retained in the investigation; do not substitute fixture hash.",
+    "memento_datetime": "Sun, 07 Apr 2024 13:47:53 GMT",
+    "expected": [
+      {
+        "external_id": "200878854",
+        "amount": "12800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "244.00"
+      },
+      {
+        "external_id": "500643998",
+        "amount": "6795000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "151.00"
+      },
+      {
+        "external_id": "200817419",
+        "amount": "12322550.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "164.00"
+      },
+      {
+        "external_id": "500614394",
+        "amount": "1280000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "32.00"
+      },
+      {
+        "external_id": "500640161",
+        "amount": "840000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "180.00"
+      },
+      {
+        "external_id": "200913780",
+        "amount": "11748000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "152.00"
+      },
+      {
+        "external_id": "199129574",
+        "amount": "7200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "2368.00"
+      },
+      {
+        "external_id": "200872274",
+        "amount": "9109066.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "200896589",
+        "amount": "9681653.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "153.00"
+      },
+      {
+        "external_id": "200918899",
+        "amount": "916000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "165.00"
+      },
+      {
+        "external_id": "500630993",
+        "amount": "5000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "200547836",
+        "amount": "1365000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "157.00"
+      },
+      {
+        "external_id": "500651855",
+        "amount": "6150000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "180.00"
+      },
+      {
+        "external_id": "500652905",
+        "amount": "2200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "415.00"
+      },
+      {
+        "external_id": "200298222",
+        "amount": "4500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "60.00"
+      },
+      {
+        "external_id": "500637479",
+        "amount": "10000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "300.00"
+      },
+      {
+        "external_id": "500652557",
+        "amount": "7100000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "135.00"
+      },
+      {
+        "external_id": "200594293",
+        "amount": "950000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "80.00"
+      },
+      {
+        "external_id": "500644307",
+        "amount": "711000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "146.00"
+      },
+      {
+        "external_id": "200628437",
+        "amount": "13500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "197.00"
+      },
+      {
+        "external_id": "200901147",
+        "amount": "11807000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "81.00"
+      },
+      {
+        "external_id": "500603835",
+        "amount": "4425000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "171.00"
+      },
+      {
+        "external_id": "500656064",
+        "amount": "30750000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "213.00"
+      },
+      {
+        "external_id": "200892382",
+        "amount": "12000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "290.00"
+      },
+      {
+        "external_id": "500653251",
+        "amount": "330600.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "180.00"
+      },
+      {
+        "external_id": "200890868",
+        "amount": "4280000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "199.00"
+      },
+      {
+        "external_id": "200287733",
+        "amount": "6800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "118.00"
+      },
+      {
+        "external_id": "500246364",
+        "amount": "8852500.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "295.00"
+      },
+      {
+        "external_id": "200926948",
+        "amount": "9298000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "135.00"
+      },
+      {
+        "external_id": "200880761",
+        "amount": "4750000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "200583729",
+        "amount": "1800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "145.00"
+      },
+      {
+        "external_id": "200322566",
+        "amount": "3200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "116.00"
+      },
+      {
+        "external_id": "200909527",
+        "amount": "3870000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "123.00"
+      },
+      {
+        "external_id": "500453586",
+        "amount": "720000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "111.00"
+      },
+      {
+        "external_id": "500655476",
+        "amount": "820000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "58.00"
+      },
+      {
+        "external_id": "500487722",
+        "amount": "4995000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "134.00"
+      },
+      {
+        "external_id": "500652341",
+        "amount": "22950000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "255.00"
+      },
+      {
+        "external_id": "500632554",
+        "amount": "3200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "200861551",
+        "amount": "450000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "130.00"
+      },
+      {
+        "external_id": "200913736",
+        "amount": "4250000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "148.00"
+      },
+      {
+        "external_id": "500654507",
+        "amount": "4000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "211.00"
+      },
+      {
+        "external_id": "500644891",
+        "amount": "4325000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "192.00"
+      },
+      {
+        "external_id": "200881115",
+        "amount": "920000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "136.00"
+      },
+      {
+        "external_id": "197696213",
+        "amount": "1000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "170.00"
+      },
+      {
+        "external_id": "500489079",
+        "amount": "2544000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "114.00"
+      },
+      {
+        "external_id": "198726226",
+        "amount": "4130000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "192.00"
+      },
+      {
+        "external_id": "500645621",
+        "amount": "2300000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "106.00"
+      },
+      {
+        "external_id": "500651798",
+        "amount": "6400000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "168.00"
+      },
+      {
+        "external_id": "500654862",
+        "amount": "7000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "165.00"
+      },
+      {
+        "external_id": "500489423",
+        "amount": "4888000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "208.00"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": true,
+    "curation": "Allowlisted advert state and captured cards; contacts/runtime scripts removed. Expectations describe retained advert values, not full mapping certification.",
+    "fixture_sha256": "f3bb38e8193d50409db15e768f781b7a69f736af61ee53f2dd67ffbeefb8df6e",
+    "sanitized_bytes": 206416
+  },
+  "2025_sale": {
+    "kind": "sanitized_capture",
+    "url": "https://www.dubizzle.com.eg/en/properties/apartments-duplex-for-sale/",
+    "requested_timestamp": "20250114155421",
+    "served_timestamp": "20250114155421",
+    "replay_url": "https://web.archive.org/web/20250114155421id_/https://www.dubizzle.com.eg/en/properties/apartments-duplex-for-sale/",
+    "retrieved_at": "2026-10-03",
+    "original_bytes": 1613251,
+    "cdx_digest": null,
+    "digest_note": "CDX digest was not retained in the investigation; do not substitute fixture hash.",
+    "memento_datetime": "Tue, 14 Jan 2025 15:54:21 GMT",
+    "expected": [
+      {
+        "external_id": "501445691",
+        "amount": "8500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "105.00"
+      },
+      {
+        "external_id": "501180016",
+        "amount": "21600000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "430.00"
+      },
+      {
+        "external_id": "501412203",
+        "amount": "1500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "501407521",
+        "amount": "3968000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "165.00"
+      },
+      {
+        "external_id": "501455758",
+        "amount": "7800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "388.00"
+      },
+      {
+        "external_id": "501412069",
+        "amount": "1500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "120.00"
+      },
+      {
+        "external_id": "500762423",
+        "amount": "6000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "156.00"
+      },
+      {
+        "external_id": "501449515",
+        "amount": "3770000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "98.00"
+      },
+      {
+        "external_id": "501180652",
+        "amount": "6500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "203679714",
+        "amount": "3220000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "73.00"
+      },
+      {
+        "external_id": "203168270",
+        "amount": "3952000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "152.00"
+      },
+      {
+        "external_id": "203680308",
+        "amount": "6300000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "155.00"
+      },
+      {
+        "external_id": "501445738",
+        "amount": "9350000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "113.00"
+      },
+      {
+        "external_id": "195805334",
+        "amount": "9000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "155.00"
+      },
+      {
+        "external_id": "203400504",
+        "amount": "4000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "203249194",
+        "amount": "1500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "501409814",
+        "amount": "6500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "127.00"
+      },
+      {
+        "external_id": "501453512",
+        "amount": "6100000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "77.00"
+      },
+      {
+        "external_id": "501334841",
+        "amount": "1300000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "169.00"
+      },
+      {
+        "external_id": "501447994",
+        "amount": "10600000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "185.00"
+      },
+      {
+        "external_id": "501451255",
+        "amount": "2180000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "175.00"
+      },
+      {
+        "external_id": "203608851",
+        "amount": "6000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "225.00"
+      },
+      {
+        "external_id": "203673379",
+        "amount": "2840000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "107.00"
+      },
+      {
+        "external_id": "501392730",
+        "amount": "15000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "210.00"
+      },
+      {
+        "external_id": "501451017",
+        "amount": "8240000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "126.00"
+      },
+      {
+        "external_id": "203609115",
+        "amount": "24500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "298.00"
+      },
+      {
+        "external_id": "501445283",
+        "amount": "6977000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "165.00"
+      },
+      {
+        "external_id": "202160482",
+        "amount": "9418000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "145.00"
+      },
+      {
+        "external_id": "202846827",
+        "amount": "2900000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "110.00"
+      },
+      {
+        "external_id": "501443151",
+        "amount": "4000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "177.00"
+      },
+      {
+        "external_id": "203409119",
+        "amount": "5200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "148.00"
+      },
+      {
+        "external_id": "203660731",
+        "amount": "4800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "220.00"
+      },
+      {
+        "external_id": "501393748",
+        "amount": "3692500.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "175.00"
+      },
+      {
+        "external_id": "501411412",
+        "amount": "7500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "165.00"
+      },
+      {
+        "external_id": "501443889",
+        "amount": "5200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "175.00"
+      },
+      {
+        "external_id": "203684750",
+        "amount": "17000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "360.00"
+      },
+      {
+        "external_id": "501409012",
+        "amount": "5800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "68.00"
+      },
+      {
+        "external_id": "203638284",
+        "amount": "5500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "220.00"
+      },
+      {
+        "external_id": "501448222",
+        "amount": "9500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "175.00"
+      },
+      {
+        "external_id": "203647466",
+        "amount": "7200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "203309345",
+        "amount": "9500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "191.00"
+      },
+      {
+        "external_id": "501444562",
+        "amount": "5150000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "205.00"
+      },
+      {
+        "external_id": "203460904",
+        "amount": "1350000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "72.00"
+      },
+      {
+        "external_id": "203634748",
+        "amount": "6500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "235.00"
+      },
+      {
+        "external_id": "501445644",
+        "amount": "4500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "190.00"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": true,
+    "curation": "Allowlisted advert state and captured cards; contacts/runtime scripts removed. Expectations describe retained advert values, not full mapping certification.",
+    "fixture_sha256": "ac7fc9dfbb2381a8e0ee5c88ca4b352c87fd27ce7724729e4951d425258d67b0",
+    "sanitized_bytes": 175013
+  },
+  "2026_sale": {
+    "kind": "sanitized_capture",
+    "url": "https://www.dubizzle.com.eg/en/properties/apartments-duplex-for-sale/",
+    "requested_timestamp": "20260120155234",
+    "served_timestamp": "20260120155234",
+    "replay_url": "https://web.archive.org/web/20260120155234id_/https://www.dubizzle.com.eg/en/properties/apartments-duplex-for-sale/",
+    "retrieved_at": "2026-10-03",
+    "original_bytes": 5167456,
+    "cdx_digest": null,
+    "digest_note": "CDX digest was not retained in the investigation; do not substitute fixture hash.",
+    "memento_datetime": "Tue, 20 Jan 2026 15:52:34 GMT",
+    "expected": [
+      {
+        "external_id": "502999176",
+        "amount": "6700000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "140.00"
+      },
+      {
+        "external_id": "503060584",
+        "amount": "8800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "125.00"
+      },
+      {
+        "external_id": "503055097",
+        "amount": "11500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "155.00"
+      },
+      {
+        "external_id": "503011605",
+        "amount": "7275520.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "503060925",
+        "amount": "5100000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "175.00"
+      },
+      {
+        "external_id": "502583891",
+        "amount": "11536000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "184.00"
+      },
+      {
+        "external_id": "206937519",
+        "amount": "8300000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "371.00"
+      },
+      {
+        "external_id": "503058470",
+        "amount": "4276343.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "190.00"
+      },
+      {
+        "external_id": "502768249",
+        "amount": "6830000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "138.00"
+      },
+      {
+        "external_id": "502889378",
+        "amount": "13905763.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "118.00"
+      },
+      {
+        "external_id": "503052089",
+        "amount": "7331000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "502987322",
+        "amount": "4264000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "187.00"
+      },
+      {
+        "external_id": "502978167",
+        "amount": "7400000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "240.00"
+      },
+      {
+        "external_id": "502303374",
+        "amount": "16600000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "146.00"
+      },
+      {
+        "external_id": "503031080",
+        "amount": "10850000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "172.00"
+      },
+      {
+        "external_id": "502836931",
+        "amount": "11880000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "242.00"
+      },
+      {
+        "external_id": "503045205",
+        "amount": "5700000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "155.00"
+      },
+      {
+        "external_id": "503063429",
+        "amount": "5700000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "115.00"
+      },
+      {
+        "external_id": "503052729",
+        "amount": "9128000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "163.00"
+      },
+      {
+        "external_id": "502943225",
+        "amount": "7500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "502817125",
+        "amount": "23800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "328.00"
+      },
+      {
+        "external_id": "503048660",
+        "amount": "6500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "212.00"
+      },
+      {
+        "external_id": "502165879",
+        "amount": "10000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "191.00"
+      },
+      {
+        "external_id": "503044727",
+        "amount": "3347000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "139.00"
+      },
+      {
+        "external_id": "502890886",
+        "amount": "4375000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "175.00"
+      },
+      {
+        "external_id": "502634987",
+        "amount": "16862000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "176.00"
+      },
+      {
+        "external_id": "503040607",
+        "amount": "1600000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "60.00"
+      },
+      {
+        "external_id": "503045851",
+        "amount": "9700000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "134.00"
+      },
+      {
+        "external_id": "502983001",
+        "amount": "9200000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "145.00"
+      },
+      {
+        "external_id": "502609237",
+        "amount": "4000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "170.00"
+      },
+      {
+        "external_id": "503061628",
+        "amount": "10979701.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "160.00"
+      },
+      {
+        "external_id": "503024697",
+        "amount": "5750000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "137.00"
+      },
+      {
+        "external_id": "503012254",
+        "amount": "3130000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "170.00"
+      },
+      {
+        "external_id": "503032297",
+        "amount": "6000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "290.00"
+      },
+      {
+        "external_id": "503056189",
+        "amount": "11250000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "245.00"
+      },
+      {
+        "external_id": "502134627",
+        "amount": "24000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "220.00"
+      },
+      {
+        "external_id": "206881298",
+        "amount": "9250000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "485.00"
+      },
+      {
+        "external_id": "503036874",
+        "amount": "4500000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "107.00"
+      },
+      {
+        "external_id": "502774681",
+        "amount": "12000000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "80.00"
+      },
+      {
+        "external_id": "503062246",
+        "amount": "5850000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "100.00"
+      },
+      {
+        "external_id": "503039509",
+        "amount": "6350000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "145.00"
+      },
+      {
+        "external_id": "502960415",
+        "amount": "5850000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "131.00"
+      },
+      {
+        "external_id": "502690849",
+        "amount": "3250000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "215.00"
+      },
+      {
+        "external_id": "503047035",
+        "amount": "8100000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "150.00"
+      },
+      {
+        "external_id": "503059081",
+        "amount": "9800000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "135.00"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": true,
+    "curation": "Allowlisted advert state and captured cards; contacts/runtime scripts removed. Expectations describe retained advert values, not full mapping certification.",
+    "fixture_sha256": "e47b86100c53c8f8b9dffe522f3b6b623fa2dc85371f086849400eaf3a79099d",
+    "sanitized_bytes": 172957
+  },
+  "non_property": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [],
+    "state_decodes": true,
+    "extraction_supported": false,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "08c6490f171d9b9c9c13c5d63611fe3fc8df14159cfb12eda322f8cc2e7fb325",
+    "sanitized_bytes": 1651
+  },
+  "mixed_categories": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [
+      {
+        "external_id": "196804372",
+        "amount": "2000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      },
+      {
+        "external_id": "900000002",
+        "amount": "2000.00",
+        "currency": "EGP",
+        "listing_type": "SALE",
+        "area_sqm": "200.00"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": true,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "513a9c8255a6bb509b2055e8301177ab984b14926d4dafcce45018e4383ca97f",
+    "sanitized_bytes": 6364
+  },
+  "empty_results": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [],
+    "state_decodes": true,
+    "extraction_supported": false,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "e31d2f55e341ee2836f8b50570290e2be2de94233b291ba80b3b455ccc421de8",
+    "sanitized_bytes": 147
+  },
+  "missing_identity": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [],
+    "state_decodes": true,
+    "extraction_supported": false,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "231c8b9903ff46e44b72c0c367daff32374a9b5d20da247fe0ed5e2a369f3a83",
+    "sanitized_bytes": 1639
+  },
+  "missing_state": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [],
+    "state_decodes": false,
+    "extraction_supported": false,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "6ba580573df48eda61d6a05a2e332d5935f2a28c84f6842d1225dd2878ef06f1",
+    "sanitized_bytes": 80
+  },
+  "challenge": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [],
+    "state_decodes": false,
+    "extraction_supported": false,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "9ad115c388c6decb2249dd4c8a00d7dacab28984fea23fab6b77fe52d33360a3",
+    "sanitized_bytes": 90
+  },
+  "large_payload": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [
+      {
+        "external_id": "196804372",
+        "amount": "2000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": true,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "f3a81b562058fa8f17a578241a6e6ed87a66da7e636b88cfdf85e667d4621bf0",
+    "sanitized_bytes": 5244568
+  },
+  "same_ad_list": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/properties/apartments-duplex-for-rent/",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [
+      {
+        "external_id": "196804372",
+        "amount": "2000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": true,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "70311a3ac9e597dba541d7c1584076b5024f09f0c6ed6fd129e1a9499a0e74d1",
+    "sanitized_bytes": 1666
+  },
+  "same_ad_detail": {
+    "kind": "synthetic",
+    "url": "https://www.dubizzle.com.eg/ad/بمدينة-نصر-_-شقة-مفروشة-فاخرة_متاحة-النهاردة_للفترات-القصيرة-بالأيام-ID196804372.html",
+    "requested_timestamp": "20230521201125",
+    "served_timestamp": "20230521201125",
+    "replay_url": null,
+    "retrieved_at": "2026-10-03",
+    "original_bytes": null,
+    "cdx_digest": null,
+    "digest_note": "Synthetic case; no independent CDX capture.",
+    "memento_datetime": null,
+    "expected": [
+      {
+        "external_id": "196804372",
+        "amount": "2000.00",
+        "currency": "EGP",
+        "listing_type": "RENT",
+        "area_sqm": "200.00"
+      }
+    ],
+    "state_decodes": true,
+    "extraction_supported": false,
+    "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
+    "fixture_sha256": "4463c22126f9e6f77b08689edd63fc64872ba8ded03d1c5228eb4fd4e612f2b4",
+    "sanitized_bytes": 1245
+  }
+}

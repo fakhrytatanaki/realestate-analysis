@@ -68,6 +68,10 @@ params = {}
 enabled = false          # crawled with `cli crawl`, not scheduled
 params = { from_year = 2010, to_year = 2023, min_delay_seconds = 1.5, user_agent = "realestatepy-archive-research/0.1 (contact: you@example.com)" }
 
+[sources.dubizzle_eg_wayback]
+enabled = false          # manual archive runs; seed reviewed rules explicitly first
+params = { from_year = 2023, to_year = 2026, min_delay_seconds = 1.5, user_agent = "realestatepy-archive-research/0.1 (contact: you@example.com)" }
+
 [sources.zillow]
 enabled = false
 interval_minutes = 180

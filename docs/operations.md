@@ -111,7 +111,8 @@ reports upsert counts, so consult document state/logs for parse failures. A
 
 ## Archive sources
 
-Archive sources (`olx_eg_wayback`) are crawled, not scheduled. `crawl` runs rounds of
+Archive sources (`olx_eg_wayback`, `dubizzle_eg_wayback`) are crawled, not scheduled.
+`crawl` runs rounds of
 route → induce navigation rules → fetch and parse → induce templates → re-parse,
 within explicit budgets, enumerating the CDX index first when the frontier is empty:
 
@@ -125,6 +126,22 @@ within explicit budgets, enumerating the CDX index first when the frontier is em
 ./venv/bin/python -m realestate.cli rules gaps --source olx_eg_wayback
 ./venv/bin/python -m realestate.cli parse --source olx_eg_wayback --unrecognised
 ```
+
+Install Dubizzle's reviewed initial graphs explicitly before enumeration/routing:
+
+```bash
+./venv/bin/python -m realestate.cli rules seed --source dubizzle_eg_wayback
+./venv/bin/python -m realestate.cli rules show --source dubizzle_eg_wayback --domain extraction --json
+```
+
+`rules seed` validates both packaged graphs before persistence and saves version
+1 only for domains without an active graph. Repeating it retains existing graphs,
+including operator edits; it never calls the LLM or archive. It currently supports
+only `dubizzle_eg_wayback`. Run it before `archive route` or `crawl`, because those
+commands can create a generic navigation graph that seeding will then retain.
+The initial extraction scope is complete category JSON lists; detail and HTML
+fallback mappings, remaining fixture evidence and replay-provenance hardening
+are still required before the [Dubizzle pilot](dubizzle-eg-wayback-plan.md).
 
 Enumeration resumes per year (`crawl_cursor`). Routing retries `UNROUTED` captures
 each time, so new navigation rules apply to old misses. Documents no template

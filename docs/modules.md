@@ -52,6 +52,7 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [application/services/listing_query_service.py](../core/src/realestate/application/services/listing_query_service.py) | Search cap, listing/provenance lookup, missing-record errors, counts |
 | [application/services/archive_crawl_service.py](../core/src/realestate/application/services/archive_crawl_service.py) | Enumerate CDX into the frontier, route captures, capture selection, the crawl rounds loop |
 | [application/services/rule_induction_service.py](../core/src/realestate/application/services/rule_induction_service.py) | Gap collection (URL shapes, DOM fingerprints), LLM questions, validation against samples, compiling answers into graph versions |
+| [application/services/rule_seed_service.py](../core/src/realestate/application/services/rule_seed_service.py) | Explicit initial-graph installation through ports; retains each domain's active operator graph |
 | [application/services/frontier_link_sink.py](../core/src/realestate/application/services/frontier_link_sink.py) | Links from recognised pages to frontier evidence |
 | [application/rules/proposals.py](../core/src/realestate/application/rules/proposals.py) | Pydantic models validating LLM navigation rules and extraction templates |
 | [application/rules/prompts.py](../core/src/realestate/application/rules/prompts.py) | Prompt text, tool schemas and prompt versions (part of the LLM cache key) |
@@ -90,6 +91,8 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [infrastructure/sources/dubizzle_eg/source.py](../core/src/realestate/infrastructure/sources/dubizzle_eg/source.py) | Dubizzle query construction, category pagination, response normalization, endpoint healthcheck |
 | [infrastructure/sources/wayback/source.py](../core/src/realestate/infrastructure/sources/wayback/source.py) | Generic archive source: frontier-driven fetch, pinned-graph parse and link discovery |
 | [infrastructure/sources/olx_eg_wayback/source.py](../core/src/realestate/infrastructure/sources/olx_eg_wayback/source.py) | OLX Egypt 2010-2023 archive: domain and year range only |
+| [infrastructure/sources/dubizzle_eg_wayback/source.py](../core/src/realestate/infrastructure/sources/dubizzle_eg_wayback/source.py) | Separate Dubizzle Egypt 2023-2026 archive; packaged reviewed rules alongside the adapter |
+| [infrastructure/extraction/seeds.py](../core/src/realestate/infrastructure/extraction/seeds.py) | Packaged JSON loading, proposal/condition validation and compilation into version-one graphs |
 | [infrastructure/archive/wayback.py](../core/src/realestate/infrastructure/archive/wayback.py) | Polite Wayback client (single flight, 429 cool-down, fixed UA), `id_` replay, CDX paging by resume key |
 | [infrastructure/llm/ollama.py](../core/src/realestate/infrastructure/llm/ollama.py) | Ollama Cloud/self-hosted chat: tool-call structure, JSON fallback, retries, concurrency cap |
 | [infrastructure/extraction/engine.py](../core/src/realestate/infrastructure/extraction/engine.py) | `HtmlRuleEngine`: graph walks for routing/extraction, candidate evaluation, condition checks |

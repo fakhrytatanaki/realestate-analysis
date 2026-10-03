@@ -2,8 +2,8 @@
 
 Nothing here knows about any particular site. Collection drains the crawl
 frontier (which the navigation graph has already routed); parsing walks the
-extraction graph. Both graphs start empty and are grown by rule induction, so a
-new archived portal is a subclass naming a domain and a year range.
+extraction graph. Graphs can be installed explicitly from reviewed seeds or grown
+by rule induction; an archived portal is a subclass naming a domain and year range.
 
 The pipeline invariants hold:
 
@@ -62,7 +62,9 @@ class WaybackDataSource(ArchiveDataSource):
         )
         self._graph: RuleGraph | None = None
         #: parse() and discover_links() see the same payload back to back.
-        self._last: tuple[int, ExtractionOutcome | None] | None = None
+        # Retain the object itself: id(payload) can be reused as soon as the
+        # caller releases it, making a different page look like a cache hit.
+        self._last: tuple[RawPayload, ExtractionOutcome | None] | None = None
 
     def archive_scope(self) -> ArchiveScope:
         return ArchiveScope(
@@ -155,10 +157,10 @@ class WaybackDataSource(ArchiveDataSource):
         return self._graph
 
     def _extract(self, payload: RawPayload, graph: RuleGraph) -> ExtractionOutcome | None:
-        if self._last is not None and self._last[0] == id(payload):
+        if self._last is not None and self._last[0] is payload:
             return self._last[1]
         outcome = self._engine.extract(graph, _document(payload), country_code=self.country_code)
-        self._last = (id(payload), outcome)
+        self._last = (payload, outcome)
         return outcome
 
 

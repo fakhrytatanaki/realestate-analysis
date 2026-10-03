@@ -14,7 +14,7 @@ from urllib.parse import unquote
 from realestate.domain.rules import RuleGap, RuleGraph
 
 NAV_PROMPT_VERSION = "nav-2"
-TEMPLATE_PROMPT_VERSION = "tpl-1"
+TEMPLATE_PROMPT_VERSION = "tpl-2"
 
 NAV_TOOL = "submit_rules"
 NAV_TOOL_DESCRIPTION = "Submit URL routing rules, at least one per group."
@@ -87,6 +87,10 @@ TEMPLATE_SCHEMA: dict[str, Any] = {
         },
         "links": {"type": "array", "items": {"type": "object"}},
         "default_currency": {"type": ["string", "null"]},
+        "default_rental_price_type": {"type": "string", "enum": ["PER_MONTH", "UNKNOWN"]},
+        "required_fields": {"type": "array", "items": {"type": "string"}},
+        "strict_classification": {"type": "boolean"},
+        "allow_title_price": {"type": "boolean"},
         "vocab": {
             "type": "object",
             "properties": {
@@ -118,6 +122,8 @@ other designs. Types:
 - items (LIST only): {"css":"<selector matching each advert element>"} or, when \
 adverts sit in embedded JSON, {"script":"<name>","path":"<path to the array>"}. \
 DETAIL: null.
+  JSON items may add "filters":[{"path":"category.lvl0.slug","pattern":"properties"}]. \
+Every filter must full-match its per-item value; rejected items are reported.
 - fields: field name -> list of alternatives, tried in order. Names: title \
 (required), url, external_id, price, currency, listed_at, location, city, \
 district, category, listing_type, property_type, bedrooms, bathrooms, area, \
@@ -142,6 +148,14 @@ id (an attribute, or a regex on the advert URL). url is the advert link.
 URLs from the url field are followed automatically.
 - default_currency: ISO code to assume for prices without a currency marker \
 (e.g. "EGP"), or null.
+- default_rental_price_type: PER_MONTH (legacy default) or UNKNOWN when the \
+capture does not establish a rental period. Explicit period text still wins.
+- required_fields: declared fields that must be present before an item is emitted.
+- strict_classification: true uses only the mapped listing_type/property_type \
+fields for vocabulary matching; it prevents title or page context from overriding \
+per-item taxonomy. Defaults to false for existing templates.
+- allow_title_price: false prevents missing/placeholder price fields from being \
+replaced by a currency-marked title amount. Defaults to true for existing templates.
 - vocab: regex patterns that map category / title / URL text to listing_type \
 ("SALE" or "RENT") and property_type (APARTMENT, VILLA, TOWNHOUSE, HOUSE, STUDIO, \
 LAND, OFFICE, SHOP, WAREHOUSE, OTHER). Cover the English and Arabic wording seen \

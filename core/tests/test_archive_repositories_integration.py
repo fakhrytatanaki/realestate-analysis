@@ -12,6 +12,7 @@ from decimal import Decimal
 import pytest
 
 from realestate.application.rules.seeds import seed_navigation_graph
+from realestate.application.services.rule_seed_service import RuleSeedService
 from realestate.domain.archive import Capture
 from realestate.domain.enums import (
     CrawlStatus,
@@ -35,6 +36,7 @@ from realestate.infrastructure.db.repositories.rules import (
     TortoiseRuleGapRepository,
     TortoiseRuleGraphRepository,
 )
+from realestate.infrastructure.extraction.seeds import PackagedRuleSeedProvider
 from tests.conftest import make_draft
 
 pytestmark = pytest.mark.usefixtures("initialised_db")
@@ -118,6 +120,22 @@ async def test_rule_graph_versions_round_trip() -> None:
     old = await graphs.get("s", RuleDomain.NAVIGATION, 1)
     assert old is not None and old.status is RuleGraphStatus.RETIRED
     assert [g.version for g in await graphs.versions("s", RuleDomain.NAVIGATION)] == [2, 1]
+
+
+async def test_packaged_seed_graphs_round_trip_and_repeated_installation() -> None:
+    source_key = "dubizzle_eg_wayback"
+    graphs = TortoiseRuleGraphRepository()
+    seeds = PackagedRuleSeedProvider()
+    service = RuleSeedService(graphs=graphs, seeds=seeds)
+    assert len((await service.seed(source_key)).installed) == 2
+    for expected in seeds.load(source_key):
+        actual = await graphs.active(source_key, expected.domain)
+        assert actual is not None and actual.version == 1
+        assert actual.nodes == expected.nodes and actual.edges == expected.edges
+        assert actual.vocab == expected.vocab
+    assert not (await service.seed(source_key)).installed
+    for domain in RuleDomain:
+        assert len(await graphs.versions(source_key, domain)) == 1
 
 
 async def test_gaps_and_llm_ledger() -> None:

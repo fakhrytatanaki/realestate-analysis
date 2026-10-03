@@ -43,6 +43,9 @@ realestate = "realestate.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"realestate.infrastructure.sources.dubizzle_eg_wayback" = ["*.json"]
+
 [tool.aerich]
 tortoise_orm = "realestate.config.tortoise.TORTOISE_ORM"
 location = "./migrations"

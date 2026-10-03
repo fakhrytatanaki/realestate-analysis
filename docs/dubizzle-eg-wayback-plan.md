@@ -2,8 +2,29 @@
 
 [Guide index](README.md) · [Existing archive pipeline](wayback-crawler-state-machine.md) · [OLX quality assessment](wayback-performance-assessment.md)
 
-Investigation date: **2026-10-03**. Status: **proposal; no scraper implementation
-or database changes made**.
+Investigation date: **2026-10-03**. Status: **initial implementation in progress;
+no pilot ingestion or database changes made**.
+
+Implemented starting slice:
+
+- Sanitized compressed fixtures for all six investigated responses, recorded
+  expected IDs/amounts/types/areas and capture times, and explicitly synthetic
+  rejection/mixed-category/large-payload cases. See the
+  [fixture evidence notes](../core/tests/fixtures/wayback_dubizzle_eg/README.md).
+- Separate registered `dubizzle_eg_wayback` source, 2023–2026 defaults, disabled
+  example configuration, and explicit idempotent `rules seed` installation.
+- Reviewed navigation plus complete category JSON-list rules. Minimal opt-in
+  template support filters per-item taxonomy, requires identity fields, preserves
+  unknown rental basis and disables title-price substitution. Subtype codes remain
+  `OTHER`; raw codes and down payment are retained without asserting their meaning.
+- Fixed shared Wayback extraction caching to retain the payload object, preventing
+  reused Python object IDs from returning another document's extraction result.
+
+The step 1 evidence gate remains open for a complete 2023 sales capture, a real
+matching list/detail pair, period/payment examples and broader field auditing.
+Step 2's source/seed infrastructure is implemented. Step 3's detail/HTML fallback,
+diagnostics, structured mappings and induction summaries, and replay-provenance
+hardening before step 4 remain outstanding. No bounded pilot has been run.
 
 ## Recommendation
 

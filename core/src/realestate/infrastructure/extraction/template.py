@@ -27,6 +27,13 @@ field spec may use ``css`` (relative to the item, or the page with
 an attribute), ``json`` (inside a JSON item), ``script`` + ``json`` (page-level
 embedded JSON), ``template`` (``"/ad/{slug}-ID{externalID}.html"`` filled from a
 JSON item), ``regex`` (group 1 if present) and ``const``.
+
+JSON items may declare ``filters: [{"path": ..., "pattern": ...}]``; every
+pattern must full-match its resolved value. ``required_fields`` rejects items
+missing mapped values before identity fallback. ``strict_classification`` uses
+only the mapped classification fields. ``default_rental_price_type="UNKNOWN"``
+and ``allow_title_price=false`` opt into conservative archive price handling;
+omitting these options preserves existing template behavior.
 """
 
 from __future__ import annotations
@@ -140,17 +147,33 @@ def run_template(
     filled: set[str] = set()
 
     for index, item in enumerate(items):
+        filters = (spec.get("items") or {}).get("filters", [])
+        if not all(
+            compiled(str(rule["pattern"])).fullmatch(
+                first_scalar(resolve(item.data, rule["path"])) or ""
+            )
+            for rule in filters
+        ):
+            result.problems.append(f"item {index}: item filter rejected")
+            continue
         values = {
             name: _field_value(alternatives, item, document)
             for name, alternatives in fields.items()
         }
         filled.update(name for name, value in values.items() if value)
+        missing = [name for name in spec.get("required_fields", []) if not values.get(name)]
+        if missing:
+            result.problems.append(f"item {index}: missing required fields {missing}")
+            continue
         draft, problem, miss = _build_draft(
             values,
             item=item,
             document=document,
             vocab=merged_vocab,
             default_currency=spec.get("default_currency"),
+            strict_classification=bool(spec.get("strict_classification", False)),
+            allow_title_price=bool(spec.get("allow_title_price", True)),
+            default_rental_price_type=PriceType(spec.get("default_rental_price_type", "PER_MONTH")),
             template_key=template_key,
             graph_version=graph_version,
             country_code=country_code,
@@ -381,6 +404,9 @@ def _build_draft(
     document: ParsedDocument,
     vocab: Mapping[str, Sequence[Mapping[str, Any]]],
     default_currency: Any,
+    strict_classification: bool,
+    allow_title_price: bool,
+    default_rental_price_type: PriceType,
     template_key: str,
     graph_version: int,
     country_code: str | None,
@@ -421,6 +447,10 @@ def _build_draft(
         document.url,
         document.title,
     ]
+    if strict_classification:
+        # A reviewed per-item field must not fall through to a misleading
+        # title, generic purpose, or the surrounding page's category.
+        context = [values.get("listing_type")]
     listing_value = _vocab_lookup(vocab.get("listing_type", []), context)
     try:
         listing_type = ListingType(listing_value) if listing_value else None
@@ -435,7 +465,9 @@ def _build_draft(
     # property_type field) says nothing and is skipped.
     property_value = _vocab_lookup(
         vocab.get("property_type", []),
-        [values.get("property_type"), title, category, document.url],
+        [values.get("property_type")]
+        if strict_classification
+        else [values.get("property_type"), title, category, document.url],
         unambiguous=True,
     )
     try:
@@ -447,15 +479,24 @@ def _build_draft(
         values.get("price"),
         listing_type=listing_type,
         default_currency=str(default_currency).upper() if default_currency else None,
+        default_rental_price_type=default_rental_price_type,
     )
     price_from_title = False
-    if parsed.amount is None and parsed.price_type is not PriceType.ON_REQUEST:
+    if (
+        allow_title_price
+        and parsed.amount is None
+        and parsed.price_type is not PriceType.ON_REQUEST
+    ):
         # Some adverts state the price only in the title ("2b, Red Sea -
         # 39600 GBP"); trusted only with an explicit currency marker, so
         # "3 bedrooms" never becomes a price.
         title_currency, _ = detect_currency(title)
         if title_currency:
-            from_title = parse_price(title, listing_type=listing_type)
+            from_title = parse_price(
+                title,
+                listing_type=listing_type,
+                default_rental_price_type=default_rental_price_type,
+            )
             if from_title.amount is not None:
                 parsed, price_from_title = from_title, True
     currency = parsed.currency

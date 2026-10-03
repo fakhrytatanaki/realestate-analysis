@@ -14,6 +14,7 @@ parameters. `enabled=false` still permits manual runs of implemented sources.
 | `dubizzle_eg` | HTTP collector and parser for Elasticsearch `_msearch` responses | Implemented; disabled in example settings |
 | `zillow` | Registered stub; fetch/parse raise `DataSourceNotImplementedError` | Cannot run; HTTP trigger returns 501 |
 | `olx_eg_wayback` | OLX Egypt 2010-2023 from the Wayback Machine; navigation and extraction rules induced by an LLM and stored as rule graphs | `params.domain`, `from_year`, `to_year`, `user_agent`, `min_delay_seconds`, `max_fetches_per_run`; crawl with `cli crawl` |
+| `dubizzle_eg_wayback` | Separate Dubizzle Egypt archive, 2023-2026; reviewed initial navigation and complete category JSON-list rules | Disabled by default; same archive parameters; explicitly install rules with `cli rules seed --source dubizzle_eg_wayback` |
 
 The shared fixture directory currently contains both generic `results` fixtures
 and `dubizzle_eg_apartments_sale.json` in Dubizzle's format. A full `fixture` run
@@ -51,7 +52,7 @@ For diagrams and a detailed walkthrough of the implemented OLX crawler, see
 [the Wayback crawler state machine guide](wayback-crawler-state-machine.md).
 
 `WaybackDataSource` is generic: a subclass names a domain and a year range. Nothing
-site-specific is hand-written. The crawl frontier (one row per CDX capture) is routed
+site-specific is encoded in the adapter. The crawl frontier (one row per CDX capture) is routed
 by a *navigation* graph; fetched pages are parsed by an *extraction* graph. Both are
 versioned state machines in Postgres (`rule_graph`, `rule_node`, `rule_edge`): edges
 are guarded by conditions (URL regex, CSS, text regex, embedded-JSON paths, spaCy
@@ -62,8 +63,20 @@ Misses are clustered into gaps (`rule_gap`) and sent to the LLM, which answers w
 selectors, regexes and vocabulary -- never values. Answers are validated against
 real samples before they become a new graph version, and every answer is kept in
 `llm_decision`. `parse()` uses the graph version pinned for the run and never calls
-the model, so replays stay deterministic. The only seed rule follows links from
-recognised pages, which is how advert URLs with empty slugs get fetched.
+the model, so replays stay deterministic. The generic seed follows links from
+recognised pages, which is how advert URLs with empty slugs get fetched. Dubizzle
+also ships reviewed source-specific graphs, installed explicitly with `rules seed`.
+
+Dubizzle seed v1 supports complete Arabic/English apartment/duplex category
+JSON lists (`state.algolia.content.hits`). It validates each item's property
+taxonomy, reads `extraFields.price`, deduplicates numeric external IDs, and uses
+the original language path. Missing rental periods remain `UNKNOWN` with their
+known amount. Subtypes remain `OTHER` until code meanings are validated; raw
+subtype/payment/down-payment fields are retained as attributes. Detail pages,
+truncated JSON, empty results and challenges remain extraction gaps. The fixture
+README records remaining evidence requirements. The full fallback, detail and
+replay-provenance work in the [Dubizzle plan](dubizzle-eg-wayback-plan.md) precedes
+the bounded pilot.
 
 Observations carry the capture time (`observed_at`); the listing row always reflects
 the newest capture and `listing_observation` keeps one row per capture (price
@@ -78,12 +91,15 @@ Deterministic engine rules the templates rely on:
   times cannot shadow each other.
 - Sale/rent is read from the type field, category, title, location, then the
   advert's own text, then the page; a property-type text naming several types
-  ("Houses - Apartments") is skipped in favour of the next.
+  ("Houses - Apartments") is skipped in favour of the next. Reviewed templates
+  can opt into `strict_classification` to use only per-item mapped fields.
 - A `css` + `regex` field without `index` tries every matching node ("Bedrooms: 3"
   and "Bathrooms: 2" spans sharing one selector); a `title`/`alt` attribute that
   only adds a suffix to the visible text ("... - Cairo") yields the visible text.
 - Prices below 100 (5 per night/week/m²) are placeholders and stored as unknown; with
   no price field value, a title price is used only if it carries a currency marker.
+  `allow_title_price=false` disables that fallback; `default_rental_price_type`
+  controls whether a missing rental period defaults to monthly or stays unknown.
 - Induction rejects a field that stays empty on every advert of 2+ sample pages.
 
 See [the plan](historical-sources-plan.md) for the investigation behind this.

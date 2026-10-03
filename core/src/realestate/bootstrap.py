@@ -28,6 +28,7 @@ from realestate.application.services.rule_induction_service import (
     InductionSettings,
     RuleInductionService,
 )
+from realestate.application.services.rule_seed_service import RuleSeedService
 from realestate.config.settings import Settings, load_settings
 from realestate.config.tortoise import build_tortoise_config
 from realestate.domain.ports.archive import (
@@ -65,6 +66,7 @@ from realestate.infrastructure.db.repositories.rules import (
 )
 from realestate.infrastructure.db.repositories.scrape_run import TortoiseScrapeRunRepository
 from realestate.infrastructure.extraction.engine import HtmlRuleEngine
+from realestate.infrastructure.extraction.seeds import PackagedRuleSeedProvider
 from realestate.infrastructure.llm.ollama import OllamaLlm, OllamaSettings
 from realestate.infrastructure.logging.factory import LogProviderFactory
 from realestate.infrastructure.scheduling.apscheduler_scheduler import ApSchedulerJobScheduler
@@ -174,6 +176,10 @@ class Container:
         return WaybackCdxIndex(self.wayback)
 
     # -- application ------------------------------------------------------
+
+    @cached_property
+    def rule_seeds(self) -> RuleSeedService:
+        return RuleSeedService(graphs=self.rule_graphs, seeds=PackagedRuleSeedProvider())
 
     @cached_property
     def ingestion(self) -> IngestionService:

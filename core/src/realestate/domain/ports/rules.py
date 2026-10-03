@@ -40,6 +40,14 @@ class RuleGraphRepository(ABC):
         """Every version, newest first."""
 
 
+class RuleSeedProvider(ABC):
+    """Load and validate reviewed initial graphs without performing persistence."""
+
+    @abstractmethod
+    def load(self, source_key: str) -> Sequence[RuleGraph]:
+        """Both decision domains, or raise ValueError for unsupported/invalid seeds."""
+
+
 class RuleGapRepository(ABC):
     """Clusters of unhandled inputs awaiting induction."""
 

@@ -1,6 +1,6 @@
-"""The only hand-written rules: generic, and true for any archived site.
+"""Generic navigation seed, shared with reviewed source-specific seed graphs.
 
-Everything site-specific is induced. The navigation seed encodes one idea: a
+The navigation seed encodes one idea: a
 URL that a *recognised* property list or detail page links to is worth
 fetching, whatever its URL looks like. That is what rescues advert URLs whose
 slug says nothing (``/ad/-ID9v1Io.html``).

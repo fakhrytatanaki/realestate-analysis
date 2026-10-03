@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from realestate.domain.enums import ListingType, PropertyType
 
@@ -69,6 +69,22 @@ class VocabEntry(BaseModel):
         return value.upper() if isinstance(value, str) else value
 
 
+class JsonItemFilter(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=200)
+    pattern: str = Field(min_length=1, max_length=400)
+
+    @field_validator("pattern")
+    @classmethod
+    def _compiles(cls, value: str) -> str:
+        try:
+            re.compile(value)
+        except re.error as exc:
+            raise ValueError(f"regex does not compile: {exc}") from exc
+        return value
+
+
 class TemplateProposal(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -79,7 +95,35 @@ class TemplateProposal(BaseModel):
     fields: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
     links: list[dict[str, Any]] = Field(default_factory=list)
     default_currency: str | None = None
+    default_rental_price_type: Literal["PER_MONTH", "UNKNOWN"] = "PER_MONTH"
+    required_fields: list[str] = Field(default_factory=list)
+    strict_classification: bool = False
+    allow_title_price: bool = True
     vocab: dict[str, list[VocabEntry]] = Field(default_factory=dict)
+
+    @field_validator("items")
+    @classmethod
+    def _filters(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is not None and "filters" in value:
+            if not value.get("script") or not isinstance(value["filters"], list):
+                raise ValueError("item filters require JSON items and a list of filters")
+            if len(value["filters"]) > 8:
+                raise ValueError("at most eight item filters are supported")
+            value = {
+                **value,
+                "filters": [
+                    JsonItemFilter.model_validate(rule).model_dump() for rule in value["filters"]
+                ],
+            }
+        return value
+
+    @model_validator(mode="after")
+    def _required_fields(self) -> TemplateProposal:
+        if not set(self.required_fields) <= self.fields.keys():
+            raise ValueError("required_fields must refer to declared fields")
+        if self.strict_classification and "listing_type" not in self.fields:
+            raise ValueError("strict_classification requires a listing_type field")
+        return self
 
     @field_validator("page_kind", mode="before")
     @classmethod
@@ -141,6 +185,10 @@ class TemplateProposal(BaseModel):
             "fields": self.fields,
             "links": self.links,
             "default_currency": self.default_currency,
+            "default_rental_price_type": self.default_rental_price_type,
+            "required_fields": self.required_fields,
+            "strict_classification": self.strict_classification,
+            "allow_title_price": self.allow_title_price,
             "name": self.name,
         }
 
