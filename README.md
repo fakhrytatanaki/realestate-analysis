@@ -90,6 +90,16 @@ python -m realestate.cli search --listing-type RENT --limit 5
 Schedules come from `etc/settings.toml`. Set `scheduler.run_in_api = true` to
 run them inside the API process instead.
 
+For a one-shot batch or an external cron job:
+
+```bash
+./scripts/ingest.sh --source fixture --source dubizzle_eg --max-items 2
+./scripts/ingest.sh --all-enabled --dry-run
+```
+
+The helper chooses scraping or archive crawling for each source and prevents
+overlapping helper runs. See [cron setup and options](docs/operations.md#one-shot-ingestion-and-cron).
+
 ## How it works
 
 Collection is two-stage: payloads are archived to a blob store first, then

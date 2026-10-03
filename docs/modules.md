@@ -13,6 +13,7 @@ the same applies to `tests/__init__.py`.
 | [bootstrap.py](../core/src/realestate/bootstrap.py) | `Container`: lazy dependency graph, DB lifecycle, scheduled-job registration, teardown |
 | [main.py](../core/src/realestate/main.py) | `create_app()`: FastAPI factory, lifespan, routes, optional API scheduler |
 | [cli.py](../core/src/realestate/cli.py) | Argument parsing and `sources`, `scrape`, `parse`, `search`, `crawl`, `archive`, `rules` service calls |
+| [ingest.py](../core/src/realestate/ingest.py) | One-shot batches of live/archive sources, dry runs, failure exit codes and local cron overlap lock; [usage](operations.md#one-shot-ingestion-and-cron) |
 | [worker.py](../core/src/realestate/worker.py) | Standalone scheduler loop and SIGINT/SIGTERM shutdown |
 | [config/paths.py](../core/src/realestate/config/paths.py) | `CORE_DIR`, `etc/`, `var/`, and resolution of relative configured paths |
 | [config/settings.py](../core/src/realestate/config/settings.py) | Typed settings, environment/TOML precedence, per-source defaults |
@@ -133,6 +134,7 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [test_api.py](../core/tests/test_api.py) | HTTP filters, pagination, lookup, auth and source/run behavior using fakes |
 | [test_query_params.py](../core/tests/test_query_params.py) | Validation and domain query conversion |
 | [test_ingestion_service.py](../core/tests/test_ingestion_service.py) | Archive/parse order, run outcomes, resource cleanup, replay |
+| [test_ingest_helper.py](../core/tests/test_ingest_helper.py) | Batch selection, workflow routing, dry runs, failure continuation and cron overlap exclusion |
 | [test_fixture_source.py](../core/tests/test_fixture_source.py) | Generic fixture collection, normalization, malformed input and determinism |
 | [test_dubizzle_eg_source.py](../core/tests/test_dubizzle_eg_source.py) | Dubizzle mapping, pagination/caps, mocked requests and health checks |
 | [test_repositories_integration.py](../core/tests/test_repositories_integration.py) | Real DB upserts/timestamps, geo filtering/counts, paging and document/run lifecycle |

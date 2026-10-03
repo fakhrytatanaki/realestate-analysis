@@ -46,6 +46,66 @@ instance per job **within that scheduler**. Multiple workers/API schedulers can
 still duplicate runs. HTTP-triggered runs use FastAPI `BackgroundTasks`, separate
 from APScheduler, and disappear if the process exits before they complete.
 
+## One-shot ingestion and cron
+
+`scripts/ingest.sh` runs a batch once and exits, using `core/venv` and the usual
+settings file/environment overrides. It can be called from any working directory.
+The database must already be running and migrated; no API or worker is required.
+
+```bash
+# Choose one or several sources; repeated keys run only once.
+./scripts/ingest.sh --source fixture --source dubizzle_eg --max-items 2
+
+# Preview every enabled, implemented source without database or network access.
+./scripts/ingest.sh --all-enabled --dry-run
+
+# Archive adapters use the crawl workflow; budgets apply per archive source.
+./scripts/ingest.sh --source olx_eg_wayback --source dubizzle_eg_wayback \
+  --rounds 3 --max-fetches 60 --max-llm-calls 10 --max-enumeration-pages 2
+```
+
+Live sources fetch and parse with their configured `max_items` and `params`;
+`--max-items` overrides that live payload cap. Archive sources run the existing
+crawler with separate fetch/model/enumeration/link budgets. `--max-llm-calls 0`
+disables induction calls. Archive runs retain the crawler's `BACKFILL` trigger.
+Prepare reviewed archive rules as described below before starting a new archive
+source; this helper does not seed them. Use `--require-complete-enumeration` to
+hold archive processing until all configured years have been enumerated.
+
+An explicit `--source` allows a disabled implementation for a manual run.
+`--all-enabled` selects only enabled implementations; `--scheduled` also requires
+every explicitly selected source to be enabled and marks live runs `SCHEDULED`.
+The script ignores source schedules because cron supplies the schedule.
+
+For example, create the log directory once, then add this entry with `crontab -e`
+(replace `/absolute/path/realestatepy` with your checkout):
+
+```bash
+mkdir -p /absolute/path/realestatepy/core/var/log
+```
+
+```cron
+# Every day at 02:00 in the cron daemon's timezone.
+0 2 * * * /absolute/path/realestatepy/core/scripts/ingest.sh --all-enabled --scheduled >> /absolute/path/realestatepy/core/var/log/ingest-cron.log 2>&1
+```
+
+Cron does not inherit your interactive shell's exports. Put persistent settings
+in `etc/settings.toml`, or set `REALESTATE_SETTINGS_FILE` and required environment
+overrides in the crontab. Avoid scheduling the same sources in the worker/API
+scheduler at the same time.
+
+Sources run sequentially and source failures do not stop the remaining batch.
+Exit codes are `0` for success, `1` for runtime errors, partial/failed runs or
+incomplete archive enumeration, `2` for invalid selection/options, `75` when
+another helper batch is running, and `130` for Ctrl-C. Per-run counts and archive
+stop reasons go to stdout; failure details go to stderr and application logs.
+
+A nonblocking Unix file lock at `core/var/lock/ingest.lock` prevents overlapping
+helper batches sharing that path. `--lock-file /path/to/lock` selects another
+path. The lock is released on process exit; keep the lock file in place.
+This does not coordinate workers, HTTP runs, direct CLI commands or other hosts.
+Dry runs skip locking. No cron entry is installed automatically.
+
 ## HTTP surface
 
 All application routes use `/api/v1`. OpenAPI lives at `/openapi.json`, with the
@@ -112,7 +172,9 @@ reports upsert counts, so consult document state/logs for parse failures. A
 
 ## Archive sources
 
-Archive sources (`olx_eg_wayback`, `dubizzle_eg_wayback`) are crawled, not scheduled.
+Archive sources (`olx_eg_wayback`, `dubizzle_eg_wayback`) use the crawl workflow;
+use the batch helper above to run that workflow from cron instead of assigning
+them a worker scrape schedule.
 `crawl` runs rounds of
 route → induce navigation rules → fetch and parse → induce templates → re-parse,
 within explicit budgets. Each crawl first releases captures claimed by a run that
