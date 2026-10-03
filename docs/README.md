@@ -13,6 +13,7 @@ them into PostgreSQL, and exposes a filterable FastAPI API. The backend lives in
 | [Module map](modules.md) | Find the owner of a behavior; every Python implementation module |
 | [Data sources](sources.md) | Existing adapters and how to add or repair a parser |
 | [Operations and API](operations.md) | Configuration, endpoints, scheduling, and replay |
+| [Wayback crawler state machine](wayback-crawler-state-machine.md) | Implemented OLX archive crawler: rule graphs, learning loop, state diagrams, and restart behavior |
 | [Historical sources plan](historical-sources-plan.md) | Proposal: archived olx.com.eg via Wayback, LLM-compiled rule graph |
 
 For a first change, read the architecture, locate the relevant module and tests,

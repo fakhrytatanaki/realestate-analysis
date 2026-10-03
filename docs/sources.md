@@ -47,6 +47,9 @@ construction and parsing; they do not establish live endpoint availability.
 
 ## Archive sources (rule graphs)
 
+For diagrams and a detailed walkthrough of the implemented OLX crawler, see
+[the Wayback crawler state machine guide](wayback-crawler-state-machine.md).
+
 `WaybackDataSource` is generic: a subclass names a domain and a year range. Nothing
 site-specific is hand-written. The crawl frontier (one row per CDX capture) is routed
 by a *navigation* graph; fetched pages are parsed by an *extraction* graph. Both are
