@@ -106,12 +106,20 @@ class RawDocumentRepository(ABC):
         limit: int = 100,
         fetched_after: datetime | None = None,
         graph_version_below: int | None = None,
+        after: tuple[datetime, UUID] | None = None,
+        least_recently_parsed: bool = False,
     ) -> list[RawDocument]:
         """Documents in a given parse state, oldest first.
 
         Passing ``PARSED`` is how a replay re-reads already-processed payloads;
         ``graph_version_below`` narrows that to documents parsed by an older
-        extraction graph (or before versions were recorded).
+        extraction graph (or before versions were recorded), oldest graph
+        version first, so repeated bounded replays reach every document.
+
+        ``after`` pages through all matches: the ``(fetched_at, id)`` of the
+        last document of the previous page. ``least_recently_parsed`` orders by
+        the last parse attempt instead, so bounded retries rotate rather than
+        re-trying the same oldest documents forever.
         """
 
     @abstractmethod

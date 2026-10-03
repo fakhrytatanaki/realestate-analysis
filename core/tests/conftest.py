@@ -332,11 +332,13 @@ class InMemoryRawDocumentRepository:
         limit=100,
         fetched_after=None,
         graph_version_below=None,
+        after=None,
+        least_recently_parsed=False,
     ):
         from realestate.domain.enums import RawDocumentStatus
 
         status = status or RawDocumentStatus.PENDING
-        return [
+        found = [
             document
             for document in self.documents.values()
             if document.status is status
@@ -346,7 +348,20 @@ class InMemoryRawDocumentRepository:
                 or document.graph_version is None
                 or document.graph_version < graph_version_below
             )
-        ][:limit]
+        ]
+        # Same orders as the Tortoise repository.
+        found.sort(key=lambda d: (d.fetched_at, d.id))
+        if graph_version_below is not None:
+            found.sort(key=lambda d: -1 if d.graph_version is None else d.graph_version)
+        if least_recently_parsed:
+            far_future = datetime.max.replace(tzinfo=UTC)
+            found.sort(key=lambda d: d.parsed_at or far_future)
+        if after is not None:
+            found = sorted(
+                (d for d in found if (d.fetched_at, d.id) > after),
+                key=lambda d: (d.fetched_at, d.id),
+            )
+        return found[:limit]
 
     async def mark_parsed(self, document_id, *, graph_version=None, report=None):  # type: ignore[no-untyped-def]
         from dataclasses import replace
@@ -384,6 +399,7 @@ class InMemoryRawDocumentRepository:
         self.documents[document_id] = replace(
             document,
             status=RawDocumentStatus.UNRECOGNISED,
+            parsed_at=datetime.now(UTC),
             parse_error=reason,
             graph_version=graph_version,
             parse_report=dict(report) if report is not None else None,

@@ -197,21 +197,35 @@ class IdentityPolicy:
 
     id_patterns: tuple[str, ...]
     reject_patterns: tuple[str, ...] = ()
+    #: Advert URLs whose token is *not* trusted as identity (a base62 slug
+    #: token, say) but still names one advert: evidence that a page lists
+    #: adverts, never an external id.
+    advert_patterns: tuple[str, ...] = ()
 
     def canonical_id(self, url: str | None) -> str | None:
         """The advert id in ``url``, or ``None`` if it names no advert."""
         if not url or self.rejects(url):
             return None
-        for pattern in self.id_patterns:
-            match = re.search(pattern, url, re.IGNORECASE)
-            if match:
-                return match.group(1) if match.groups() else match.group(0)
-        return None
+        return _first_match(self.id_patterns, url)
+
+    def advert_key(self, url: str | None) -> str | None:
+        """A key for the advert ``url`` links to, trusted as identity or not."""
+        if not url or self.rejects(url):
+            return None
+        return _first_match(self.id_patterns, url) or _first_match(self.advert_patterns, url)
 
     def rejects(self, url: str) -> bool:
         return is_site_root(url) or any(
             re.search(pattern, url, re.IGNORECASE) for pattern in self.reject_patterns
         )
+
+
+def _first_match(patterns: Sequence[str], url: str) -> str | None:
+    for pattern in patterns:
+        match = re.search(pattern, url, re.IGNORECASE)
+        if match:
+            return match.group(1) if match.groups() else match.group(0)
+    return None
 
 
 def is_site_root(url: str) -> bool:

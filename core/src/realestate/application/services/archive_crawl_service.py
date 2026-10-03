@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
 from realestate.application.rules.seeds import seed_navigation_graph
-from realestate.application.services.ingestion_service import IngestionService
+from realestate.application.services.ingestion_service import IngestionService, ReplayResult
 from realestate.application.services.rule_induction_service import (
     InductionReport,
     RuleInductionService,
@@ -561,15 +561,18 @@ class ArchiveCrawlService:
             )
             routed = await self.route(source_key)
 
+            # Counted every round, budget or not, so gap counts are the backlog.
+            await self._induction.collect_navigation_gaps(source_key)
             navigation = InductionReport()
+            rerouted = RouteReport()
             if llm_left > 0 and routed.unrouted:
-                await self._induction.collect_navigation_gaps(source_key)
                 navigation = await self._induction.induce(
                     source_key, domain=RuleDomain.NAVIGATION, max_calls=llm_left, domain_name=domain
                 )
                 llm_left -= navigation.llm_calls
                 if navigation.versions:
-                    routed.add(await self.route(source_key))
+                    rerouted = await self.route(source_key)
+                    routed.add(rerouted)
 
             fetch_ctx = FetchContext(max_items=min(per_round, fetches_left))
             run = await self._ingestion.ingest(
@@ -583,23 +586,21 @@ class ArchiveCrawlService:
             )
             fetches_left -= fetch_attempts
 
+            await self._induction.collect_extraction_gaps(source_key)
             extraction = InductionReport()
-            reparsed = 0
+            replay = ReplayResult()
             if llm_left > 0:
-                await self._induction.collect_extraction_gaps(source_key)
                 extraction = await self._induction.induce(
                     source_key, domain=RuleDomain.EXTRACTION, max_calls=llm_left
                 )
                 llm_left -= extraction.llm_calls
                 if extraction.versions:
-                    reparsed = (await self._ingestion.reparse_unrecognised(source_key)).created
-                    # A new graph version is not applied until parsed documents
-                    # are re-read with it.
-                    reparsed += (
-                        await self._ingestion.reparse_stale(
-                            source_key, graph_version=max(extraction.versions)
-                        )
-                    ).created
+                    # A new graph version is not applied until every unrecognised
+                    # and older-parsed document is re-read with it.
+                    replay = await self._ingestion.reparse_stale(
+                        source_key, graph_version=max(extraction.versions), limit=None
+                    )
+            reparsed = replay.created
 
             links = await self.resolve_links(
                 source_key, limit=min(self._settings.link_lookups_per_round, lookups_left)
@@ -638,9 +639,17 @@ class ArchiveCrawlService:
             )
             for note in navigation.notes + extraction.notes:
                 await log.warning("induction note", note=note)
-            progressed = (
-                fetch_attempts or navigation.versions or extraction.versions or links.captures_added
+            # A saved version counts only if it changed something: a rule that
+            # never wins must not keep an unbounded crawl alive.
+            rules_took_effect = (
+                rerouted.queued
+                + rerouted.skipped
+                + rerouted.deferred
+                + replay.changed
+                + replay.created
+                + replay.updated
             )
+            progressed = fetch_attempts or links.captures_added or rules_took_effect
             if not progressed:
                 report.stopped = (
                     "no progress (nothing queued to fetch and no new rules)"

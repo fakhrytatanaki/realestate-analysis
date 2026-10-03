@@ -49,10 +49,10 @@ Services depend on domain ports. DTOs own transport validation and serialization
 
 | Module | Owns |
 |---|---|
-| [application/services/ingestion_service.py](../core/src/realestate/application/services/ingestion_service.py) | Run validation, archive-before-parse workflow, pending recovery, replay, error accounting |
+| [application/services/ingestion_service.py](../core/src/realestate/application/services/ingestion_service.py) | Run validation, archive-before-parse workflow, pending recovery, replay (`ReplayResult`: documents read and outcomes changed; unbounded stale replay), error accounting |
 | [application/services/listing_query_service.py](../core/src/realestate/application/services/listing_query_service.py) | Search cap, listing/provenance lookup, missing-record errors, counts |
 | [application/services/archive_crawl_service.py](../core/src/realestate/application/services/archive_crawl_service.py) | Enumerate CDX into the frontier, optional enumeration gate, route captures, capture selection, attempt budgets across crawl rounds |
-| [application/services/rule_induction_service.py](../core/src/realestate/application/services/rule_induction_service.py) | Gap collection (URL shapes, DOM fingerprints), LLM questions, validation against samples, compiling answers into graph versions |
+| [application/services/rule_induction_service.py](../core/src/realestate/application/services/rule_induction_service.py) | Gap collection (URL shapes, DOM fingerprints, full scans), LLM questions on current misses, validation against samples and inside the graph (first-match navigation, URL-shape reach, `OTHER` advert evidence, curated winners to `NEEDS_HUMAN`), compiling answers into graph versions |
 | [application/services/initial_rule_seed_service.py](../core/src/realestate/application/services/initial_rule_seed_service.py) | Explicit initial-graph installation through ports; retains each domain's active operator graph |
 | [application/services/frontier_link_sink.py](../core/src/realestate/application/services/frontier_link_sink.py) | Links from recognised pages to frontier evidence |
 | [application/rules/proposals.py](../core/src/realestate/application/rules/proposals.py) | Pydantic models validating LLM navigation rules and extraction templates |
@@ -149,6 +149,7 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [test_wayback_and_llm_clients.py](../core/tests/test_wayback_and_llm_clients.py) | Wayback 429/404/replay/CDX paging, archive source pinning, Ollama tools/fallback/retries |
 | [test_wayback_replay.py](../core/tests/test_wayback_replay.py) | Redirect confinement before I/O, nearest-capture provenance/time proof, throttled hops and served-year scope |
 | [test_rule_induction_and_crawl.py](../core/tests/test_rule_induction_and_crawl.py) | Navigation and template induction, repair feedback, cache reuse, end-to-end crawl with evidence |
+| [test_induction_validation.py](../core/tests/test_induction_validation.py) | Induction judged as rules run: current samples, first-match conflicts, URL-shape reach, curated winners, `OTHER` evidence, vocabulary guards, failed-gap counting, effect-based crawl progress, full scans |
 | [test_archive_pilot_limits.py](../core/tests/test_archive_pilot_limits.py) | Failed-attempt budgets across rounds/batches, zero limits, enumeration completion and resume, source-scoped cursors |
 | [test_archive_repositories_integration.py](../core/tests/test_archive_repositories_integration.py) | Real DB frontier, graphs, gaps, ledger; observation-ordered upserts |
 | [fixtures/wayback_olx_eg/](../core/tests/fixtures/wayback_olx_eg/) | Gzipped real captures (2011-2023) and hand-written reference templates |

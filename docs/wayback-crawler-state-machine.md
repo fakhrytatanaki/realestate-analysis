@@ -63,16 +63,20 @@ flowchart TD
     Links -.->|Used by subsequent routing| Route
     Replay --> Lookup[Look up linked URLs no capture matched: exact CDX query near the linking capture]
     Lookup -.->|New captures carry link evidence| Route
-    Lookup --> Continue{"Rounds and fetch budget remain, and this round made progress?"}
+    Lookup --> Continue{"Rounds and fetch budget remain, and this round changed something?"}
     Continue -->|Yes| Route
     Continue -->|No| Stop[Stop and retain persisted work]
 ```
 
 [ArchiveCrawlService.crawl](../core/src/realestate/application/services/archive_crawl_service.py)
 coordinates these steps. Fetching finishes before the ingestion service parses
-that batch. A round counts as progress if it attempts fetches, saves a new
-navigation/extraction version, or adds captures through link lookups. The dashed link represents data fed back to later
-routing, rather than another routing pass during parsing.
+that batch. A round counts as progress if it attempts fetches, adds captures
+through link lookups, or saves a rule version that *changed something*: rerouted
+captures, or replayed documents whose status, winning template or listings
+changed. A version that changes nothing cannot keep `--rounds 0` alive. Gaps are
+counted every round, LLM budget or not, so gap counts are the live backlog. The
+dashed link represents data fed back to later routing, rather than another
+routing pass during parsing.
 
 ## What is actually constructed?
 
@@ -215,50 +219,63 @@ groups misses so it can learn one reusable recipe from several related inputs:
 ```mermaid
 flowchart TD
     URL[UNROUTED URLs] --> Shape[Group by URL shape]
-    HTML[UNRECOGNISED documents] --> Fingerprint[Cluster by structural fingerprint]
-    Shape --> Gap[OPEN rule_gap with samples and occurrence count]
+    HTML[UNRECOGNISED or flagged PARSED documents] --> Fingerprint[Cluster by structural fingerprint]
+    Shape --> Gap[OPEN rule_gap with current samples and occurrence count]
     Fingerprint --> Gap
-    Gap --> Cache{Valid answer cached for this request?}
-    Cache -->|Yes| Validate[Validate proposed rules against samples]
+    Gap --> Fresh{Still a miss under the active graph?}
+    Fresh -->|No| Skip[Skip: nothing to ask]
+    Fresh -->|Curated template wins and malfunctions| Human[NEEDS_HUMAN]
+    Fresh -->|Yes| Cache{Valid answer cached for this request?}
+    Cache -->|Yes| Validate[Validate on samples, then inside the graph]
     Cache -->|No| Model[Ask LLM for structured rule proposal]
     Model --> Ledger[Record answer in llm_decision]
     Ledger --> Validate
     Validate -->|Pass| Extend[Append nodes, edges and vocabulary]
     Extend --> Activate[Save ACTIVE version N+1; retire previous version]
     Activate --> Resolved[Mark covered gap RESOLVED]
-    Resolved --> Retry[Route old URL misses or reparse saved pages]
+    Resolved --> Retry[Route old URL misses or reparse every stale page]
     Validate -->|Template fails and repair budget remains| Feedback[Send errors back to LLM]
     Feedback --> Model
     Validate -->|Uncovered navigation group or exhausted template repairs| Failure[Record gap failure; FAILED at attempt limit]
 ```
 
-Navigation asks about batches of URL-shape groups. Extraction provides a trimmed
-view of an archived page and validates the proposed template on saved samples
-from that design, with the source's identity policy and country, exactly as
-production parsing does. A new version copies the previous graph and appends
+Navigation asks about batches of URL-shape groups, showing each group's
+*current* misses: URLs of that shape still `UNROUTED` and still unmatched by the
+active graph, never samples stored when the gap was first seen (those may be
+routed by now, and asking again only produces duplicate rules). Extraction
+provides a trimmed view of an archived page and validates the proposed template
+on saved samples from that design, with the source's identity policy and
+country, exactly as production parsing does. A new version copies the previous graph and appends
 rules; induction does not rewrite existing nodes in place. `rules seed
 --retire KEY` creates a version **without** named states, which is how a
 faulty induced template is superseded.
 
 Extraction gaps come from `UNRECOGNISED` documents **and** from `PARSED` ones
 whose stored parse report shows the winning template malfunctioning (identity
-problems, or most items dropped). A wrong-but-populated result is a gap too.
+problems, most items dropped, or an `OTHER` page linking to three or more
+adverts). A wrong-but-populated result is a gap too. Collection scans every such
+document, a page at a time, and clusters misses by the fingerprint their parse
+stored. When a *curated* template is the one malfunctioning, no induced template
+can outrank it, so the gap becomes `NEEDS_HUMAN` without an LLM call.
 
 Current default validation and retry behavior:
 
 | Stage | Checks and bounds |
 |---|---|
-| Navigation | Valid decisions and compilable, nontrivial regexes; each accepted rule must match a sample in its group; the group's accepted rules together must cover at least 50% of samples |
-| Navigation breadth | With at least four groups, reject a pattern matching at least 90% of all sampled URLs |
+| Navigation | Valid decisions and compilable, nontrivial regexes; rules judged as they run, in answer order with the first match winning: each must win some of its own group's samples (a rule whose URLs earlier rules take is dead), and must not take another group's sample against that group's own rule; the accepted rules must route at least 50% of a group's samples to cover it |
+| Navigation breadth | Reject a pattern matching URLs of more than 25% of the site's URL shapes (from a sample spread over the whole frontier, once it has 20+ shapes); with at least four groups, also reject one matching 90% of the batch's samples |
 | Extraction conditions | Recognize the primary sample and at least 60% of sampled pages; include a distinctive page-design cue, rather than only a URL/date or generic selector |
+| `OTHER` evidence | Reject an `OTHER` proposal for a matched page linking to three or more distinct adverts (the identity policy's ids, plus advert URLs whose token is not trusted as an id) |
+| Inside the graph | The candidate, added to the active graph as acceptance would add it, must win on the primary sample; a template that works alone but loses to an existing one changes nothing |
+| Vocabulary | Proposed patterns of at least three characters; Latin alternatives get a leading `\b` (so `rent` no longer matches "current"); reject a pattern matching more than a quarter of a fixed set of neutral texts (place names, "Call now", …), since vocabulary is shared by every template |
 | Extraction output | Non-`OTHER` templates need a title; lists need an items recipe and at least two items on the primary sample; primary valid-item ratio must be at least 60%; other matched samples must also succeed |
 | Extraction field feedback | Reject missing sale/rent vocabulary, and declared fields empty on every sample: two list pages with ten or more items, or three detail pages (currency excepted) |
 | Extraction correctness | Reject regexes escaped twice (`\\d`); a `url` recipe pointing at the site home or a category page; one external id from detail pages of different adverts; a price regex that discards the amount, or price recipes that only ever succeed through the title fallback |
 | Gold regression | With verified gold labels for pages the candidate matches, reject it if adding it lowers the exact-match rate on id, title, amount, currency and sale/rent |
 | Repairs and failures | Up to two template repair responses after the initial proposal; gaps normally become `FAILED` after three failed induction attempts |
 
-`OTHER` proposals pass after condition validation without listing-output checks.
-These are checks on sampled archived pages; they do not establish that a rule
+`OTHER` proposals skip the listing-output checks but not the advert-link and
+graph checks. These are checks on sampled archived pages; they do not establish that a rule
 works across every capture. There is no separate human activation gate in this
 flow. Saving a validated version activates it immediately in a database transaction
 and retires the previous active version for that source and decision domain.
@@ -268,7 +285,11 @@ Successful answers can be reused for identical request fingerprints, including
 model, prompt version, messages, and response schema. Cached answers do not spend
 the crawl's LLM-call budget. Rule nodes link back to the decision that created them.
 If new misses recur in a previously `RESOLVED` gap, collection reopens it for
-induction. `FAILED` gaps remain excluded from automatic induction.
+induction. `FAILED` and `NEEDS_HUMAN` gaps keep counting the inputs like them
+(a new page of a failed design is not lost in it) but are not asked about,
+with two automatic exceptions for `FAILED` gaps: induction reopens those last
+attempted with a different model or prompt version, and collection reopens one
+once its count reaches four times what it was when it failed.
 
 ## Persistent capture and document lifecycles
 
@@ -431,8 +452,10 @@ frontier. Explicit `archive enumerate` can finish it before the next crawl.
 Exhausting that budget still permits fetching and parsing with existing rules.
 
 At startup, `crawl` parses up to 10,000 leftover `PENDING` documents. After new
-templates it reparses up to 500 `UNRECOGNISED` documents by default. Larger backlogs
-can be handled through explicit parse commands. Persisted rules and statuses let
+templates it reparses every `UNRECOGNISED` and older-parsed document, a batch at a
+time (`parse --stale` does the same). Bounded replays read the oldest graph
+version first, and `parse --unrecognised` the least recently tried documents, so
+repeating them reaches every document. Persisted rules and statuses let
 later runs continue, but there are several limits:
 
 - New navigation versions automatically retry `UNROUTED`, not all `SKIPPED` or
@@ -450,8 +473,10 @@ later runs continue, but there are several limits:
   under a row lock, so several crawl processes together still keep one
   `min_delay_seconds` between requests. A 429 pushes the shared slot back, pausing
   every worker.
-- `FAILED` gaps are not retried automatically; after changing the model or the
-  prompts, `rules gaps --reopen-failed` gives them fresh attempts.
+- `FAILED` gaps are retried automatically after a model or prompt-version change
+  (for failures recorded with their model) or once they grow fourfold;
+  `rules gaps --reopen-failed` gives every `FAILED` and `NEEDS_HUMAN` gap fresh
+  attempts by hand.
 - LLM decisions record the source whose induction asked (`llm_decision.source_key`),
   so `archive status` reports one source's calls and tokens.
 

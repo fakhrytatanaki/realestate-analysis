@@ -7,6 +7,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 
+from tortoise import Tortoise
 from tortoise.expressions import Q
 
 from realestate.domain.archive import (
@@ -252,6 +253,18 @@ class TortoiseCrawlFrontierRepository(CrawlFrontierRepository):
                 source_key=source_key, status=status
             ).count()
         return out
+
+    async def spread_urls(self, source_key: str, *, limit: int) -> list[str]:
+        total = await CrawlFrontierModel.filter(source_key=source_key).count()
+        if total == 0 or limit <= 0:
+            return []
+        step = max(1, total // limit)
+        rows = await Tortoise.get_connection("default").execute_query_dict(
+            'SELECT "original_url" FROM "crawl_frontier" '
+            'WHERE "source_key" = $1 AND "id" % $2 = 0 ORDER BY "id" LIMIT $3',
+            [source_key, step, limit],
+        )
+        return [str(row["original_url"]) for row in rows]
 
     async def sample_urls(self, source_key: str, status: CrawlStatus, *, limit: int) -> list[str]:
         rows = (

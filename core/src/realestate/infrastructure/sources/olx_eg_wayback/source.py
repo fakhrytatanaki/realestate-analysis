@@ -42,6 +42,8 @@ OLX_EG_IDENTITY = IdentityPolicy(
         r"/sitemap/",
         r"/(?:login|register|post-classifieds|myolx)",
     ),
+    # i2-era advert URLs: the base62 token names one advert but is not its id.
+    advert_patterns=(r"-ID([0-9A-Za-z]+)\.html",),
 )
 
 

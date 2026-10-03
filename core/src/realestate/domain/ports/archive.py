@@ -157,6 +157,14 @@ class CrawlFrontierRepository(ABC):
         """Captures per status."""
 
     @abstractmethod
+    async def spread_urls(self, source_key: str, *, limit: int) -> list[str]:
+        """About ``limit`` original URLs spread evenly over the whole frontier, any status.
+
+        A picture of the site's URL space, e.g. to tell how far a proposed
+        routing rule reaches beyond the URLs it was written for.
+        """
+
+    @abstractmethod
     async def sample_urls(self, source_key: str, status: CrawlStatus, *, limit: int) -> list[str]:
         """Original URLs of distinct URL keys in ``status``."""
 

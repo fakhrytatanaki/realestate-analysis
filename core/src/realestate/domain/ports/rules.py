@@ -52,8 +52,12 @@ class RuleGapRepository(ABC):
     """Clusters of unhandled inputs awaiting induction."""
 
     @abstractmethod
-    async def reset_open(self, source_key: str, domain: RuleDomain) -> None:
-        """Zero the occurrence counts of open gaps before a fresh recount."""
+    async def reset_counts(self, source_key: str, domain: RuleDomain) -> None:
+        """Zero the occurrence counts of unresolved gaps before a fresh recount.
+
+        Covers ``OPEN``, ``FAILED`` and ``NEEDS_HUMAN``, so every count is the
+        current backlog rather than a sum over collections.
+        """
 
     @abstractmethod
     async def record(
@@ -66,7 +70,14 @@ class RuleGapRepository(ABC):
         occurrences: int = 1,
         max_samples: int = 8,
     ) -> RuleGap:
-        """Add occurrences and samples to a gap, creating or reopening it."""
+        """Add occurrences and samples to a gap, creating or reopening it.
+
+        New samples come first, so a gap shows its current inputs rather than
+        the ones it was created with. ``RESOLVED`` gaps reopen. ``FAILED`` and
+        ``NEEDS_HUMAN`` gaps keep counting without reopening, except that a
+        ``FAILED`` gap reopens once it outgrows its size at failure
+        (:func:`~realestate.domain.rules.failed_gap_outgrown`).
+        """
 
     @abstractmethod
     async def list(
@@ -83,12 +94,28 @@ class RuleGapRepository(ABC):
     async def mark_resolved(self, gap_id: UUID, *, version: int) -> None: ...
 
     @abstractmethod
-    async def record_failure(self, gap_id: UUID, error: str, *, max_attempts: int) -> RuleGap:
-        """Count a failed induction; the gap becomes ``FAILED`` at ``max_attempts``."""
+    async def record_failure(
+        self, gap_id: UUID, error: str, *, max_attempts: int, attempted_with: str | None = None
+    ) -> RuleGap:
+        """Count a failed induction; the gap becomes ``FAILED`` at ``max_attempts``.
+
+        ``attempted_with`` (``model|prompt version``) is kept so that a later
+        model or prompt can be given another try (:meth:`reopen_superseded`).
+        """
+
+    @abstractmethod
+    async def mark_needs_human(self, gap_id: UUID, reason: str) -> None:
+        """Park a gap induction cannot resolve (a curated rule wins on its inputs)."""
 
     @abstractmethod
     async def reopen_failed(self, source_key: str, domain: RuleDomain | None = None) -> int:
-        """Give ``FAILED`` gaps a fresh set of attempts (after a model or prompt change)."""
+        """Give ``FAILED`` and ``NEEDS_HUMAN`` gaps a fresh set of attempts (manual)."""
+
+    @abstractmethod
+    async def reopen_superseded(
+        self, source_key: str, domain: RuleDomain, *, attempted_with: str
+    ) -> int:
+        """Reopen ``FAILED`` gaps last attempted with a different model or prompt."""
 
 
 class LlmDecisionRepository(ABC):
@@ -159,6 +186,14 @@ class RuleEngine(ABC):
     ) -> list[str]:
         """Bounded non-contact diagnostics for a miss; engines may provide none."""
         return []
+
+    def advert_links(self, document: ArchivedDocument, *, identity: IdentityPolicy | None) -> int:
+        """Distinct adverts the page links to, other than itself (0 without a policy).
+
+        Evidence against calling a page "without adverts": only the source's
+        identity policy can tell an advert link from any other.
+        """
+        return 0
 
     @abstractmethod
     def evaluate_candidate(

@@ -43,7 +43,7 @@ from realestate.domain.ports.rules import (
     RuleGapRepository,
     RuleGraphRepository,
 )
-from realestate.domain.rules import LlmDecision, RuleGap, RuleGraph
+from realestate.domain.rules import LlmDecision, RuleGap, RuleGraph, failed_gap_outgrown
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "wayback_olx_eg"
 SRC = Path(__file__).resolve().parents[1] / "src"
@@ -269,6 +269,11 @@ class InMemoryFrontier(CrawlFrontierRepository):
                 out[entry.status] += 1
         return out
 
+    async def spread_urls(self, source_key: str, *, limit: int) -> list[str]:
+        rows = [e for e in self.rows.values() if e.source_key == source_key]
+        step = max(1, len(rows) // limit) if limit > 0 else len(rows) + 1
+        return [entry.original_url for entry in rows[::step]][:limit]
+
     async def sample_urls(self, source_key: str, status: CrawlStatus, *, limit: int) -> list[str]:
         seen: dict[str, str] = {}
         for entry in self.rows.values():
@@ -387,12 +392,12 @@ class InMemoryGaps(RuleGapRepository):
                 return gap
         return None
 
-    async def reset_open(self, source_key: str, domain: RuleDomain) -> None:
+    async def reset_counts(self, source_key: str, domain: RuleDomain) -> None:
         for gap_id, gap in list(self.gaps.items()):
             if (
                 gap.source_key == source_key
                 and gap.domain is domain
-                and gap.status is GapStatus.OPEN
+                and gap.status is not GapStatus.RESOLVED
             ):
                 self.gaps[gap_id] = replace(gap, occurrences=0)
 
@@ -420,12 +425,15 @@ class InMemoryGaps(RuleGapRepository):
         else:
             if gap.status is GapStatus.RESOLVED:
                 gap = replace(gap, status=GapStatus.OPEN, occurrences=0)
-            if gap.status is GapStatus.OPEN:
-                gap = replace(
-                    gap,
-                    occurrences=gap.occurrences + occurrences,
-                    samples=list(dict.fromkeys([*gap.samples, *samples]))[:max_samples],
-                )
+            gap = replace(
+                gap,
+                occurrences=gap.occurrences + occurrences,
+                samples=list(dict.fromkeys([*samples, *gap.samples]))[:max_samples],
+            )
+            if gap.status is GapStatus.FAILED and failed_gap_outgrown(
+                gap.occurrences, gap.failed_occurrences
+            ):
+                gap = replace(gap, status=GapStatus.OPEN, attempts=0)
         self.gaps[gap.id] = gap
         return gap
 
@@ -451,25 +459,51 @@ class InMemoryGaps(RuleGapRepository):
             self.gaps[gap_id], status=GapStatus.RESOLVED, resolved_version=version
         )
 
-    async def record_failure(self, gap_id: UUID, error: str, *, max_attempts: int) -> RuleGap:
+    async def record_failure(
+        self, gap_id: UUID, error: str, *, max_attempts: int, attempted_with: str | None = None
+    ) -> RuleGap:
         gap = self.gaps[gap_id]
         attempts = gap.attempts + 1
+        failed = attempts >= max_attempts
         gap = replace(
             gap,
             attempts=attempts,
             last_error=error,
-            status=GapStatus.FAILED if attempts >= max_attempts else gap.status,
+            attempted_with=attempted_with if attempted_with is not None else gap.attempted_with,
+            status=GapStatus.FAILED if failed else gap.status,
+            failed_occurrences=gap.occurrences if failed else gap.failed_occurrences,
         )
         self.gaps[gap_id] = gap
         return gap
+
+    async def mark_needs_human(self, gap_id: UUID, reason: str) -> None:
+        self.gaps[gap_id] = replace(
+            self.gaps[gap_id], status=GapStatus.NEEDS_HUMAN, last_error=reason
+        )
 
     async def reopen_failed(self, source_key: str, domain: RuleDomain | None = None) -> int:
         reopened = 0
         for gap_id, gap in list(self.gaps.items()):
             if (
                 gap.source_key == source_key
-                and gap.status is GapStatus.FAILED
+                and gap.status in (GapStatus.FAILED, GapStatus.NEEDS_HUMAN)
                 and (domain is None or gap.domain is domain)
+            ):
+                self.gaps[gap_id] = replace(gap, status=GapStatus.OPEN, attempts=0)
+                reopened += 1
+        return reopened
+
+    async def reopen_superseded(
+        self, source_key: str, domain: RuleDomain, *, attempted_with: str
+    ) -> int:
+        reopened = 0
+        for gap_id, gap in list(self.gaps.items()):
+            if (
+                gap.source_key == source_key
+                and gap.domain is domain
+                and gap.status is GapStatus.FAILED
+                and gap.attempted_with is not None
+                and gap.attempted_with != attempted_with
             ):
                 self.gaps[gap_id] = replace(gap, status=GapStatus.OPEN, attempts=0)
                 reopened += 1

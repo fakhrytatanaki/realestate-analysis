@@ -42,6 +42,15 @@ ROOT_KEY = "root"
 #: A condition evaluator: given a condition dict, does it hold for the input?
 ConditionEvaluator = Callable[[Mapping[str, Any]], bool]
 
+#: A FAILED gap gets fresh attempts once its backlog grows this many times past
+#: what it was when it failed: the inputs it stands for are no longer a corner.
+FAILED_GAP_REGROWTH = 4
+
+
+def failed_gap_outgrown(occurrences: int, failed_occurrences: int) -> bool:
+    """Whether a FAILED gap now stands for enough new inputs to be asked about again."""
+    return occurrences >= FAILED_GAP_REGROWTH * max(1, failed_occurrences)
+
 
 @dataclass(frozen=True, slots=True)
 class RuleNode:
@@ -303,6 +312,11 @@ class RuleGap:
     attempts: int = 0
     last_error: str | None = None
     resolved_version: int | None = None
+    #: ``model|prompt version`` of the induction that last failed it, so a
+    #: model or prompt change gives FAILED gaps fresh attempts.
+    attempted_with: str | None = None
+    #: Occurrences when it became FAILED; growth past that reopens it.
+    failed_occurrences: int = 0
 
 
 @dataclass(frozen=True, slots=True)

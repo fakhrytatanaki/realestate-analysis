@@ -12,6 +12,10 @@ configured database between 13:00 and 13:15 UTC. A crawl was writing to the
 database the whole time, so frontier counts moved between queries. Each figure
 gives its own denominator. This review changed no code, rules or data.
 
+Status: **Phase 0 implemented** on branch `rule-induction-phase0` (see
+[Phase 0 status](#phase-0-status)). Phases 1–6 are not started. The stored graphs
+described below are unchanged.
+
 ## Verdict
 
 The deterministic half of the design is sound and should stay as it is: bytes-only
@@ -355,6 +359,53 @@ the 2016–2019 breadth pilot.
 Reproductions A–E become the regression tests for 0.2–0.7. They need only the
 existing `Harness` in `tests/test_rule_induction_and_crawl.py`, fixtures, and a
 scripted model; all five fail today as described above.
+
+#### Phase 0 status
+
+All eight items are implemented, with tests in
+[`test_induction_validation.py`](../core/tests/test_induction_validation.py) and
+repository tests in `test_archive_repositories_integration.py`. Undoing any single
+fix makes its test fail (16 such mutations checked). Where the implementation
+differs from the table above:
+
+- **0.2, catch-all guard.** "Reject a rule that contradicts how existing rules
+  route the URLs it matches" was tried first and rejected: on the live frontier the
+  catch-all disagreed with only 48% of existing routes (most of what it matches is
+  `/ad/` pages, deferred anyway), while a legitimate FETCH rule shadowed by an
+  earlier DEFER scored 100%. The implemented guard is *URL-shape reach*: a rule may
+  match URLs of at most 25% of the distinct URL shapes in a sample spread over the
+  whole frontier. Live, the catch-all spans 65.5% of 2,684 shapes; `/properties/`,
+  `/vehicles/` and `/cars/` span 7–9%; the 99th percentile of all rules is 8.6%.
+  Two live `q-.*` search-page rules (35–36%) would also be refused. They SKIP every
+  search page, property searches included.
+- **0.2, duplicates.** The first-match check also collapses one answer's repeated
+  rules: the live graph holds nine identical `/cars/` SKIP rules from one answer (v98).
+- **0.4.** Only advert links count, not currency-marked prices: non-property
+  category pages carry prices as well. The check needs an identity policy, so it does
+  not apply to `dubizzle_eg_wayback` until 5.1 gives it one.
+- **0.5.** Latin alternatives get a *leading* word boundary only, so `rent` still
+  matches "Rentals" but not "current".
+- **0.8.** Gap collection pages through every candidate with a keyset. Replays do
+  not need full scans to avoid starvation: bounded stale replays read the oldest
+  graph version first, bounded unrecognised retries read the least recently tried
+  first, and the crawl (and `parse --stale`) replays every stale document a batch
+  at a time.
+- Parse reports now store a miss's `fingerprint` and an `OTHER` page's
+  `advert_links`, so collection needs no blob reads for them. Replays return a
+  `ReplayResult` with the documents read and how many changed outcome; this is the
+  effect that 0.7 checks.
+
+Operational follow-ups:
+
+- Migration `6_…_rule_gap_failure_tracking` adds `rule_gap.attempted_with` and
+  `failed_occurrences`. Run `./scripts/migrate.sh` before using this code against a
+  database. It was generated against, and tested on, a scratch database upgraded
+  through 0–5, not the shared dev database.
+- Existing `OTHER` documents have no `advert_links` in their stored report until
+  they are re-parsed (`parse --source … --reparse`), so `tpl.v5`'s six gallery
+  pages surface as gaps only after that, or after item 1.2 retires the template.
+- Existing `FAILED` gaps have no recorded model, so they are not reopened
+  automatically; use `rules gaps --reopen-failed` for them.
 
 ### Phase 1: repair the stored graphs
 

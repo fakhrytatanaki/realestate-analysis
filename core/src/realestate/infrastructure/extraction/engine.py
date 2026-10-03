@@ -29,6 +29,7 @@ from realestate.infrastructure.extraction.fingerprint import (
     structural_fingerprint,
 )
 from realestate.infrastructure.extraction.template import TemplateError, run_template
+from realestate.infrastructure.extraction.text import absolute_url
 
 #: Page-kind marker on a route action meaning "infer it from link evidence".
 FROM_EVIDENCE = "FROM_EVIDENCE"
@@ -121,6 +122,17 @@ class HtmlRuleEngine(RuleEngine):
             if len(problems) >= 20:
                 break
         return problems[:20]
+
+    def advert_links(self, document: ArchivedDocument, *, identity: IdentityPolicy | None) -> int:
+        if identity is None:
+            return 0
+        parsed = ParsedDocument(document)
+        own = identity.advert_key(document.url)
+        keys = {
+            identity.advert_key(absolute_url(node.attributes.get("href"), document.url))
+            for node in parsed.tree.css("a[href]")
+        }
+        return len(keys - {None, own})
 
     def check_condition(self, condition: Mapping[str, Any]) -> list[str]:
         problems: list[str] = []

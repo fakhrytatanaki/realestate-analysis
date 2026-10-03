@@ -17,8 +17,8 @@ import hashlib
 import json
 import re
 from collections import defaultdict
-from collections.abc import Sequence
-from dataclasses import dataclass, field
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass, field, replace
 from typing import Any
 from uuid import UUID
 
@@ -32,12 +32,14 @@ from realestate.domain.enums import (
     CrawlStatus,
     GapStatus,
     NodeKind,
+    PageKind,
     RawDocumentStatus,
     RuleDomain,
     RuleOrigin,
 )
 from realestate.domain.exceptions import LlmError
 from realestate.domain.gold import GoldDocument, GoldScore, GoldSet, score
+from realestate.domain.models import RawDocument
 from realestate.domain.ports.archive import CrawlFrontierRepository
 from realestate.domain.ports.blob_provider import BlobProvider
 from realestate.domain.ports.data_source import ArchiveDataSource
@@ -54,6 +56,7 @@ from realestate.domain.ports.source_registry import SourceRegistry
 from realestate.domain.rules import (
     ROOT_KEY,
     CandidateReport,
+    ExtractionOutcome,
     RuleEdge,
     RuleGap,
     RuleGraph,
@@ -66,15 +69,26 @@ class InductionSettings:
     nav_batch_size: int = 12
     nav_samples_per_gap: int = 8
     nav_url_scan_limit: int = 50_000
+    #: URLs spread over the whole frontier, the picture of the site's URL
+    #: space a proposed routing rule's reach is measured against.
+    nav_universe_sample: int = 20_000
+    #: A routing rule matching URLs of more than this share of the site's
+    #: URL shapes reaches far beyond the group it was written for.
+    nav_max_shape_share: float = 0.25
+    #: Below this many distinct shapes the frontier is too small to judge reach.
+    nav_min_universe_shapes: int = 20
     max_repairs: int = 2
     max_attempts: int = 3
     prompt_budget_chars: int = 24_000
     #: Fingerprints within this many bits are one page design (see fingerprint.py).
     cluster_distance: int = 10
     extraction_samples: int = 4
-    extraction_scan_limit: int = 500
+    #: Documents read per query while scanning for gaps (every one is scanned).
+    extraction_scan_batch: int = 500
     min_condition_ratio: float = 0.6
     min_valid_item_ratio: float = 0.6
+    #: A page linking to this many distinct adverts is not "without adverts".
+    advert_links_for_list: int = 3
 
 
 @dataclass(slots=True)
@@ -152,7 +166,7 @@ class RuleInductionService:
 
     async def collect_navigation_gaps(self, source_key: str) -> int:
         """Group unrouted URLs by shape; returns the number of open gaps."""
-        await self._gaps.reset_open(source_key, RuleDomain.NAVIGATION)
+        await self._gaps.reset_counts(source_key, RuleDomain.NAVIGATION)
         urls = await self._frontier.sample_urls(
             source_key, CrawlStatus.UNROUTED, limit=self._settings.nav_url_scan_limit
         )
@@ -183,72 +197,107 @@ class RuleInductionService:
 
         Unrecognised documents, plus parsed ones whose parse report shows the
         winning template malfunctioning (identity problems, most items
-        dropped): a wrong-but-populated result is a gap too, not a success.
+        dropped, an ``OTHER`` page linking to adverts): a wrong-but-populated
+        result is a gap too, not a success. Every candidate document is
+        scanned, not a fixed oldest window, so a design that failed induction
+        cannot hide newer ones; counts are recounted from zero each time.
         """
-        await self._gaps.reset_open(source_key, RuleDomain.EXTRACTION)
-        documents = await self._documents.list_by_status(
-            source_key=source_key,
-            status=RawDocumentStatus.UNRECOGNISED,
-            limit=self._settings.extraction_scan_limit,
-        )
-        parsed = await self._documents.list_by_status(
-            source_key=source_key,
-            status=RawDocumentStatus.PARSED,
-            limit=self._settings.extraction_scan_limit,
-        )
-        flagged = [raw for raw in parsed if self._needs_review(raw.parse_report)]
-        documents = [*documents, *flagged]
+        await self._gaps.reset_counts(source_key, RuleDomain.EXTRACTION)
         known = [
             gap.fingerprint
             for gap in await self._gaps.list(source_key, RuleDomain.EXTRACTION, limit=5000)
         ]
-        touched: set[str] = set()
-        for raw in documents:
-            try:
-                content = await self._blob.get(raw.blob_key)
-            except Exception as exc:
-                await self._log.warning(
-                    "cannot read archived document", document_id=str(raw.id), error=str(exc)
-                )
+        members: dict[str, list[str]] = defaultdict(list)
+        unrecognised = flagged = 0
+        async for raw in self._scan(source_key, RawDocumentStatus.UNRECOGNISED):
+            fingerprint = await self._fingerprint_of(raw)
+            if fingerprint is not None:
+                members[self._cluster(fingerprint, known)].append(str(raw.id))
+                unrecognised += 1
+        async for raw in self._scan(source_key, RawDocumentStatus.PARSED):
+            if not self._needs_review(raw.parse_report):
                 continue
-            document = ArchivedDocument.from_payload(
-                content, content_type=raw.content_type, source_url=raw.source_url, meta=raw.meta
-            )
-            fingerprint = self._engine.fingerprint(document)
-            nearest = min(
-                known,
-                key=lambda other: self._engine.fingerprint_distance(fingerprint, other),
-                default=None,
-            )
-            if (
-                nearest is not None
-                and self._engine.fingerprint_distance(fingerprint, nearest)
-                <= self._settings.cluster_distance
-            ):
-                fingerprint = nearest
-            else:
-                known.append(fingerprint)
+            fingerprint = await self._fingerprint_of(raw)
+            if fingerprint is not None:
+                members[self._cluster(fingerprint, known)].append(str(raw.id))
+                flagged += 1
+        for fingerprint, document_ids in members.items():
             await self._gaps.record(
                 source_key,
                 RuleDomain.EXTRACTION,
                 fingerprint,
-                samples=[str(raw.id)],
+                samples=_spread(document_ids, self._settings.extraction_samples),
+                occurrences=len(document_ids),
                 max_samples=self._settings.extraction_samples,
             )
-            touched.add(fingerprint)
         await self._log.info(
             "extraction gaps collected",
             source_key=source_key,
-            unrecognised_documents=len(documents) - len(flagged),
-            flagged_parsed_documents=len(flagged),
-            page_designs=len(touched),
+            unrecognised_documents=unrecognised,
+            flagged_parsed_documents=flagged,
+            page_designs=len(members),
         )
-        return len(touched)
+        return len(members)
+
+    async def _scan(self, source_key: str, status: RawDocumentStatus) -> AsyncIterator[RawDocument]:
+        """Every document of a source in ``status``, a page at a time."""
+        after = None
+        while True:
+            page = await self._documents.list_by_status(
+                source_key=source_key,
+                status=status,
+                limit=self._settings.extraction_scan_batch,
+                after=after,
+            )
+            for raw in page:
+                yield raw
+            if len(page) < self._settings.extraction_scan_batch:
+                return
+            after = (page[-1].fetched_at, page[-1].id)
+
+    async def _fingerprint_of(self, raw: RawDocument) -> str | None:
+        """The page design: stored by the parse that missed, else computed from the payload."""
+        stored = (raw.parse_report or {}).get("fingerprint")
+        if stored:
+            return str(stored)
+        try:
+            content = await self._blob.get(raw.blob_key)
+        except Exception as exc:
+            await self._log.warning(
+                "cannot read archived document", document_id=str(raw.id), error=str(exc)
+            )
+            return None
+        return self._engine.fingerprint(
+            ArchivedDocument.from_payload(
+                content, content_type=raw.content_type, source_url=raw.source_url, meta=raw.meta
+            )
+        )
+
+    def _cluster(self, fingerprint: str, known: list[str]) -> str:
+        """The known design within cluster distance, else ``fingerprint`` as a new one."""
+        nearest = min(
+            known,
+            key=lambda other: self._engine.fingerprint_distance(fingerprint, other),
+            default=None,
+        )
+        if (
+            nearest is not None
+            and self._engine.fingerprint_distance(fingerprint, nearest)
+            <= self._settings.cluster_distance
+        ):
+            return nearest
+        known.append(fingerprint)
+        return fingerprint
 
     def _needs_review(self, report: dict[str, Any] | None) -> bool:
         if not report:
             return False
         if int(report.get("identity_problems") or 0) > 0:
+            return True
+        if (
+            report.get("page_kind") == PageKind.OTHER.value
+            and int(report.get("advert_links") or 0) >= self._settings.advert_links_for_list
+        ):
             return True
         total = int(report.get("items_total") or 0)
         valid = int(report.get("items_valid") or 0)
@@ -277,23 +326,53 @@ class RuleInductionService:
         self, source_key: str, budget: int, domain_name: str
     ) -> InductionReport:
         report = InductionReport()
+        signature = self._attempted_with(prompts.NAV_PROMPT_VERSION)
+        reopened = await self._gaps.reopen_superseded(
+            source_key, RuleDomain.NAVIGATION, attempted_with=signature
+        )
+        if reopened:
+            await self._log.info(
+                "failed navigation gaps reopened for a new model or prompt", count=reopened
+            )
+        # The prompt shows a gap's *current* misses: samples stored when it was
+        # first seen may be routed by now, and asking about them again only
+        # yields duplicate rules that validate against the same stale URLs.
+        pool: dict[str, list[str]] = defaultdict(list)
+        for url in await self._frontier.sample_urls(
+            source_key, CrawlStatus.UNROUTED, limit=self._settings.nav_url_scan_limit
+        ):
+            pool[url_shape(url)].append(url)
+        universe = _shapes(
+            await self._frontier.spread_urls(
+                source_key, limit=self._settings.nav_universe_sample
+            )
+        )
         attempted: set[UUID] = set()  # ask about each gap at most once per call
         while report.llm_calls < budget:
-            candidates = await self._gaps.list(
-                source_key,
-                RuleDomain.NAVIGATION,
-                status=GapStatus.OPEN,
-                limit=self._settings.nav_batch_size * 20,
-            )
-            open_gaps = [
-                gap for gap in candidates if gap.occurrences > 0 and gap.id not in attempted
-            ][: self._settings.nav_batch_size]
-            if not open_gaps:
-                break
-            attempted.update(gap.id for gap in open_gaps)
             graph = await self._graphs.active(
                 source_key, RuleDomain.NAVIGATION
             ) or seed_navigation_graph(source_key)
+            open_gaps: list[RuleGap] = []
+            for gap in await self._gaps.list(
+                source_key, RuleDomain.NAVIGATION, status=GapStatus.OPEN, limit=5000
+            ):
+                if gap.occurrences <= 0 or gap.id in attempted:
+                    continue
+                attempted.add(gap.id)
+                current = self._still_unrouted(graph, pool.get(gap.fingerprint, []))
+                if not current:
+                    continue
+                open_gaps.append(
+                    replace(
+                        gap,
+                        samples=_spread(current, self._settings.nav_samples_per_gap),
+                        occurrences=len(pool[gap.fingerprint]),
+                    )
+                )
+                if len(open_gaps) >= self._settings.nav_batch_size:
+                    break
+            if not open_gaps:
+                break
             messages = [
                 LlmMessage("system", prompts.NAV_SYSTEM),
                 LlmMessage(
@@ -329,9 +408,9 @@ class RuleInductionService:
             report.llm_calls += 0 if answer.cached else 1
             report.cache_hits += 1 if answer.cached else 0
 
-            accepted, problems = self._validate_nav(answer.data, open_gaps)
+            accepted, covered, problems = self._validate_nav(answer.data, open_gaps, universe)
             await self._settle(answer, valid=bool(accepted), error="; ".join(problems) or None)
-            covered = {index for index, _ in accepted}
+            saved_version: int | None = None
             if accepted:
                 nodes, edges = [], []
                 priority = graph.next_edge_priority()
@@ -365,16 +444,25 @@ class RuleInductionService:
                         nodes=nodes, edges=edges, notes=f"llm: {len(nodes)} navigation rules"
                     )
                 )
+                saved_version = saved.version
                 report.versions.append(saved.version)
                 report.accepted += len(nodes)
+                # Routed from now on: later batches of this call must not ask again.
+                patterns = [re.compile(rule.pattern, re.IGNORECASE) for _, rule in accepted]
+                for shape, urls in pool.items():
+                    pool[shape] = [u for u in urls if not any(p.search(u) for p in patterns)]
+            if saved_version is not None:
                 for index in covered:
-                    await self._gaps.mark_resolved(open_gaps[index].id, version=saved.version)
+                    await self._gaps.mark_resolved(open_gaps[index].id, version=saved_version)
             for index, gap in enumerate(open_gaps):
                 if index not in covered:
                     report.rejected += 1
                     reason = "; ".join(problems[-3:]) or "no valid rule proposed for this group"
                     await self._gaps.record_failure(
-                        gap.id, reason, max_attempts=self._settings.max_attempts
+                        gap.id,
+                        reason,
+                        max_attempts=self._settings.max_attempts,
+                        attempted_with=signature,
                     )
             for index, rule in accepted:
                 await self._log.info(
@@ -395,18 +483,36 @@ class RuleInductionService:
             )
         return report
 
+    def _still_unrouted(self, graph: RuleGraph, urls: Sequence[str]) -> list[str]:
+        """Those of a shape's unrouted URLs the active graph still does not route.
+
+        Bounded: enough to sample from, without routing a whole shape.
+        """
+        limit = 4 * self._settings.nav_samples_per_gap
+        return [url for url in urls[:limit] if self._engine.route(graph, url, {}) is None]
+
     def _validate_nav(
-        self, data: dict[str, Any] | None, gaps: Sequence[RuleGap]
-    ) -> tuple[list[tuple[int, NavRuleProposal]], list[str]]:
+        self,
+        data: dict[str, Any] | None,
+        gaps: Sequence[RuleGap],
+        universe: dict[str, list[str]] | None = None,
+    ) -> tuple[list[tuple[int, NavRuleProposal]], set[int], list[str]]:
+        """``(accepted rules, covered group indexes, problems)``.
+
+        Rules are judged as they will run: appended in answer order, first
+        match wins. A rule must win some of its own group's URLs, must not
+        take another group's URL with a different decision than that group's
+        own rule gives it, and must not reach across the site's URL shapes.
+        """
         if data is None:
-            return [], ["reply contained no JSON object"]
+            return [], set(), ["reply contained no JSON object"]
         raw_rules = data.get("rules") if isinstance(data, dict) else None
         if isinstance(data, dict) and raw_rules is None and "pattern" in data:
             raw_rules = [data]
         problems: list[str] = []
         all_samples = [url for gap in gaps for url in gap.samples]
-        by_group: dict[int, list[tuple[int, NavRuleProposal, re.Pattern[str]]]] = defaultdict(list)
-        for order, raw in enumerate(raw_rules or []):
+        proposed: list[tuple[int, NavRuleProposal, re.Pattern[str]]] = []
+        for raw in raw_rules or []:
             try:
                 rule = NavRuleBatch(rules=[raw]).rules[0]
             except ValidationError as exc:
@@ -418,8 +524,7 @@ class RuleInductionService:
                 continue
             pattern = re.compile(rule.pattern, re.IGNORECASE)
             own = gaps[index].samples
-            hits = sum(1 for url in own if pattern.search(url))
-            if hits == 0:
+            if not any(pattern.search(url) for url in own):
                 problems.append(
                     f"group {rule.group}: pattern {rule.pattern!r} matches 0/{len(own)} samples"
                 )
@@ -431,23 +536,47 @@ class RuleInductionService:
                         f"group {rule.group}: pattern {rule.pattern!r} matches nearly every URL"
                     )
                     continue
-            by_group[index].append((order, rule, pattern))
-
-        # A group may mix kinds of pages, so several partial rules are fine --
-        # but together they must cover most of the group.
-        kept: list[tuple[int, int, NavRuleProposal]] = []
-        for index, rules in by_group.items():
-            own = gaps[index].samples
-            covered = sum(1 for url in own if any(p.search(url) for _, _, p in rules))
-            if covered / len(own) < 0.5:
+            reach = self._shape_reach(pattern, universe)
+            if reach is not None and reach > self._settings.nav_max_shape_share:
                 problems.append(
-                    f"group {index + 1}: rules together match only {covered}/{len(own)} samples"
+                    f"group {rule.group}: pattern {rule.pattern!r} matches URLs of {reach:.0%} "
+                    "of the site's URL shapes, far beyond this group; make it specific to "
+                    "this group's URLs"
                 )
                 continue
-            kept += [(order, index, rule) for order, rule, _ in rules]
-        # The model was told rules apply in the order listed; keep that order.
-        accepted = [(index, rule) for _, index, rule in sorted(kept, key=lambda item: item[0])]
-        return accepted, problems
+            proposed.append((index, rule, pattern))
+
+        accepted = _first_match_survivors(proposed, gaps, problems)
+        # A group may mix kinds of pages, so several partial rules are fine --
+        # but together the rules must route most of it.
+        while True:
+            covered: set[int] = set()
+            short: set[int] = set()
+            for index, gap in enumerate(gaps):
+                routed = sum(
+                    1 for url in gap.samples if any(p.search(url) for _, _, p in accepted)
+                )
+                if routed / len(gap.samples) >= 0.5:
+                    covered.add(index)
+                elif any(owner == index for owner, _, _ in accepted):
+                    short.add(index)
+                    problems.append(
+                        f"group {index + 1}: rules together match only "
+                        f"{routed}/{len(gap.samples)} samples"
+                    )
+            if not short:
+                break
+            accepted = [entry for entry in accepted if entry[0] not in short]
+        return [(index, rule) for index, rule, _ in accepted], covered, problems
+
+    def _shape_reach(
+        self, pattern: re.Pattern[str], universe: dict[str, list[str]] | None
+    ) -> float | None:
+        """Share of the site's URL shapes with an example the pattern matches."""
+        if not universe or len(universe) < self._settings.nav_min_universe_shapes:
+            return None
+        hit = sum(1 for urls in universe.values() if any(pattern.search(url) for url in urls))
+        return hit / len(universe)
 
     async def _source_context(self, source_key: str) -> _SourceContext:
         context = _SourceContext()
@@ -465,6 +594,14 @@ class RuleInductionService:
 
     async def _induce_extraction(self, source_key: str, budget: int) -> InductionReport:
         report = InductionReport()
+        signature = self._attempted_with(prompts.TEMPLATE_PROMPT_VERSION)
+        reopened = await self._gaps.reopen_superseded(
+            source_key, RuleDomain.EXTRACTION, attempted_with=signature
+        )
+        if reopened:
+            await self._log.info(
+                "failed extraction gaps reopened for a new model or prompt", count=reopened
+            )
         open_gaps = await self._gaps.list(
             source_key, RuleDomain.EXTRACTION, status=GapStatus.OPEN, limit=50
         )
@@ -477,17 +614,62 @@ class RuleInductionService:
             samples = await self._load_samples(gap)
             if not samples:
                 await self._gaps.record_failure(
-                    gap.id, "sample documents unavailable", max_attempts=1
+                    gap.id,
+                    "sample documents unavailable",
+                    max_attempts=1,
+                    attempted_with=signature,
                 )
                 continue
             graph = await self._graphs.active(source_key, RuleDomain.EXTRACTION) or RuleGraph.empty(
                 source_key, RuleDomain.EXTRACTION
             )
+            current = self._engine.extract(
+                graph,
+                samples[0].document,
+                country_code=context.country_code,
+                identity=context.identity,
+            )
+            if current is not None and not self._outcome_needs_review(
+                current, samples[0].document, context
+            ):
+                continue  # handled by now; the next collection will not count it
+            blocker = _curated_winner(graph, current)
+            if blocker is not None and current is not None:
+                reason = (
+                    f"curated template {blocker} wins on {samples[0].ref} and malfunctions "
+                    f"({current.items_valid} of {current.items_total} items valid); induced "
+                    "templates never outrank it, so fix it and install it with `rules seed`"
+                )
+                await self._gaps.mark_needs_human(gap.id, reason)
+                report.notes.append(f"extraction: {reason}")
+                await self._log.warning(
+                    "extraction gap needs a human", gap=gap.fingerprint, template=blocker
+                )
+                continue
             outcome = await self._induce_template(
-                graph, gap, samples, budget - report.llm_calls, context
+                graph, gap, samples, budget - report.llm_calls, context, signature
             )
             report.merge(outcome)
         return report
+
+    def _outcome_needs_review(
+        self, outcome: ExtractionOutcome, document: ArchivedDocument, context: _SourceContext
+    ) -> bool:
+        """:meth:`_needs_review` for a fresh outcome rather than a stored report."""
+        return self._needs_review(
+            {
+                "page_kind": outcome.page_kind.value,
+                "items_total": outcome.items_total,
+                "items_valid": outcome.items_valid,
+                "identity_problems": sum(1 for p in outcome.problems if "identity" in p),
+                "advert_links": self._engine.advert_links(document, identity=context.identity)
+                if outcome.page_kind is PageKind.OTHER
+                else 0,
+            }
+        )
+
+    def _attempted_with(self, prompt_version: str) -> str:
+        return f"{self._llm.model}|{prompt_version}"
 
     async def _induce_template(
         self,
@@ -496,6 +678,7 @@ class RuleInductionService:
         samples: list[_Sample],
         budget: int,
         context: _SourceContext,
+        signature: str | None = None,
     ) -> InductionReport:
         report = InductionReport()
         primary = samples[0].document
@@ -602,7 +785,10 @@ class RuleInductionService:
             ]
         report.rejected += 1
         await self._gaps.record_failure(
-            gap.id, "; ".join(errors)[:2000], max_attempts=self._settings.max_attempts
+            gap.id,
+            "; ".join(errors)[:2000],
+            max_attempts=self._settings.max_attempts,
+            attempted_with=signature,
         )
         await self._log.warning("template rejected", gap=gap.fingerprint, errors=errors[:5])
         return report
@@ -683,7 +869,19 @@ class RuleInductionService:
                 "use cues common to the design rather than to one page"
             ]
         if proposal.page_kind == "OTHER":
-            return []
+            for report, sample in zip(reports, samples, strict=True):
+                links = (
+                    self._engine.advert_links(sample.document, identity=context.identity)
+                    if report.condition_matched
+                    else 0
+                )
+                if links >= self._settings.advert_links_for_list:
+                    return [
+                        f"page {sample.ref} links to {links} different adverts, so it is not a "
+                        "page without property adverts; write a LIST or DETAIL template that "
+                        "extracts them (OTHER is only for pages with no property adverts)"
+                    ]
+            return self._wins_in_graph(trial, node, condition, samples[0], context)
         outcome = primary.outcome
         assert outcome is not None
         problems: list[str] = []
@@ -740,9 +938,36 @@ class RuleInductionService:
                         f"design ({other.document_ref})"
                     )
                     break
+        if not problems:
+            problems += self._wins_in_graph(trial, node, condition, samples[0], context)
         if not problems and context.gold:
             problems += self._gold_regression(graph, trial, node, condition, context)
         return problems
+
+    def _wins_in_graph(
+        self,
+        trial: RuleGraph,
+        node: RuleNode,
+        condition: dict[str, Any],
+        primary: _Sample,
+        context: _SourceContext,
+    ) -> list[str]:
+        """A template that works alone but loses inside the graph changes nothing."""
+        outcome = self._engine.extract(
+            _with_candidate(trial, node, condition),
+            primary.document,
+            country_code=context.country_code,
+            identity=context.identity,
+        )
+        if outcome is not None and outcome.template_key == node.key:
+            return []
+        winner = outcome.template_key if outcome is not None else "nothing"
+        found = f" with {outcome.items_valid} adverts" if outcome is not None else ""
+        return [
+            f"the template works on its own, but among the existing rules {winner} still "
+            f"wins on page {primary.ref}{found}; it must extract more adverts (or more of "
+            "their details) than that template to take effect"
+        ]
 
     def _correctness_problems(
         self,
@@ -797,17 +1022,7 @@ class RuleInductionService:
         context: _SourceContext,
     ) -> list[str]:
         """Adding the candidate must not lower the exact-match rate on gold pages it matches."""
-        candidate_graph = trial.extended(
-            nodes=[node],
-            edges=[
-                RuleEdge(
-                    from_key=ROOT_KEY,
-                    to_key=node.key,
-                    condition=condition,
-                    priority=trial.next_edge_priority(),
-                )
-            ],
-        )
+        candidate_graph = _with_candidate(trial, node, condition)
         before, after = GoldScore(), GoldScore()
         for gold in context.gold:
             if not self._engine.evaluate_candidate(
@@ -931,10 +1146,92 @@ class RuleInductionService:
             await self._decisions.mark_valid(answer.decision_id, valid, error)
 
 
+def _with_candidate(graph: RuleGraph, node: RuleNode, condition: dict[str, Any]) -> RuleGraph:
+    """``graph`` plus a proposed template, placed the way acceptance would place it."""
+    return graph.extended(
+        nodes=[node],
+        edges=[
+            RuleEdge(
+                from_key=ROOT_KEY,
+                to_key=node.key,
+                condition=condition,
+                priority=graph.next_edge_priority(),
+            )
+        ],
+    )
+
+
+def _curated_winner(graph: RuleGraph, outcome: ExtractionOutcome | None) -> str | None:
+    """The winning template's key when a human or seed wrote it."""
+    if outcome is None or not graph.has_node(outcome.template_key):
+        return None
+    origin = graph.node(outcome.template_key).origin
+    return outcome.template_key if origin in (RuleOrigin.HUMAN, RuleOrigin.SEED) else None
+
+
 def _page_identity(url: str, identity: IdentityPolicy | None) -> str:
     """Which advert a detail page is, judged from its own archived URL."""
     found = identity.canonical_id(url) if identity is not None else None
     return found or surt_key(url)
+
+
+def _shapes(urls: Sequence[str], examples: int = 3) -> dict[str, list[str]]:
+    """A few example URLs per URL shape."""
+    by_shape: dict[str, list[str]] = defaultdict(list)
+    for url in urls:
+        members = by_shape[url_shape(url)]
+        if len(members) < examples:
+            members.append(url)
+    return dict(by_shape)
+
+
+def _first_match_survivors(
+    proposed: Sequence[tuple[int, NavRuleProposal, re.Pattern[str]]],
+    gaps: Sequence[RuleGap],
+    problems: list[str],
+) -> list[tuple[int, NavRuleProposal, re.Pattern[str]]]:
+    """The proposed rules that still do something once earlier ones have matched.
+
+    Rules run in answer order and the first match wins, so a rule whose own
+    group's URLs are all taken by earlier rules is dead, and a rule that
+    takes another group's URL against that group's own rule overrides it.
+    """
+    accepted: list[tuple[int, NavRuleProposal, re.Pattern[str]]] = []
+    for index, rule, pattern in proposed:
+        wins = [
+            (group, url)
+            for group, gap in enumerate(gaps)
+            for url in gap.samples
+            if pattern.search(url) and not any(p.search(url) for _, _, p in accepted)
+        ]
+        if not any(group == index for group, _ in wins):
+            problems.append(
+                f"group {index + 1}: pattern {rule.pattern!r} routes none of its URLs: "
+                "rules listed before it already take them"
+            )
+            continue
+        conflict = next(
+            (
+                (group, url, other)
+                for group, url in wins
+                if group != index
+                for owner, other, other_pattern in proposed
+                if owner == group
+                and other.decision != rule.decision
+                and other_pattern.search(url)
+            ),
+            None,
+        )
+        if conflict is not None:
+            group, url, other = conflict
+            problems.append(
+                f"group {index + 1}: pattern {rule.pattern!r} would also route group "
+                f"{group + 1}'s {url} as {rule.decision}, but the rule for group {group + 1} "
+                f"says {other.decision}; list the more specific rule first or narrow this one"
+            )
+            continue
+        accepted.append((index, rule, pattern))
+    return accepted
 
 
 def _spread(items: Sequence[str], count: int) -> list[str]:

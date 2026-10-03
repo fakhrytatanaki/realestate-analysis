@@ -171,7 +171,11 @@ Deterministic engine rules the templates rely on:
 - Induction rejects a field that stays empty on every advert of 2+ list sample pages
   (10+ adverts) or 3+ detail pages, doubly escaped regexes, home-page `url` recipes,
   one id across different adverts, price regexes that drop the amount, and any
-  candidate that lowers the exact-match rate on verified gold pages.
+  candidate that lowers the exact-match rate on verified gold pages. A candidate
+  must also win inside the active graph; `OTHER` is refused for pages linking to
+  three or more adverts; vocabulary patterns that match generic text are refused
+  (vocabulary is shared by every template). Give archive sources an identity
+  policy: it is also how induction tells advert links from other links.
 
 See [the plan](historical-sources-plan.md) for the investigation behind this.
 

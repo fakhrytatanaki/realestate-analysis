@@ -56,17 +56,31 @@ class TortoiseRawDocumentRepository(RawDocumentRepository):
         limit: int = 100,
         fetched_after: datetime | None = None,
         graph_version_below: int | None = None,
+        after: tuple[datetime, UUID] | None = None,
+        least_recently_parsed: bool = False,
     ) -> list[RawDocument]:
         queryset = RawDocumentModel.filter(status=status)
         if source_key is not None:
             queryset = queryset.filter(source_key=source_key)
         if fetched_after is not None:
             queryset = queryset.filter(fetched_at__gte=fetched_after)
+        order = ["fetched_at", "id"]
         if graph_version_below is not None:
             queryset = queryset.filter(
                 Q(graph_version__lt=graph_version_below) | Q(graph_version__isnull=True)
             )
-        rows = await queryset.order_by("fetched_at").limit(limit)
+            # Oldest interpretation first: a bounded replay after each new
+            # version must not keep re-reading the same oldest documents.
+            order = ["graph_version", *order]
+        if least_recently_parsed:
+            order = ["parsed_at", *order]
+        if after is not None:
+            fetched_at, last_id = after
+            queryset = queryset.filter(
+                Q(fetched_at__gt=fetched_at) | Q(fetched_at=fetched_at, id__gt=last_id)
+            )
+            order = ["fetched_at", "id"]
+        rows = await queryset.order_by(*order).limit(limit)
         return [to_raw_document(row) for row in rows]
 
     async def mark_parsed(

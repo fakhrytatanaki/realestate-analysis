@@ -185,8 +185,9 @@ async def test_gaps_and_llm_ledger() -> None:
     gap = await gaps.record(
         "s", RuleDomain.NAVIGATION, "shape-a", samples=["u2", "u3"], occurrences=1
     )
-    assert gap.occurrences == 3 and gap.samples == ["u1", "u2", "u3"]
-    await gaps.reset_open("s", RuleDomain.NAVIGATION)
+    # Current inputs first: older samples may be handled by now.
+    assert gap.occurrences == 3 and gap.samples == ["u2", "u3", "u1"]
+    await gaps.reset_counts("s", RuleDomain.NAVIGATION)
     assert (await gaps.list("s", RuleDomain.NAVIGATION))[0].occurrences == 0
     failed = await gaps.record_failure(gap.id, "nope", max_attempts=1)
     assert failed.status is GapStatus.FAILED
@@ -212,6 +213,82 @@ async def test_gaps_and_llm_ledger() -> None:
     found = await ledger.find_valid("t", "fp", "m", "v1")
     assert found is not None and found.response == {"rules": []}
     assert await ledger.totals() == {"calls": 1, "valid": 1, "tokens_in": 10, "tokens_out": 4}
+
+
+async def test_unresolved_gaps_keep_counting_and_reopen_on_growth_or_a_new_prompt() -> None:
+    gaps = TortoiseRuleGapRepository()
+    gap = await gaps.record("s", RuleDomain.EXTRACTION, "fp", samples=["d1"], occurrences=2)
+    failed = await gaps.record_failure(gap.id, "no", max_attempts=1, attempted_with="m|tpl-3")
+    assert failed.status is GapStatus.FAILED and failed.failed_occurrences == 2
+    assert failed.attempted_with == "m|tpl-3"
+
+    await gaps.reset_counts("s", RuleDomain.EXTRACTION)
+    counted = await gaps.record("s", RuleDomain.EXTRACTION, "fp", samples=["d2"], occurrences=7)
+    assert counted.status is GapStatus.FAILED and counted.occurrences == 7
+    assert counted.samples == ["d2", "d1"]
+    regrown = await gaps.record("s", RuleDomain.EXTRACTION, "fp", samples=["d3"])
+    assert regrown.status is GapStatus.OPEN and regrown.attempts == 0  # 8 >= 4 x 2
+
+    await gaps.record_failure(regrown.id, "no", max_attempts=1, attempted_with="m|tpl-3")
+    unknown = await gaps.record("s", RuleDomain.EXTRACTION, "other", samples=["d4"])
+    await gaps.record_failure(unknown.id, "no", max_attempts=1)  # model not recorded
+    assert await gaps.reopen_superseded("s", RuleDomain.EXTRACTION, attempted_with="m|tpl-3") == 0
+    assert await gaps.reopen_superseded("s", RuleDomain.EXTRACTION, attempted_with="m|tpl-4") == 1
+
+    await gaps.mark_needs_human(unknown.id, "curated olx.x wins")
+    human = await gaps.record("s", RuleDomain.EXTRACTION, "other", samples=["d5"], occurrences=9)
+    assert human.status is GapStatus.NEEDS_HUMAN and human.last_error == "curated olx.x wins"
+    assert await gaps.reopen_failed("s", RuleDomain.EXTRACTION) == 1
+
+
+async def test_document_listings_page_through_and_rotate() -> None:
+    documents = TortoiseRawDocumentRepository()
+    ids = [await _raw_document(f"doc{i}") for i in range(5)]
+    for document_id in ids:
+        await documents.mark_unrecognised(document_id, "no rule", graph_version=1)
+    seen: list[UUID] = []
+    after = None
+    while True:
+        page = await documents.list_by_status(
+            source_key="archive", status=RawDocumentStatus.UNRECOGNISED, limit=2, after=after
+        )
+        seen += [document.id for document in page]
+        if len(page) < 2:
+            break
+        after = (page[-1].fetched_at, page[-1].id)
+    assert seen == ids
+
+    # Retried just now, so it goes to the back of the rotation.
+    await documents.mark_unrecognised(ids[0], "still no rule", graph_version=2)
+    rotated = await documents.list_by_status(
+        source_key="archive",
+        status=RawDocumentStatus.UNRECOGNISED,
+        limit=5,
+        least_recently_parsed=True,
+    )
+    assert [document.id for document in rotated] == [*ids[1:], ids[0]]
+    # Stale replays read the oldest interpretation first.
+    await documents.mark_unrecognised(ids[3], "no rule", graph_version=0)
+    stale = await documents.list_by_status(
+        source_key="archive", status=RawDocumentStatus.UNRECOGNISED, limit=1, graph_version_below=5
+    )
+    assert [document.id for document in stale] == [ids[3]]
+
+
+async def test_frontier_spread_urls_cover_the_whole_frontier() -> None:
+    frontier = TortoiseCrawlFrontierRepository()
+    await frontier.add_captures(
+        "spread",
+        [
+            Capture(f"eg,com,olx)/p{i}", "20130101000000", f"http://olx.com.eg/p{i}", "D")
+            for i in range(40)
+        ],
+    )
+    spread = await frontier.spread_urls("spread", limit=10)
+    assert 8 <= len(spread) <= 10
+    numbers = sorted(int(url.rsplit("p", 1)[1]) for url in spread)
+    assert numbers[-1] - numbers[0] >= 30  # not just the first rows
+    assert await frontier.spread_urls("nothing-here", limit=10) == []
 
 
 async def test_upsert_keeps_the_latest_observation_whatever_the_order() -> None:

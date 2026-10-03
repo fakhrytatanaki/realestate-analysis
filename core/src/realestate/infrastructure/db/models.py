@@ -358,6 +358,10 @@ class RuleGapModel(Model):
     attempts = fields.IntField(default=0)
     last_error = fields.TextField(null=True)
     resolved_version = fields.IntField(null=True)
+    #: ``model|prompt version`` of the induction that last failed this gap.
+    attempted_with = fields.CharField(max_length=255, null=True)
+    #: Occurrences when the gap became FAILED; outgrowing it reopens the gap.
+    failed_occurrences = fields.IntField(default=0)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 

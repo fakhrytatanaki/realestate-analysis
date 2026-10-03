@@ -108,7 +108,7 @@ def build_parser() -> argparse.ArgumentParser:
     parse.add_argument(
         "--stale",
         action="store_true",
-        help="re-parse payloads parsed by an older extraction graph than the active one",
+        help="re-parse every payload parsed by an older extraction graph than the active one",
     )
     parse.add_argument(
         "--since-days",
@@ -325,7 +325,7 @@ async def run(args: argparse.Namespace) -> int:
                         return 2
                     graph = await container.audit.graph(args.source)
                     outcome = await container.ingestion.reparse_stale(
-                        args.source, graph_version=graph.version
+                        args.source, graph_version=graph.version, limit=None
                     )
                 elif args.unrecognised:
                     if not args.source:
@@ -349,6 +349,7 @@ async def run(args: argparse.Namespace) -> int:
                 else:
                     outcome = await container.ingestion.parse_pending(args.source, limit=args.limit)
                 print(
+                    f"{outcome.documents} documents ({outcome.changed} changed outcome): "
                     f"created {outcome.created}, updated {outcome.updated}, "
                     f"unchanged {outcome.unchanged}"
                 )
@@ -561,8 +562,8 @@ async def run(args: argparse.Namespace) -> int:
                             reopened = await container.rule_gaps.reopen_failed(
                                 args.source, _domain(args.domain)
                             )
-                            print(f"reopened {reopened} failed gaps")
-                        for status_ in (GapStatus.OPEN, GapStatus.FAILED):
+                            print(f"reopened {reopened} failed or needs-human gaps")
+                        for status_ in (GapStatus.OPEN, GapStatus.NEEDS_HUMAN, GapStatus.FAILED):
                             listed = await container.rule_gaps.list(
                                 args.source, _domain(args.domain), status=status_, limit=30
                             )
@@ -570,9 +571,15 @@ async def run(args: argparse.Namespace) -> int:
                             for gap in listed:
                                 last = gap.last_error
                                 error = f"  last error: {last[:160]}" if last else ""
+                                failed = (
+                                    f" (x{gap.failed_occurrences} when it failed, "
+                                    f"with {gap.attempted_with or 'an unrecorded model'})"
+                                    if status_ is GapStatus.FAILED
+                                    else ""
+                                )
                                 print(
-                                    f"  [{gap.domain}] {gap.fingerprint} x{gap.occurrences} "
-                                    f"attempts={gap.attempts}{error}"
+                                    f"  [{gap.domain}] {gap.fingerprint} x{gap.occurrences}"
+                                    f"{failed} attempts={gap.attempts}{error}"
                                 )
 
             case "search":
@@ -662,9 +669,15 @@ async def _print_status(container: Container, source_key: str) -> None:
             f"{len(graph.terminals())} rules, {vocab_entries} vocab entries"
         )
         gaps = container.rule_gaps
-        open_gaps = await gaps.list(source_key, domain, status=GapStatus.OPEN, limit=1000)
-        failed = await gaps.list(source_key, domain, status=GapStatus.FAILED, limit=1000)
-        print(f"  gaps: {len(open_gaps)} open, {len(failed)} failed")
+        open_gaps = await gaps.list(source_key, domain, status=GapStatus.OPEN, limit=5000)
+        failed = await gaps.list(source_key, domain, status=GapStatus.FAILED, limit=5000)
+        human = await gaps.list(source_key, domain, status=GapStatus.NEEDS_HUMAN, limit=5000)
+        growing = [gap for gap in failed if gap.occurrences > gap.failed_occurrences]
+        print(
+            f"  gaps: {sum(1 for gap in open_gaps if gap.occurrences)} open with current misses "
+            f"({len(open_gaps)} open in all), {len(failed)} failed "
+            f"({len(growing)} still growing), {len(human)} need a human"
+        )
     totals = await container.llm_decisions.totals(source_key=source_key)
     print(
         f"llm ledger (this source): {totals['calls']} calls, {totals['valid']} valid, "
