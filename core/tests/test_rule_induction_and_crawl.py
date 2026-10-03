@@ -238,10 +238,11 @@ class Harness:
             log=log,
         )
         self.index = FixtureIndex(captures)
+        self.cursors = InMemoryCursors()
         self.crawler = ArchiveCrawlService(
             registry=registry,
             frontier=self.frontier,
-            cursors=InMemoryCursors(),
+            cursors=self.cursors,
             index=self.index,
             graphs=self.graphs,
             engine=self.engine,

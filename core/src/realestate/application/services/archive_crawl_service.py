@@ -95,6 +95,8 @@ class CrawlRound:
     run: ScrapeRun | None
     extraction: InductionReport
     reparsed_created: int = 0
+    fetch_attempts: int = 0
+    fetch_failures: int = 0
 
 
 @dataclass(slots=True)
@@ -103,6 +105,7 @@ class CrawlReport:
     rounds: list[CrawlRound] = field(default_factory=list)
     #: Why the loop ended: rounds done, a budget spent, or no progress.
     stopped: str = ""
+    incomplete_years: list[int] = field(default_factory=list)
 
     @property
     def llm_calls(self) -> int:
@@ -176,6 +179,16 @@ class ArchiveCrawlService:
                 if max_pages is not None and report.pages >= max_pages:
                     return report
         return report
+
+    async def incomplete_years(self, source_key: str) -> list[int]:
+        """Configured years whose CDX enumeration has not completed."""
+        scope = self.scope(source_key)
+        missing = []
+        for year in range(scope.from_year, scope.to_year + 1):
+            _, done = await self._cursors.get(source_key, f"cdx:{year}")
+            if not done:
+                missing.append(year)
+        return missing
 
     # -- routing ----------------------------------------------------------
 
@@ -287,19 +300,39 @@ class ArchiveCrawlService:
         fetches_per_round: int | None = None,
         enumerate_if_empty: bool = True,
         max_enumeration_pages: int | None = None,
+        require_complete_enumeration: bool = False,
     ) -> CrawlReport:
         """Run rounds until ``rounds`` (0 = no limit), a budget, or no progress.
 
         Safe to interrupt and re-run: frontier state, rule graphs and archived
         payloads are all persisted, and payloads archived but not yet parsed
         (an interrupted run) are parsed first.
+
+        ``max_fetches`` counts selected capture attempts including failures,
+        across all rounds. The optional enumeration gate checks every configured
+        source year before parsing leftovers, routing, induction or replay fetches.
         """
+        if rounds < 0 or max_fetches < 0 or max_llm_calls < 0:
+            raise ConfigurationError("rounds and crawl budgets must be nonnegative")
+        if fetches_per_round is not None and fetches_per_round <= 0:
+            raise ConfigurationError("fetches_per_round must be positive")
+        if max_enumeration_pages is not None and max_enumeration_pages <= 0:
+            raise ConfigurationError("max_enumeration_pages must be positive")
         report = CrawlReport()
         log = self._log.bind(source_key=source_key)
         counts = await self._frontier.counts(source_key)
         if enumerate_if_empty and sum(counts.values()) == 0:
             await log.info("frontier empty, enumerating the archive index")
             report.enumeration = await self.enumerate(source_key, max_pages=max_enumeration_pages)
+
+        if require_complete_enumeration:
+            report.incomplete_years = await self.incomplete_years(source_key)
+            if report.incomplete_years:
+                report.stopped = "enumeration incomplete"
+                await log.warning(
+                    "crawl held until enumeration completes", years=report.incomplete_years
+                )
+                return report
 
         leftover = await self._ingestion.parse_pending(source_key, limit=10_000)
         if leftover.created or leftover.updated or leftover.unchanged:
@@ -344,12 +377,16 @@ class ArchiveCrawlService:
                 if navigation.versions:
                     routed.add(await self.route(source_key))
 
+            fetch_ctx = FetchContext(max_items=min(per_round, fetches_left))
             run = await self._ingestion.ingest(
                 source_key,
                 trigger=RunTrigger.BACKFILL,
-                ctx=FetchContext(max_items=min(per_round, fetches_left)),
+                ctx=fetch_ctx,
             )
-            fetches_left -= run.documents_fetched
+            # Older/custom sources may not report attempts; retain their payload
+            # accounting while archive sources include failed capture attempts.
+            fetch_attempts = max(fetch_ctx.progress.attempts, run.documents_fetched)
+            fetches_left -= fetch_attempts
 
             extraction = InductionReport()
             reparsed = 0
@@ -370,6 +407,8 @@ class ArchiveCrawlService:
                     run=run,
                     extraction=extraction,
                     reparsed_created=reparsed,
+                    fetch_attempts=fetch_attempts,
+                    fetch_failures=fetch_ctx.progress.failures,
                 )
             )
             await log.info(
@@ -379,6 +418,8 @@ class ArchiveCrawlService:
                 unrouted=routed.unrouted,
                 nav_rules=navigation.accepted,
                 fetched=run.documents_fetched,
+                fetch_attempts=fetch_attempts,
+                fetch_failures=fetch_ctx.progress.failures,
                 created=run.listings_created + reparsed,
                 updated=run.listings_updated,
                 templates=extraction.accepted,
@@ -388,7 +429,7 @@ class ArchiveCrawlService:
             )
             for note in navigation.notes + extraction.notes:
                 await log.warning("induction note", note=note)
-            progressed = run.documents_fetched or navigation.versions or extraction.versions
+            progressed = fetch_attempts or navigation.versions or extraction.versions
             if not progressed:
                 report.stopped = (
                     "no progress (nothing queued to fetch and no new rules)"

@@ -102,7 +102,17 @@ def build_parser() -> argparse.ArgumentParser:
     crawl.add_argument(
         "--rounds", type=int, default=3, help="rounds to run; 0 = until a budget or idle"
     )
-    crawl.add_argument("--max-fetches", type=int, default=60, help="captures fetched, all rounds")
+    crawl.add_argument(
+        "--max-fetches",
+        type=int,
+        default=60,
+        help="capture attempts including failures, all rounds",
+    )
+    crawl.add_argument(
+        "--require-complete-enumeration",
+        action="store_true",
+        help="hold the crawl until all configured source years have finished CDX enumeration",
+    )
     crawl.add_argument(
         "--fetches-per-round",
         type=int,
@@ -262,6 +272,7 @@ async def run(args: argparse.Namespace) -> int:
                     max_llm_calls=args.max_llm_calls,
                     fetches_per_round=args.fetches_per_round,
                     max_enumeration_pages=args.max_enumeration_pages,
+                    require_complete_enumeration=args.require_complete_enumeration,
                 )
                 if report.enumeration:
                     print(
@@ -277,6 +288,7 @@ async def run(args: argparse.Namespace) -> int:
                         f"deferred {round_.routed.deferred}, unrouted {round_.routed.unrouted}); "
                         f"nav rules +{round_.navigation.accepted}; "
                         f"fetched {run.documents_fetched if run else 0}, "
+                        f"attempted {round_.fetch_attempts}, failed {round_.fetch_failures}; "
                         f"created {created}; "
                         f"templates +{round_.extraction.accepted}; "
                         f"llm calls {round_.navigation.llm_calls + round_.extraction.llm_calls}"
@@ -285,6 +297,9 @@ async def run(args: argparse.Namespace) -> int:
                         print(f"  note: {note}")
                 print(f"stopped: {report.stopped}")
                 await _print_status(container, args.source)
+                if report.incomplete_years:
+                    print(f"incomplete enumeration years: {report.incomplete_years}")
+                    return 2
 
             case "archive":
                 match args.archive_command:
@@ -392,6 +407,8 @@ def _domain(name: str | None) -> RuleDomain | None:
 
 
 async def _print_status(container: Container, source_key: str) -> None:
+    missing = await container.crawler.incomplete_years(source_key)
+    print(f"enumeration: incomplete years {missing}" if missing else "enumeration: complete")
     counts = await container.frontier.counts(source_key)
     print(
         "frontier: " + ", ".join(f"{status.value.lower()} {n}" for status, n in counts.items() if n)

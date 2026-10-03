@@ -18,8 +18,15 @@ from __future__ import annotations
 from collections import Counter
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, ClassVar
+from urllib.parse import urlsplit
 
-from realestate.domain.archive import ArchivedDocument, ArchiveScope, DiscoveredLink
+from realestate.domain.archive import (
+    ArchivedDocument,
+    ArchiveScope,
+    DiscoveredLink,
+    parse_timestamp,
+    surt_key,
+)
 from realestate.domain.enums import RawDocumentKind, RuleDomain
 from realestate.domain.exceptions import FetchError, UnrecognisedDocumentError
 from realestate.domain.models import FetchContext, ListingDraft, RawPayload
@@ -42,6 +49,8 @@ class WaybackDataSource(ArchiveDataSource):
     default_from_year: ClassVar[int] = 2005
     default_to_year: ClassVar[int] = 2025
     default_max_fetches: ClassVar[int] = 200
+    #: Older portals can explicitly allow the requested in-domain city host.
+    allow_requested_subdomains: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -75,14 +84,14 @@ class WaybackDataSource(ArchiveDataSource):
         )
 
     async def fetch(self, ctx: FetchContext) -> AsyncIterator[RawPayload]:
-        budget = (
-            ctx.max_items
-            or ctx.page_limit
-            or int(self._params.get("max_fetches_per_run", self.default_max_fetches))
-        )
+        budget = ctx.max_items if ctx.max_items is not None else ctx.page_limit
+        if budget is None:
+            budget = int(self._params.get("max_fetches_per_run", self.default_max_fetches))
         fetched = 0
         attempted: set[int] = set()
-        while fetched < budget:
+        scope = self.archive_scope()
+        domain = scope.domain.lower().removeprefix("www.")
+        while len(attempted) < budget:
             batch = [
                 entry
                 for entry in await self._frontier.next_queued(self.key, limit=_FETCH_BATCH)
@@ -91,30 +100,72 @@ class WaybackDataSource(ArchiveDataSource):
             if not batch:
                 return
             for entry in batch:
-                if fetched >= budget:
+                if len(attempted) >= budget:
                     return
                 attempted.add(entry.id)
+                ctx.progress.attempts += 1
                 try:
-                    archived = await self._client.fetch_capture(entry.timestamp, entry.original_url)
+                    hosts = {domain, f"www.{domain}"}
+                    if self.allow_requested_subdomains:
+                        try:
+                            requested_host = urlsplit(entry.original_url).hostname or ""
+                        except ValueError as exc:
+                            raise FetchError(f"invalid capture URL: {entry.original_url}") from exc
+                        if requested_host.endswith(f".{domain}"):
+                            hosts.add(requested_host)
+                    archived = await self._client.fetch_capture(
+                        entry.timestamp,
+                        entry.original_url,
+                        allowed_hosts=hosts,
+                    )
+                    if not scope.from_year <= archived.captured_at.year <= scope.to_year:
+                        raise FetchError(
+                            "served capture outside selected years "
+                            f"{scope.from_year}-{scope.to_year}: "
+                            f"requested {entry.timestamp} {entry.original_url}; "
+                            f"served {archived.timestamp} {archived.original_url}; "
+                            f"replay {archived.replay_url} (held for review)"
+                        )
                 except FetchError as exc:
+                    ctx.progress.failures += 1
                     await self._frontier.mark_failed(entry.id, str(exc))
                     await self._log.warning(
-                        "capture fetch failed", url=entry.original_url, error=str(exc)
+                        "capture fetch failed",
+                        url=entry.original_url,
+                        error=str(exc),
+                        attempt=len(attempted),
+                        budget=budget,
                     )
                     continue
+                drift_seconds = (
+                    archived.captured_at - parse_timestamp(entry.timestamp)
+                ).total_seconds()
                 yield RawPayload(
                     content=archived.content,
                     kind=RawDocumentKind.HTML,
                     content_type=archived.content_type,
-                    source_url=entry.original_url,
+                    source_url=archived.original_url,
                     meta={
                         "frontier_id": entry.id,
                         "url_key": entry.url_key,
                         "timestamp": archived.timestamp,
                         "captured_at": archived.captured_at.isoformat(),
-                        "original_url": entry.original_url,
+                        "original_url": archived.original_url,
                         "replay_url": archived.replay_url,
+                        "requested_timestamp": archived.requested_timestamp,
+                        "requested_original_url": archived.requested_original_url,
+                        "requested_replay_url": archived.requested_replay_url,
+                        "served_timestamp": archived.timestamp,
+                        "served_original_url": archived.original_url,
+                        "served_url_key": surt_key(archived.original_url),
+                        "timestamp_source": archived.timestamp_source,
+                        "replay_timestamp": archived.replay_timestamp,
+                        "capture_drift_seconds": drift_seconds,
+                        "redirect_chain": list(archived.redirect_chain),
+                        # Both digest keys describe the requested CDX row, not a
+                        # different capture selected by a nearest-capture redirect.
                         "digest": entry.digest,
+                        "cdx_digest": entry.digest,
                         "page_kind_hint": entry.page_kind.value if entry.page_kind else None,
                         "route_node": entry.route_node,
                     },
@@ -124,9 +175,16 @@ class WaybackDataSource(ArchiveDataSource):
                 fetched += 1
                 await self._log.info(
                     "capture fetched",
-                    progress=f"{fetched}/{budget}",
+                    progress=f"{len(attempted)}/{budget}",
+                    fetched=fetched,
+                    failures=ctx.progress.failures,
                     url=entry.original_url,
+                    served_url=archived.original_url,
+                    requested=entry.timestamp,
                     captured=archived.timestamp,
+                    capture_drift_seconds=drift_seconds,
+                    timestamp_source=archived.timestamp_source,
+                    redirects=len(archived.redirect_chain) - 1,
                     bytes=len(archived.content),
                     kind=entry.page_kind.value if entry.page_kind else "?",
                     rule=entry.route_node,

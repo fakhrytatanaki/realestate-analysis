@@ -67,6 +67,34 @@ the model, so replays stay deterministic. The generic seed follows links from
 recognised pages, which is how advert URLs with empty slugs get fetched. Dubizzle
 also ships reviewed source-specific graphs, installed explicitly with `rules seed`.
 
+Wayback collection limits count selected capture attempts, including failures,
+rather than only yielded payloads. The source reports attempts and handled
+failures through `FetchContext.progress`; ingestion records failures as run
+errors and the crawler deducts attempts across rounds. HTTP retries and redirect
+hops are part of one selected capture attempt. For a bounded pilot, use the
+optional `crawl --require-complete-enumeration` gate; see [operations](operations.md).
+
+Replay follows redirects explicitly. Each request must stay on `web.archive.org`;
+each replay must retain `id_` mode and an original host equal to the configured
+domain or its `www` variant. OLX additionally permits the requested in-domain
+city subdomain, matching its older layouts. Other subdomains and live-site escapes are rejected
+before requesting the target. Redirect hops receive the same throttle as initial
+requests. A timezone-aware `Memento-Datetime`, normalized to UTC, determines the
+served time; otherwise a valid full timestamp in the final replay URL is required.
+Short prefixes alone cannot supply an observation time. The header takes precedence
+when it differs from the final URL, and `replay_timestamp` retains that URL's time.
+
+New raw metadata keeps `requested_timestamp`, `requested_original_url`,
+`requested_replay_url`, `served_timestamp`, `served_original_url`,
+`timestamp_source`, `capture_drift_seconds`, `served_url_key` and `redirect_chain`
+(all visited replay URLs, including the final one). Existing `timestamp`,
+`captured_at`, `original_url`, `replay_url` and `source_url` describe the served
+capture, so offline extraction uses its actual URL/time. `url_key`, `digest` and
+`cdx_digest` refer to the requested frontier/CDX row; a redirected capture's digest
+is not inferred from that row. Earlier raw documents retain their original metadata.
+Captures served outside the configured `from_year`/`to_year` range are held for
+review as failed frontier entries and do not emit raw payloads or observations.
+
 Dubizzle seed v1 supports complete Arabic/English apartment/duplex category
 JSON lists (`state.algolia.content.hits`). It validates each item's property
 taxonomy, reads `extraFields.price`, deduplicates numeric external IDs, and uses
@@ -86,7 +114,7 @@ signal and no cards. Unsupported designs and challenges remain gaps. Structured
 `archive extraction`/`archive extraction gap` logs report template, counts,
 bounded rejection reasons, malformed state, unknown basis and category/purpose
 conflicts. The fixture README and [Dubizzle plan](dubizzle-eg-wayback-plan.md)
-record remaining evidence and replay-provenance gates before the bounded pilot.
+record the remaining evidence and mapping gates before the bounded pilot.
 
 Observations carry the capture time (`observed_at`); the listing row always reflects
 the newest capture and `listing_observation` keeps one row per capture (price

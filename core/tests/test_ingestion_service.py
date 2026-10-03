@@ -163,6 +163,26 @@ async def test_fetch_failure_fails_the_run(harness) -> None:  # type: ignore[no-
     assert "site unreachable" in run.error_message
 
 
+async def test_handled_fetch_failures_are_counted_once_per_pass(harness) -> None:  # type: ignore[no-untyped-def]
+    class ReportingSource(StubSource):
+        async def fetch(self, ctx: FetchContext) -> AsyncIterator[RawPayload]:
+            ctx.progress.attempts += 2
+            ctx.progress.failures += 2
+            async for payload in super().fetch(ctx):
+                ctx.progress.attempts += 1
+                yield payload
+
+    service, _, documents, _ = harness(ReportingSource(payloads=1))
+    ctx = FetchContext()
+    for _ in range(2):
+        run = await service.ingest("stub", ctx=ctx)
+        assert run.status is RunStatus.PARTIAL
+        assert run.errors == 2
+        assert run.documents_fetched == 1
+    assert ctx.progress.attempts == 6 and ctx.progress.failures == 4
+    assert len(documents.documents) == 2
+
+
 async def test_source_is_always_closed(harness) -> None:  # type: ignore[no-untyped-def]
     source = StubSource(fail_fetch=True)
     service, _, _, _ = harness(source)

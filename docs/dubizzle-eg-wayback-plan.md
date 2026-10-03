@@ -28,14 +28,28 @@ Implemented starting slice:
   diagnostics in structured source logs, and advert-first induction summaries
   with contact/runtime redaction in the prompt copy. Existing OLX/live behavior
   passes regression checks; parsing remains offline and graph-pinned.
+- Hardened shared replay collection: validate every Wayback/original-host redirect
+  before requesting it, throttle each hop, retain requested/served URLs and times,
+  record timestamp proof and drift, and hold out-of-scope served years as failed
+  frontier entries. Missing served-time proof cannot fall back to the requested
+  timestamp. Existing raw metadata is not retroactively corrected.
+  OLX's documented city-host layouts retain the requested in-domain subdomain;
+  Dubizzle permits only its configured apex/`www` hosts.
+- Added bounded-pilot controls: failed capture attempts consume the fetch budget
+  across rounds and increment run errors; crawl output separates attempts,
+  failures and archived payloads. An explicit enumeration-completion gate holds
+  the crawl before parsing/routing/induction/fetching if any configured year is
+  unfinished. These controls are tested with mocked HTTP; no pilot was run.
 
 The step 1 evidence gate remains open for a complete 2023 sales capture, a real
 matching list/detail pair, period/payment examples and broader field auditing.
 Step 2's source/seed infrastructure is implemented. Step 3 now handles the
 observed detail and truncated-list shapes, but its acceptance gate remains open:
 independent held-out captures, validated subtype/period/payment codes and broader
-field auditing are still required. Replay-provenance hardening before step 4
-also remains outstanding. No bounded pilot has been run.
+field auditing are still required. Replay-provenance hardening before step 4 is
+implemented and covered by mocked-HTTP tests. Pilot budget and enumeration
+controls are implemented; fixture evidence and field audits remain prerequisites.
+No bounded pilot has been run.
 
 ## Recommendation
 
@@ -231,13 +245,15 @@ Avoid introducing a new source-kind model just for this integration;
    jobs serially initially: two clients do not share a global IA throttle. A
    shared host limiter is a follow-up if concurrent operation is needed.
 
-Harden replay provenance before the pilot: preserve both requested and served
-original URLs/timestamps, check every redirect remains on Wayback, and reject
-unexpected original hosts. The current client follows redirects automatically
-and keeps the requested original URL. Nearest-capture drift must be recorded;
-captures served outside the selected year range should be held for review rather
-than counted in that year's coverage. Do not silently accept the requested time
-when neither response metadata nor the final replay URL proves the served time.
+Replay provenance hardening is implemented before the pilot: preserve both
+requested and served original URLs/timestamps, validate every redirect before
+requesting it, and reject unexpected original hosts and rewritten replay modes.
+Nearest-capture drift and timestamp proof are recorded. Captures served outside
+the configured source year range are held as failed frontier entries for review,
+with no raw payload or observation emitted. An aware Memento header takes
+precedence over the full final URL timestamp; both are retained when available.
+Neither a short URL prefix nor a missing header can justify silently assigning
+the requested capture time. See the [source metadata contract](sources.md).
 
 For investigation, use explicit CDX `matchType=prefix` with paths, for example:
 
@@ -377,16 +393,25 @@ and run from `core/`:
 ./venv/bin/python -m realestate.cli rules seed --source dubizzle_eg_wayback
 ./venv/bin/python -m realestate.cli archive enumerate --source dubizzle_eg_wayback --from-year 2023 --to-year 2023
 ./venv/bin/python -m realestate.cli archive route --source dubizzle_eg_wayback
-./venv/bin/python -m realestate.cli crawl --source dubizzle_eg_wayback --max-fetches 50 --max-llm-calls 0
+./venv/bin/python -m realestate.cli crawl --source dubizzle_eg_wayback --max-fetches 50 --max-llm-calls 0 --require-complete-enumeration
 ./venv/bin/python -m realestate.cli archive status --source dubizzle_eg_wayback
 ```
 
 These are implementation-runbook commands, **not commands executed during this
-investigation**. Seeding is a proposed new command. Enumeration is metadata-only
+investigation**. Seeding and the crawl controls are now implemented. Enumeration is metadata-only
 but may require many pages; resume it to completion before routing the pilot.
 Curate the pilot selection across available months, languages, sale/rent, cities
 and list/detail types; the current priority/time ordering does not guarantee that
 distribution from a 50-fetch budget by itself.
+
+The pilot limit counts selected capture attempts, including failed fetches and
+provenance rejections. A selected capture can involve multiple throttled HTTP
+redirects/retries. Failed rows remain failed for review; unattempted rows stay
+queued. Handled fetch failures contribute to the run's existing `errors` and
+`PARTIAL` status. The completion gate checks configured source years, so keep
+the pilot configuration at 2023–2023; enumeration flags alone do not narrow it.
+If enumeration is incomplete, the crawl exits with status 2 and reports the
+unfinished years. Resume `archive enumerate` explicitly before rerunning.
 
 Report captures and emitted adverts per stratum, JSON/fallback/gap counts,
 identity collisions, price/area completeness, unknown rental periods, rejected

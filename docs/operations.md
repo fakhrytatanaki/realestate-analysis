@@ -94,7 +94,8 @@ retain their standard `detail` response.
 ```
 
 Every CLI command initializes a database connection, including `sources`.
-`scrape --max-items` counts payloads. Source-level configured `max_items` is passed
+`scrape --max-items` counts payloads for live/fixture sources and capture attempts
+(including failures) for Wayback sources. Source-level configured `max_items` is passed
 by scheduled jobs; manual CLI/HTTP callers must supply their own cap.
 
 Plain `parse` drains pending documents. `--reparse` requires a source and selects
@@ -141,11 +142,40 @@ only `dubizzle_eg_wayback`. Run it before `archive route` or `crawl`, because th
 commands can create a generic navigation graph that seeding will then retain.
 The packaged extraction scope includes complete category JSON lists, observed
 2023 JSON detail and the 2023 English sales-card fallback. Remaining fixture
-evidence, mapping audits and replay-provenance hardening are still required
+evidence and mapping audits are still required
 before the [Dubizzle pilot](dubizzle-eg-wayback-plan.md). Updating packaged seeds
 does not upgrade an installed graph: repeated seeding preserves its active
 version, and successful old parses require explicit replay after a reviewed
 graph change.
+
+For a bounded pilot, add `--require-complete-enumeration` to `crawl`. It checks
+the per-year cursors for every configured source year before parsing pending
+documents, routing, induction or capture fetches. If a year is unfinished, the
+crawl reports it and exits with status 2. It may enumerate an empty frontier up
+to `--max-enumeration-pages`; it does not resume a nonempty partial frontier.
+Resume `archive enumerate` explicitly until `archive status` reports complete.
+Completing enumeration does not replace the pilot's fixture and field-audit gates.
+
+`crawl --max-fetches` bounds selected capture attempts across all rounds,
+including failed requests and rejected replay provenance. Each attempt can
+involve multiple throttled redirects/retries; the limit is not an HTTP request
+count. `--fetches-per-round` uses the same attempt accounting. Crawl output and
+logs distinguish attempts, failed captures and successfully archived documents.
+Handled fetch failures increment the run's `errors` and produce `PARTIAL` status,
+including runs that archive no payloads. Failed rows remain held for review and
+unattempted rows remain queued for a later run.
+
+Configure the source's `params.from_year`/`params.to_year` for the intended crawl
+scope as well as passing enumeration flags. Fetch validates the served capture
+against the configured years; enumeration flags select CDX rows only. Review
+`capture fetched` logs for requested/served URL and timestamp drift. New raw
+metadata retains the redirect chain and timestamp proof. Out-of-range captures,
+live-site redirects, unexpected original hosts and missing time proof become
+failed frontier entries; they produce no observation. The error retains the
+out-of-range replay URL and served timestamp for review. Expand the scope
+deliberately before retrying those captures; successful fetches alone do not
+demonstrate coverage of the requested CDX year. Legacy raw documents cannot gain
+served provenance by offline replay when that evidence was never retained.
 
 Enumeration resumes per year (`crawl_cursor`). Routing retries `UNROUTED` captures
 each time, so new navigation rules apply to old misses. Documents no template

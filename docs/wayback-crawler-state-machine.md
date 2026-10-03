@@ -39,8 +39,10 @@ progress between rounds and process restarts.
 flowchart TD
     Start[Start crawl] --> Empty{Frontier empty?}
     Empty -->|Yes| CDX[Enumerate CDX captures by year]
-    Empty -->|No| Pending[Parse previously archived PENDING documents]
-    CDX --> Pending
+    Empty -->|No| Gate{Completion gate enabled and any configured year unfinished?}
+    CDX --> Gate
+    Gate -->|Yes| Hold[Report incomplete years and stop]
+    Gate -->|No| Pending[Parse previously archived PENDING documents]
     Pending --> Route[Route DISCOVERED and retried UNROUTED captures]
     Route --> Nav[If URL misses and LLM budget remains: learn navigation rules]
     Nav --> Reroute[If new navigation version: route again]
@@ -59,7 +61,7 @@ flowchart TD
 
 [ArchiveCrawlService.crawl](../core/src/realestate/application/services/archive_crawl_service.py)
 coordinates these steps. Fetching finishes before the ingestion service parses
-that batch. A round counts as progress if it archives documents or saves a new
+that batch. A round counts as progress if it attempts captures or saves a new
 navigation/extraction version. The dashed link represents data fed back to later
 routing, rather than another routing pass during parsing.
 
@@ -304,10 +306,18 @@ subdomains. It saves a resume key and completion flag per year in `crawl_cursor`
 was intentionally limited or interrupted after adding rows, use `archive enumerate`
 to continue the saved cursors.
 
-Replay fetches use `/web/{timestamp}id_/{original_url}`. The client follows
-redirects and records the timestamp actually served, using `Memento-Datetime` or
-the final replay URL when available. Payload metadata includes that capture time,
-the replay URL, frontier ID, digest, and route node.
+Replay fetches use `/web/{timestamp}id_/{original_url}`. The client validates each
+redirect before following it: requests stay on Wayback, retain original-byte
+mode and point to the configured original domain or its `www` variant. OLX also
+permits the requested in-domain city subdomain for its older layouts. Every hop
+is throttled. An aware `Memento-Datetime` normalized to UTC supplies served time;
+otherwise the final replay URL must contain a valid full timestamp. A requested
+prefix alone cannot supply time proof. Metadata preserves requested and served
+URLs/times, timestamp source, drift and the full redirect chain. Frontier ID,
+URL key and CDX digest identify the requested capture; offline parsing uses the
+served URL/time. A served year outside the configured source range is held as a
+failed frontier entry for review, without emitting an observation. See the
+[source metadata contract](sources.md#archive-sources-rule-graphs).
 
 An extraction graph is loaded once per source instance, so parsing and link
 discovery share one version. New rules take effect through a new instance on
@@ -317,8 +327,20 @@ the listing repository keeps the newest observation's main values and merges
 missing details. See [the archive source guide](sources.md#archive-sources-rule-graphs).
 
 `--rounds` bounds iterations; zero means continue until idle or the fetch budget
-is spent. `--max-fetches` counts archived documents, not all HTTP requests,
-retries, or failed fetch attempts. `--fetches-per-round` controls batch size.
+is spent. `--max-fetches` counts selected capture attempts, including failed
+fetches and rejected replay provenance, across all rounds. Redirects and retries
+are part of an attempt, so it does not count individual HTTP requests.
+`--fetches-per-round` controls the attempt budget for each batch. Handled fetch
+failures increment the scrape run's errors and produce `PARTIAL` status; output
+and logs distinguish attempts, failures and archived payloads. Failed rows are
+not automatically retried; unattempted rows remain queued.
+
+`--require-complete-enumeration` optionally holds the crawl before parsing,
+routing, induction or capture fetches if any configured source year lacks a
+completed CDX cursor. The CLI reports the unfinished years and exits with status
+2. `archive status` reports completion for the same configured scope. Resume a
+nonempty partial frontier with explicit `archive enumerate`; the automatic
+empty-frontier enumeration behavior is unchanged.
 `--max-llm-calls` is shared by navigation and extraction, with navigation first.
 Exhausting that budget still permits fetching and parsing with existing rules.
 

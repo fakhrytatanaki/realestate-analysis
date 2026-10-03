@@ -241,11 +241,13 @@ class IngestionService:
     ) -> tuple[list[RawDocument], int]:
         """Collect payloads and archive each one.
 
-        Returns the recorded documents plus a count of payloads that could not
-        be archived; one bad payload must not abandon the rest of the run.
+        Returns recorded documents plus handled collection/archive failures;
+        one failed capture or bad payload must not abandon the rest of the run.
         """
         documents: list[RawDocument] = []
         errors = 0
+        failures_before = ctx.progress.failures
+        attempts_before = ctx.progress.attempts
 
         async for payload in source.fetch(ctx):
             try:
@@ -254,7 +256,14 @@ class IngestionService:
                 errors += 1
                 await log.exception("failed to archive payload", exc, url=payload.source_url)
 
-        await log.info("fetch stage complete", documents=len(documents), errors=errors)
+        errors += ctx.progress.failures - failures_before
+        await log.info(
+            "fetch stage complete",
+            documents=len(documents),
+            errors=errors,
+            fetch_attempts=ctx.progress.attempts - attempts_before,
+            fetch_failures=ctx.progress.failures - failures_before,
+        )
         return documents, errors
 
     async def _archive(
