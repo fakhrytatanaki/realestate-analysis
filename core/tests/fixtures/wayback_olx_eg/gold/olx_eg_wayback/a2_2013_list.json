@@ -1,0 +1,18 @@
+{
+  "verified": true,
+  "note": "First six adverts, checked by hand against the archived HTML. GBP prices appear only in titles.",
+  "document": {
+    "file": "../../a2_2013_list.html.gz",
+    "content_type": "text/html",
+    "source_url": "http://www.olx.com.eg/houses-apartments-for-sale-cat-367",
+    "meta": {"timestamp": "20130305032637", "original_url": "http://www.olx.com.eg/houses-apartments-for-sale-cat-367"}
+  },
+  "items": [
+    {"external_id": "487590261", "title": "Apartment for Sale in Hurghada, Al Bahr al Ahmar, Ref# 1890653", "amount": "35500.00", "currency": "EGP", "listing_type": "SALE"},
+    {"external_id": "487301159", "title": "1b , Red Sea - 86161 GBP", "amount": "86161.00", "currency": "GBP", "listing_type": "SALE"},
+    {"external_id": "487301158", "title": "3b , Red Sea - 126322 GBP", "amount": "126322.00", "currency": "GBP", "listing_type": "SALE"},
+    {"external_id": "487332221", "title": "Apartment for Sale in Tanta, Al Gharbiyah, Ref# 1890222", "amount": "780000.00", "currency": "EGP", "listing_type": "SALE"},
+    {"external_id": "487301153", "title": "2b , Red Sea - 106410 GBP", "amount": "106410.00", "currency": "GBP", "listing_type": "SALE"},
+    {"external_id": "487301160", "title": "2b , Red Sea - 60139 GBP", "amount": "60139.00", "currency": "GBP", "listing_type": "SALE"}
+  ]
+}

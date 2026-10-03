@@ -9,7 +9,9 @@ One round of :meth:`ArchiveCrawlService.crawl`:
 3. **ingest**: fetch queued captures, archive them, parse them with the
    extraction graph, and feed links from recognised pages back as evidence;
 4. **induce** extraction templates for clusters of unrecognised pages, and
-   re-parse those pages with the new rules.
+   re-parse those pages with the new rules;
+5. **look up** linked URLs the frontier had no capture of, one exact-URL index
+   query each near the linking page's capture time (bounded per round).
 
 Every LLM answer is compiled into rules, so each round needs fewer calls than
 the last. Budgets (fetches, LLM calls) are explicit because the archive and the
@@ -18,9 +20,12 @@ model are both shared, rate-limited services.
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 from realestate.application.rules.seeds import seed_navigation_graph
 from realestate.application.services.ingestion_service import IngestionService
@@ -28,20 +33,22 @@ from realestate.application.services.rule_induction_service import (
     InductionReport,
     RuleInductionService,
 )
-from realestate.domain.archive import ArchiveScope, FrontierEntry
+from realestate.domain.archive import EXPLORE_NODE, ArchiveScope, FrontierEntry, capture_year
 from realestate.domain.enums import (
     CrawlStatus,
+    LinkRequestStatus,
     PageKind,
     RouteDecision,
     RuleDomain,
     RunTrigger,
 )
-from realestate.domain.exceptions import ConfigurationError
+from realestate.domain.exceptions import ConfigurationError, FetchError
 from realestate.domain.models import FetchContext, ScrapeRun
 from realestate.domain.ports.archive import (
     ArchiveIndex,
     CrawlCursorRepository,
     CrawlFrontierRepository,
+    LinkRequestRepository,
 )
 from realestate.domain.ports.data_source import ArchiveDataSource
 from realestate.domain.ports.log_provider import LogProvider
@@ -55,13 +62,27 @@ _RouteKey = tuple[CrawlStatus, str | None, int, PageKind | None]
 
 @dataclass(frozen=True, slots=True)
 class CrawlSettings:
-    #: Distinct-content captures fetched per URL, by page kind: list pages are
-    #: snapshots of what was on offer, so several over time are worth having.
-    max_captures_list: int = 4
-    max_captures_detail: int = 2
+    #: Distinct-content captures fetched per URL *per capture year*, by page
+    #: kind: a lifetime cap lets whichever years were enumerated first use up
+    #: every slot. List pages are snapshots of what was on offer, so several a
+    #: year are worth having.
+    max_captures_list: int = 2
+    max_captures_detail: int = 1
     max_captures_other: int = 1
     route_batch: int = 2000
     cdx_page_size: int = 5000
+    #: Index pages enumerated per crawl across years not yet complete.
+    enumeration_pages_per_crawl: int = 20
+    #: FETCHING claims older than this belong to an interrupted run.
+    claim_timeout: timedelta = timedelta(minutes=15)
+    #: Exact-URL index lookups of unmatched links, per round.
+    link_lookups_per_round: int = 10
+    #: Captures of a linked URL accepted per lookup, and how far from the
+    #: linking page's capture time they may be.
+    link_lookup_captures: int = 2
+    link_lookup_window_days: int = 183
+    #: Failed lookups of one URL before it is given up.
+    link_lookup_attempts: int = 3
 
 
 @dataclass(slots=True)
@@ -88,6 +109,21 @@ class EnumerationReport:
 
 
 @dataclass(slots=True)
+class LinkLookupReport:
+    looked_up: int = 0
+    found: int = 0
+    captures_added: int = 0
+    not_archived: int = 0
+    failed: int = 0
+
+
+@dataclass(slots=True)
+class ExplorationReport:
+    #: year -> captures sent to the fetch queue as exploration samples.
+    queued: dict[int, int] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
 class CrawlRound:
     number: int
     routed: RouteReport
@@ -95,6 +131,7 @@ class CrawlRound:
     run: ScrapeRun | None
     extraction: InductionReport
     reparsed_created: int = 0
+    links: LinkLookupReport = field(default_factory=LinkLookupReport)
 
 
 @dataclass(slots=True)
@@ -123,7 +160,9 @@ class ArchiveCrawlService:
         induction: RuleInductionService,
         log: LogProvider,
         settings: CrawlSettings | None = None,
+        links: LinkRequestRepository | None = None,
     ) -> None:
+        self._links = links
         self._registry = registry
         self._frontier = frontier
         self._cursors = cursors
@@ -155,8 +194,8 @@ class ArchiveCrawlService:
         scope = self.scope(source_key)
         report = EnumerationReport()
         for year in range(from_year or scope.from_year, (to_year or scope.to_year) + 1):
-            cursor_scope = f"cdx:{year}"
-            resume_key, done = await self._cursors.get(source_key, cursor_scope)
+            cursor_scope = cursor_key(scope.domain, year)
+            resume_key, done = await self._cursor(source_key, scope.domain, year)
             if done:
                 continue
             async for page in self._index.iter_captures(
@@ -177,6 +216,128 @@ class ArchiveCrawlService:
                     return report
         return report
 
+    async def _cursor(self, source_key: str, domain: str, year: int) -> tuple[str | None, bool]:
+        """A year's resume point, adopting a pre-domain ``cdx:{year}`` cursor once."""
+        state = await self._cursors.get(source_key, cursor_key(domain, year))
+        if state != (None, False):
+            return state
+        legacy = await self._cursors.get(source_key, f"cdx:{year}")
+        if legacy != (None, False):
+            resume_key, done = legacy
+            await self._cursors.save(
+                source_key, cursor_key(domain, year), resume_key=resume_key, done=done
+            )
+        return legacy
+
+    async def coverage(self, source_key: str) -> list[YearCoverage]:
+        """Per capture year: enumeration state and what became of its captures."""
+        scope = self.scope(source_key)
+        by_quarter = await self._frontier.status_by_quarter(source_key)
+        years: list[YearCoverage] = []
+        for year in range(scope.from_year, scope.to_year + 1):
+            resume_key, done = await self._cursor(source_key, scope.domain, year)
+            enumeration = (
+                "done" if done else "in progress" if resume_key else "not enumerated"
+            )
+            quarters: dict[str, dict[str, int]] = {}
+            for (quarter, status), count in sorted(by_quarter.items()):
+                if quarter.startswith(str(year)):
+                    quarters.setdefault(quarter, {})[status.value] = count
+            years.append(YearCoverage(year=year, enumeration=enumeration, quarters=quarters))
+        return years
+
+    # -- linked URLs and exploration ---------------------------------------
+
+    async def resolve_links(self, source_key: str, *, limit: int) -> LinkLookupReport:
+        """Look up linked URLs no enumerated capture matched, one index query each.
+
+        Found captures join the frontier carrying the link as evidence, so the
+        next routing pass fetches them through the evidence rule.
+        """
+        report = LinkLookupReport()
+        if self._links is None or limit <= 0:
+            return report
+        domain = self.scope(source_key).domain
+        for request in await self._links.pending(source_key, limit=limit):
+            assert request.id is not None
+            if not _within_domain(request.url, domain):
+                await self._links.resolve(
+                    request.id, status=LinkRequestStatus.NONE, error="outside the archived domain"
+                )
+                report.not_archived += 1
+                continue
+            report.looked_up += 1
+            try:
+                captures = await self._index.lookup(
+                    request.url,
+                    around=request.parent_timestamp,
+                    window_days=self._settings.link_lookup_window_days,
+                    limit=self._settings.link_lookup_captures,
+                )
+            except FetchError as exc:
+                report.failed += 1
+                exhausted = request.attempts + 1 >= self._settings.link_lookup_attempts
+                await self._links.resolve(
+                    request.id,
+                    status=LinkRequestStatus.FAILED if exhausted else LinkRequestStatus.PENDING,
+                    error=str(exc),
+                )
+                continue
+            if not captures:
+                report.not_archived += 1
+                await self._links.resolve(request.id, status=LinkRequestStatus.NONE)
+                continue
+            report.found += 1
+            report.captures_added += await self._frontier.add_captures(source_key, captures)
+            await self._frontier.add_evidence(
+                source_key, {capture.url_key: request.rel for capture in captures}
+            )
+            await self._links.resolve(
+                request.id, status=LinkRequestStatus.FOUND, captures_found=len(captures)
+            )
+        if report.looked_up:
+            await self._log.info(
+                "linked urls looked up",
+                source_key=source_key,
+                looked_up=report.looked_up,
+                found=report.found,
+                captures_added=report.captures_added,
+                not_archived=report.not_archived,
+                failed=report.failed,
+            )
+        return report
+
+    async def explore(
+        self, source_key: str, *, per_year: int, seed: str = "explore"
+    ) -> ExplorationReport:
+        """Queue a reproducible random sample of skipped/deferred/unrouted captures.
+
+        Routing decisions are never checked against the pages they turned
+        away; fetching a few per year (route node ``explore``, low priority)
+        lets the audit estimate how often SKIP/DEFER/miss threw away adverts.
+        """
+        report = ExplorationReport()
+        rejected = await self._frontier.captures_with_status(
+            source_key, [CrawlStatus.SKIPPED, CrawlStatus.DEFERRED, CrawlStatus.UNROUTED]
+        )
+        by_year: dict[int, list[tuple[str, int]]] = defaultdict(list)
+        for entry_id, timestamp in rejected:
+            draw = hashlib.sha1(f"{seed}:{entry_id}".encode()).hexdigest()
+            by_year[capture_year(timestamp)].append((draw, entry_id))
+        chosen: list[int] = []
+        for year, entries in sorted(by_year.items()):
+            picked = [entry_id for _, entry_id in sorted(entries)[:per_year]]
+            report.queued[year] = len(picked)
+            chosen.extend(picked)
+        if chosen:
+            await self._frontier.set_route(
+                chosen, status=CrawlStatus.QUEUED, route_node=EXPLORE_NODE, priority=1
+            )
+        await self._log.info(
+            "exploration samples queued", source_key=source_key, per_year=report.queued
+        )
+        return report
+
     # -- routing ----------------------------------------------------------
 
     async def navigation_graph(self, source_key: str) -> RuleGraph:
@@ -185,9 +346,18 @@ class ArchiveCrawlService:
             graph = await self._graphs.save_version(seed_navigation_graph(source_key))
         return graph
 
-    async def route(self, source_key: str, *, retry_unrouted: bool = True) -> RouteReport:
-        """Decide what to do with every discovered capture."""
+    async def route(
+        self, source_key: str, *, retry_unrouted: bool = True, reopen_capped: bool = False
+    ) -> RouteReport:
+        """Decide what to do with every discovered capture.
+
+        ``reopen_capped`` first sends captures skipped by the per-URL capture
+        cap back to routing, e.g. after the cap policy changed.
+        """
         graph = await self.navigation_graph(source_key)
+        if reopen_capped:
+            reopened = await self._frontier.reopen_capped(source_key)
+            await self._log.info("capture-capped captures reopened", count=reopened)
         if retry_unrouted:
             await self._frontier.reset_status(
                 source_key, from_status=CrawlStatus.UNROUTED, to_status=CrawlStatus.DISCOVERED
@@ -285,21 +455,41 @@ class ArchiveCrawlService:
         max_fetches: int = 100,
         max_llm_calls: int = 10,
         fetches_per_round: int | None = None,
-        enumerate_if_empty: bool = True,
+        enumerate_missing: bool = True,
         max_enumeration_pages: int | None = None,
+        max_link_lookups: int | None = None,
     ) -> CrawlReport:
         """Run rounds until ``rounds`` (0 = no limit), a budget, or no progress.
 
         Safe to interrupt and re-run: frontier state, rule graphs and archived
-        payloads are all persisted, and payloads archived but not yet parsed
-        (an interrupted run) are parsed first.
+        payloads are all persisted, payloads archived but not yet parsed (an
+        interrupted run) are parsed first, and captures claimed by a run that
+        died are released back to the queue.
+
+        Every year in the source's range whose index is not fully enumerated
+        gets enumerated (within ``max_enumeration_pages``), not only when the
+        frontier is empty -- otherwise the first year ever enumerated would be
+        the only one.
         """
         report = CrawlReport()
         log = self._log.bind(source_key=source_key)
+        released = await self._frontier.release_stale_claims(
+            source_key, claimed_before=datetime.now(UTC) - self._settings.claim_timeout
+        )
+        if released:
+            await log.warning("released captures claimed by an interrupted run", count=released)
+        if enumerate_missing:
+            report.enumeration = await self.enumerate(
+                source_key,
+                max_pages=max_enumeration_pages or self._settings.enumeration_pages_per_crawl,
+            )
+            if report.enumeration.added:
+                await log.info(
+                    "enumerated the archive index",
+                    added=report.enumeration.added,
+                    years_completed=report.enumeration.years_completed,
+                )
         counts = await self._frontier.counts(source_key)
-        if enumerate_if_empty and sum(counts.values()) == 0:
-            await log.info("frontier empty, enumerating the archive index")
-            report.enumeration = await self.enumerate(source_key, max_pages=max_enumeration_pages)
 
         leftover = await self._ingestion.parse_pending(source_key, limit=10_000)
         if leftover.created or leftover.updated or leftover.unchanged:
@@ -311,6 +501,11 @@ class ArchiveCrawlService:
 
         domain = self.scope(source_key).domain
         llm_left = max_llm_calls
+        lookups_left = (
+            max_link_lookups
+            if max_link_lookups is not None
+            else self._settings.link_lookups_per_round * (rounds if rounds > 0 else 10**6)
+        )
         fetches_left = max_fetches
         per_round = fetches_per_round or (
             max(1, max_fetches // rounds) if rounds > 0 else min(max_fetches, 50)
@@ -349,7 +544,9 @@ class ArchiveCrawlService:
                 trigger=RunTrigger.BACKFILL,
                 ctx=FetchContext(max_items=min(per_round, fetches_left)),
             )
-            fetches_left -= run.documents_fetched
+            # Failed attempts spend archive time too.
+            attempts = int(run.stats.get("fetch_attempts", run.documents_fetched))
+            fetches_left -= attempts
 
             extraction = InductionReport()
             reparsed = 0
@@ -361,6 +558,18 @@ class ArchiveCrawlService:
                 llm_left -= extraction.llm_calls
                 if extraction.versions:
                     reparsed = (await self._ingestion.reparse_unrecognised(source_key)).created
+                    # A new graph version is not applied until parsed documents
+                    # are re-read with it.
+                    reparsed += (
+                        await self._ingestion.reparse_stale(
+                            source_key, graph_version=max(extraction.versions)
+                        )
+                    ).created
+
+            links = await self.resolve_links(
+                source_key, limit=min(self._settings.link_lookups_per_round, lookups_left)
+            )
+            lookups_left -= links.looked_up
 
             report.rounds.append(
                 CrawlRound(
@@ -370,6 +579,7 @@ class ArchiveCrawlService:
                     run=run,
                     extraction=extraction,
                     reparsed_created=reparsed,
+                    links=links,
                 )
             )
             await log.info(
@@ -382,13 +592,16 @@ class ArchiveCrawlService:
                 created=run.listings_created + reparsed,
                 updated=run.listings_updated,
                 templates=extraction.accepted,
+                links_found=links.found,
                 llm_calls=navigation.llm_calls + extraction.llm_calls,
                 llm_left=llm_left,
                 fetches_left=fetches_left,
             )
             for note in navigation.notes + extraction.notes:
                 await log.warning("induction note", note=note)
-            progressed = run.documents_fetched or navigation.versions or extraction.versions
+            progressed = (
+                attempts or navigation.versions or extraction.versions or links.captures_added
+            )
             if not progressed:
                 report.stopped = (
                     "no progress (nothing queued to fetch and no new rules)"
@@ -415,21 +628,51 @@ def _format_counts(counts: dict[CrawlStatus, int] | dict[str, int]) -> str:
     return ",".join(shown) or "empty"
 
 
+def _within_domain(url: str, domain: str) -> bool:
+    host = (urlsplit(url if "://" in url else "http://" + url).hostname or "").lower()
+    domain = domain.lower().removeprefix("www.")
+    return host == domain or host.endswith("." + domain)
+
+
+def cursor_key(domain: str, year: int) -> str:
+    """Enumeration cursor scope: a completion marker is only valid for its domain."""
+    return f"cdx:{domain}:{year}"
+
+
+@dataclass(slots=True)
+class YearCoverage:
+    year: int
+    #: "done", "in progress" or "not enumerated".
+    enumeration: str
+    #: quarter -> frontier status -> captures.
+    quarters: dict[str, dict[str, int]] = field(default_factory=dict)
+
+
+_TAKEN = (CrawlStatus.FETCHED, CrawlStatus.FETCHING, CrawlStatus.QUEUED)
+
+
 def select_captures(captures: Sequence[FrontierEntry], cap: int) -> set[int]:
     """Which captures of one URL to fetch: distinct content, spread over time.
 
-    Captures with a digest already fetched (or queued) are redundant. Of the
-    rest, the first and last are kept and the remainder evenly spaced, so a
-    list page yields snapshots across its whole archived life.
+    ``cap`` applies per capture year, so every year a URL was archived in can
+    contribute, whatever order years were enumerated in. Within a year,
+    captures with a digest already fetched (or queued) are redundant; of the
+    rest, the first and last are kept and the remainder evenly spaced. The
+    same content in another year is still worth a fetch: it shows the advert
+    was still up.
     """
-    taken_digests = {
-        entry.digest
-        for entry in captures
-        if entry.status in (CrawlStatus.FETCHED, CrawlStatus.QUEUED)
-    }
-    budget = cap - len(
-        {e.digest for e in captures if e.status in (CrawlStatus.FETCHED, CrawlStatus.QUEUED)}
-    )
+    by_year: dict[int, list[FrontierEntry]] = defaultdict(list)
+    for entry in captures:
+        by_year[capture_year(entry.timestamp)].append(entry)
+    chosen: set[int] = set()
+    for entries in by_year.values():
+        chosen |= _select_in_year(entries, cap)
+    return chosen
+
+
+def _select_in_year(captures: Sequence[FrontierEntry], cap: int) -> set[int]:
+    taken_digests = {entry.digest for entry in captures if entry.status in _TAKEN}
+    budget = cap - len(taken_digests)
     if budget <= 0:
         return set()
     distinct: list[FrontierEntry] = []

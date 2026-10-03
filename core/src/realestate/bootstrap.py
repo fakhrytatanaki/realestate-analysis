@@ -18,6 +18,7 @@ from tortoise import Tortoise
 
 from realestate.application.jobs.parse_pending_job import make_parse_pending_job
 from realestate.application.jobs.scrape_source_job import make_scrape_job
+from realestate.application.services.archive_audit_service import ArchiveAuditService
 from realestate.application.services.archive_crawl_service import (
     ArchiveCrawlService,
     CrawlSettings,
@@ -31,12 +32,16 @@ from realestate.application.services.rule_induction_service import (
     InductionSettings,
     RuleInductionService,
 )
+from realestate.application.services.rule_seed_service import RuleSeedService
+from realestate.config.paths import resolve
 from realestate.config.settings import Settings, load_settings
 from realestate.config.tortoise import build_tortoise_config
+from realestate.domain.gold import GoldSet
 from realestate.domain.ports.archive import (
     ArchiveIndex,
     CrawlCursorRepository,
     CrawlFrontierRepository,
+    LinkRequestRepository,
 )
 from realestate.domain.ports.blob_provider import BlobProvider
 from realestate.domain.ports.job_scheduler import JobScheduler
@@ -57,11 +62,13 @@ from realestate.domain.ports.rules import (
     RuleGraphRepository,
 )
 from realestate.domain.ports.security import PasswordHasher
+from realestate.infrastructure.archive.rate_gate import PostgresRateGate
 from realestate.infrastructure.archive.wayback import WaybackCdxIndex, WaybackClient
 from realestate.infrastructure.blob.factory import BlobProviderFactory
 from realestate.infrastructure.db.repositories.crawl import (
     TortoiseCrawlCursorRepository,
     TortoiseCrawlFrontierRepository,
+    TortoiseLinkRequestRepository,
 )
 from realestate.infrastructure.db.repositories.listing import TortoiseListingRepository
 from realestate.infrastructure.db.repositories.market import TortoiseMarketStatsRepository
@@ -77,6 +84,7 @@ from realestate.infrastructure.db.repositories.user import (
     TortoiseUserRepository,
 )
 from realestate.infrastructure.extraction.engine import HtmlRuleEngine
+from realestate.infrastructure.gold.file_gold_set import FileGoldSet
 from realestate.infrastructure.llm.ollama import OllamaLlm, OllamaSettings
 from realestate.infrastructure.logging.factory import LogProviderFactory
 from realestate.infrastructure.scheduling.apscheduler_scheduler import ApSchedulerJobScheduler
@@ -146,6 +154,10 @@ class Container:
         return TortoiseCrawlFrontierRepository()
 
     @cached_property
+    def link_requests(self) -> LinkRequestRepository:
+        return TortoiseLinkRequestRepository()
+
+    @cached_property
     def cursors(self) -> CrawlCursorRepository:
         return TortoiseCrawlCursorRepository()
 
@@ -196,7 +208,7 @@ class Container:
 
     @cached_property
     def wayback(self) -> WaybackClient:
-        return WaybackClient(log=self.log)
+        return WaybackClient(log=self.log, gate=PostgresRateGate())
 
     @cached_property
     def archive_index(self) -> ArchiveIndex:
@@ -213,7 +225,7 @@ class Container:
             documents=self.documents,
             runs=self.runs,
             log=self.log,
-            links=FrontierLinkSink(self.frontier),
+            links=FrontierLinkSink(self.frontier, self.link_requests),
         )
 
     @cached_property
@@ -229,6 +241,8 @@ class Container:
             blob=self.blob,
             frontier=self.frontier,
             log=self.log,
+            registry=self.registry,
+            gold=self.gold,
             settings=InductionSettings(
                 nav_batch_size=archive.nav_batch_size,
                 max_repairs=archive.max_repairs,
@@ -250,13 +264,39 @@ class Container:
             ingestion=self.ingestion,
             induction=self.induction,
             log=self.log,
+            links=self.link_requests,
             settings=CrawlSettings(
-                max_captures_list=archive.max_captures_list,
-                max_captures_detail=archive.max_captures_detail,
-                max_captures_other=archive.max_captures_other,
+                max_captures_list=archive.max_captures_list_per_year,
+                max_captures_detail=archive.max_captures_detail_per_year,
+                max_captures_other=archive.max_captures_other_per_year,
                 cdx_page_size=archive.cdx_page_size,
+                enumeration_pages_per_crawl=archive.enumeration_pages_per_crawl,
+                claim_timeout=timedelta(minutes=archive.claim_timeout_minutes),
+                link_lookups_per_round=archive.link_lookups_per_round,
+                link_lookup_window_days=archive.link_lookup_window_days,
             ),
         )
+
+    @cached_property
+    def audit(self) -> ArchiveAuditService:
+        return ArchiveAuditService(
+            registry=self.registry,
+            documents=self.documents,
+            blob=self.blob,
+            engine=self.rule_engine,
+            graphs=self.rule_graphs,
+            listings=self.listings,
+            log=self.log,
+            gold=self.gold,
+        )
+
+    @cached_property
+    def gold(self) -> GoldSet:
+        return FileGoldSet(resolve(self.settings.archive.gold_dir), blob=self.blob)
+
+    @cached_property
+    def seeder(self) -> RuleSeedService:
+        return RuleSeedService(registry=self.registry, graphs=self.rule_graphs, log=self.log)
 
     @cached_property
     def queries(self) -> ListingQueryService:

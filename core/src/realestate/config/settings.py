@@ -125,13 +125,26 @@ class LlmSettings(BaseModel):
 class ArchiveSettings(BaseModel):
     """Crawl and rule-induction knobs shared by every archive source."""
 
-    max_captures_list: int = 4
-    max_captures_detail: int = 2
-    max_captures_other: int = 1
+    #: Distinct-content captures fetched per URL *per capture year*, by page kind.
+    max_captures_list_per_year: int = 2
+    max_captures_detail_per_year: int = 1
+    max_captures_other_per_year: int = 1
     cdx_page_size: int = 5000
+    #: CDX index pages enumerated per crawl, across years not yet complete.
+    enumeration_pages_per_crawl: int = 20
     nav_batch_size: int = 12
     max_repairs: int = 2
     max_attempts: int = 3
+    #: Fetch attempts per capture before a retryable failure becomes FAILED.
+    max_fetch_attempts: int = 3
+    #: A FETCHING claim older than this belongs to an interrupted run.
+    claim_timeout_minutes: int = 15
+    #: Exact-URL CDX lookups per crawl round of linked pages missing from the
+    #: frontier, and how far from the linking capture a found capture may be.
+    link_lookups_per_round: int = 10
+    link_lookup_window_days: int = 183
+    #: Hand-checked extraction answers (see ``infrastructure/gold``).
+    gold_dir: str = "var/gold"
 
 
 class SourceSettings(BaseModel):

@@ -86,6 +86,8 @@ class RunTrigger(StrEnum):
     SCHEDULED = "SCHEDULED"
     MANUAL = "MANUAL"
     BACKFILL = "BACKFILL"
+    #: Re-parsing archived payloads (reparse, rebuild); fetches nothing.
+    REPLAY = "REPLAY"
 
 
 class SortOrder(StrEnum):
@@ -115,6 +117,9 @@ class CrawlStatus(StrEnum):
     #: No navigation rule matched; waiting for rule induction.
     UNROUTED = "UNROUTED"
     QUEUED = "QUEUED"
+    #: Claimed by a fetch; becomes FETCHED once its payload is archived, or
+    #: returns to QUEUED if the claim goes stale (an interrupted run).
+    FETCHING = "FETCHING"
     #: Ambiguous; fetched only if a recognised page later links to it.
     DEFERRED = "DEFERRED"
     SKIPPED = "SKIPPED"
@@ -173,6 +178,17 @@ class RuleOrigin(StrEnum):
     SEED = "SEED"
     LLM = "LLM"
     HUMAN = "HUMAN"
+
+
+class LinkRequestStatus(StrEnum):
+    """A link to a URL the frontier had no capture of, awaiting an exact CDX lookup."""
+
+    PENDING = "PENDING"
+    #: The archive has captures near the linking page's time; added to the frontier.
+    FOUND = "FOUND"
+    #: The archive has no capture of it in the window.
+    NONE = "NONE"
+    FAILED = "FAILED"
 
 
 class GapStatus(StrEnum):

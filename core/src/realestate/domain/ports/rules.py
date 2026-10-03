@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
-from realestate.domain.archive import ArchivedDocument
+from realestate.domain.archive import ArchivedDocument, IdentityPolicy
 from realestate.domain.enums import GapStatus, RuleDomain
 from realestate.domain.rules import (
     CandidateReport,
@@ -78,6 +78,10 @@ class RuleGapRepository(ABC):
     async def record_failure(self, gap_id: UUID, error: str, *, max_attempts: int) -> RuleGap:
         """Count a failed induction; the gap becomes ``FAILED`` at ``max_attempts``."""
 
+    @abstractmethod
+    async def reopen_failed(self, source_key: str, domain: RuleDomain | None = None) -> int:
+        """Give ``FAILED`` gaps a fresh set of attempts (after a model or prompt change)."""
+
 
 class LlmDecisionRepository(ABC):
     """Every model answer, valid or not: cache, audit trail and cost ledger."""
@@ -104,6 +108,7 @@ class LlmDecisionRepository(ABC):
         tokens_in: int = 0,
         tokens_out: int = 0,
         latency_ms: int = 0,
+        source_key: str | None = None,
     ) -> LlmDecision: ...
 
     @abstractmethod
@@ -111,7 +116,9 @@ class LlmDecisionRepository(ABC):
         """Update the verdict once the answer has been validated."""
 
     @abstractmethod
-    async def totals(self, task_prefix: str | None = None) -> dict[str, int]:
+    async def totals(
+        self, task_prefix: str | None = None, *, source_key: str | None = None
+    ) -> dict[str, int]:
         """``{"calls", "valid", "tokens_in", "tokens_out"}`` for reporting."""
 
 
@@ -127,9 +134,17 @@ class RuleEngine(ABC):
 
     @abstractmethod
     def extract(
-        self, graph: RuleGraph, document: ArchivedDocument, *, country_code: str | None
+        self,
+        graph: RuleGraph,
+        document: ArchivedDocument,
+        *,
+        country_code: str | None,
+        identity: IdentityPolicy | None = None,
     ) -> ExtractionOutcome | None:
-        """Walk the extraction graph for one document; ``None`` is a miss."""
+        """Walk the extraction graph for one document; ``None`` is a miss.
+
+        ``identity``, when given, derives external ids from advert URLs.
+        """
 
     @abstractmethod
     def evaluate_candidate(
@@ -141,6 +156,7 @@ class RuleEngine(ABC):
         document: ArchivedDocument,
         document_ref: str,
         country_code: str | None,
+        identity: IdentityPolicy | None = None,
     ) -> CandidateReport:
         """Try one proposed template on one document, outside the graph."""
 

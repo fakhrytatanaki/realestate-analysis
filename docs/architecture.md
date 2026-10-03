@@ -51,7 +51,13 @@ flowchart LR
    but do not increment the run's error counter.
 
 `parse_pending()` handles only `PENDING`. `reparse()` handles `PARSED` and, by
-default, `FAILED`. Neither fetches new bytes or creates a scrape-run record.
+default, `FAILED`. `reparse_stale()` handles archive documents parsed by an older
+extraction graph; `rebuild()` deletes an archive source's listings and re-parses
+all its payloads. None fetches new bytes; each records a scrape run with trigger
+`REPLAY`. Documents parse in capture order (fetch order for live sources).
+Archive sources also store a parse report (template, page kind, items kept and
+dropped, identity problems) and the graph version on each document, and quality
+counters on each run (`scrape_run.stats`).
 
 ## Storage and identity
 

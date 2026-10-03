@@ -102,6 +102,8 @@ def to_raw_document(row: RawDocumentModel) -> RawDocument:
         parse_error=row.parse_error,
         attempts=row.attempts,
         scrape_run_id=row.scrape_run_id,  # type: ignore[attr-defined]
+        graph_version=row.graph_version,
+        parse_report=row.parse_report,
     )
 
 
@@ -118,6 +120,7 @@ def to_scrape_run(row: ScrapeRunModel) -> ScrapeRun:
         listings_updated=row.listings_updated,
         errors=row.errors,
         error_message=row.error_message,
+        stats=row.stats or {},
     )
 
 

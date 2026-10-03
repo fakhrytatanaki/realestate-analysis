@@ -12,12 +12,13 @@ Also the two pure URL functions the archive pipeline is built on:
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qsl, unquote, urlsplit
 
-from realestate.domain.enums import CrawlStatus, LinkRel, PageKind
+from realestate.domain.enums import CrawlStatus, LinkRel, LinkRequestStatus, PageKind
 
 #: Wayback timestamps are UTC ``YYYYMMDDhhmmss``; shorter ones are prefixes.
 _TIMESTAMP_FORMAT = "%Y%m%d%H%M%S"
@@ -84,6 +85,20 @@ class DiscoveredLink:
 
 
 @dataclass(frozen=True, slots=True)
+class LinkRequest:
+    """A linked URL no enumerated capture matched, to look up in the index by itself."""
+
+    source_key: str
+    url_key: str
+    url: str
+    rel: LinkRel
+    parent_timestamp: str | None = None
+    status: LinkRequestStatus = LinkRequestStatus.PENDING
+    attempts: int = 0
+    id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class ArchivedDocument:
     """An archived page as the rule engine sees it.
 
@@ -121,6 +136,91 @@ class ArchivedDocument:
             captured_at=captured_at,
             content_type=content_type,
         )
+
+
+#: Route node of captures fetched as a random sample of rejected routing
+#: decisions, to measure how often SKIP/DEFER/miss turned adverts away.
+EXPLORE_NODE = "explore"
+
+
+def capture_year(timestamp: str) -> int:
+    return int(timestamp[:4])
+
+
+def capture_quarter(timestamp: str) -> str:
+    """``"20131027..."`` -> ``"2013Q4"``: the stratum fetch order rotates through."""
+    month = int(timestamp[4:6] or "1") if len(timestamp) >= 6 else 1
+    return f"{timestamp[:4]}Q{(max(1, min(12, month)) - 1) // 3 + 1}"
+
+
+def stratified_order(
+    rows: Sequence[tuple[int, str, int]],
+    *,
+    taken: Mapping[str, int] | None = None,
+    per_stratum: int | None = None,
+) -> list[int]:
+    """Frontier ids in fetch order: round-robin across capture quarters.
+
+    ``rows`` are ``(id, timestamp, priority)``. Within a quarter, higher
+    priority then older first; across quarters, each quarter's first pick,
+    then each one's second, and so on -- so a dense month cannot starve a
+    sparse one of a bounded fetch budget. ``per_stratum`` caps each quarter's
+    total including ``taken`` (already fetched), for breadth pilots.
+    """
+    by_stratum: dict[str, list[tuple[int, str, int]]] = {}
+    for entry_id, timestamp, priority in rows:
+        by_stratum.setdefault(capture_quarter(timestamp), []).append(
+            (-priority, timestamp, entry_id)
+        )
+    ranked: list[tuple[int, int, str, int]] = []
+    for stratum, entries in by_stratum.items():
+        entries.sort()
+        if per_stratum is not None:
+            entries = entries[: max(0, per_stratum - (taken or {}).get(stratum, 0))]
+        ranked.extend(
+            (rank, negative, timestamp, entry_id)
+            for rank, (negative, timestamp, entry_id) in enumerate(entries)
+        )
+    ranked.sort()
+    return [entry_id for *_, entry_id in ranked]
+
+
+@dataclass(frozen=True, slots=True)
+class IdentityPolicy:
+    """How a source's adverts are identified: fixed code, never induced.
+
+    Induced templates locate an advert's URL; this policy turns that URL into
+    the external id, so a selector that grabs the site logo link cannot invent
+    an identity. ``id_patterns`` are tried in order and group 1 is the id;
+    ``reject_patterns`` name URLs that are never one advert (home, categories).
+    """
+
+    id_patterns: tuple[str, ...]
+    reject_patterns: tuple[str, ...] = ()
+
+    def canonical_id(self, url: str | None) -> str | None:
+        """The advert id in ``url``, or ``None`` if it names no advert."""
+        if not url or self.rejects(url):
+            return None
+        for pattern in self.id_patterns:
+            match = re.search(pattern, url, re.IGNORECASE)
+            if match:
+                return match.group(1) if match.groups() else match.group(0)
+        return None
+
+    def rejects(self, url: str) -> bool:
+        return is_site_root(url) or any(
+            re.search(pattern, url, re.IGNORECASE) for pattern in self.reject_patterns
+        )
+
+
+def is_site_root(url: str) -> bool:
+    """Whether ``url`` is a bare host (``http://www.olx.com.eg/``), never one advert."""
+    raw = url.strip()
+    if "://" not in raw:
+        raw = "http://" + raw.lstrip("/")
+    parts = urlsplit(raw)
+    return parts.path.strip("/") == "" and not parts.query
 
 
 # -- URL canonicalisation -------------------------------------------------

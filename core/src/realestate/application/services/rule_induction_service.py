@@ -27,7 +27,7 @@ from pydantic import ValidationError
 from realestate.application.rules import prompts
 from realestate.application.rules.proposals import NavRuleBatch, NavRuleProposal, TemplateProposal
 from realestate.application.rules.seeds import seed_navigation_graph
-from realestate.domain.archive import ArchivedDocument, url_shape
+from realestate.domain.archive import ArchivedDocument, IdentityPolicy, surt_key, url_shape
 from realestate.domain.enums import (
     CrawlStatus,
     GapStatus,
@@ -37,8 +37,10 @@ from realestate.domain.enums import (
     RuleOrigin,
 )
 from realestate.domain.exceptions import LlmError
+from realestate.domain.gold import GoldDocument, GoldScore, GoldSet, score
 from realestate.domain.ports.archive import CrawlFrontierRepository
 from realestate.domain.ports.blob_provider import BlobProvider
+from realestate.domain.ports.data_source import ArchiveDataSource
 from realestate.domain.ports.llm import LlmMessage, StructuredLlm
 from realestate.domain.ports.log_provider import LogProvider
 from realestate.domain.ports.repositories import RawDocumentRepository
@@ -48,7 +50,15 @@ from realestate.domain.ports.rules import (
     RuleGapRepository,
     RuleGraphRepository,
 )
-from realestate.domain.rules import ROOT_KEY, RuleEdge, RuleGap, RuleGraph, RuleNode
+from realestate.domain.ports.source_registry import SourceRegistry
+from realestate.domain.rules import (
+    ROOT_KEY,
+    CandidateReport,
+    RuleEdge,
+    RuleGap,
+    RuleGraph,
+    RuleNode,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +102,15 @@ class _Sample:
 
 
 @dataclass(slots=True)
+class _SourceContext:
+    """What production parsing of a source uses, so validation tests the same thing."""
+
+    identity: IdentityPolicy | None = None
+    country_code: str | None = None
+    gold: list[GoldDocument] = field(default_factory=list)
+
+
+@dataclass(slots=True)
 class _Answer:
     data: dict[str, Any] | None
     decision_id: UUID | None
@@ -113,6 +132,8 @@ class RuleInductionService:
         frontier: CrawlFrontierRepository,
         log: LogProvider,
         settings: InductionSettings | None = None,
+        registry: SourceRegistry | None = None,
+        gold: GoldSet | None = None,
     ) -> None:
         self._graphs = graphs
         self._gaps = gaps
@@ -124,6 +145,8 @@ class RuleInductionService:
         self._frontier = frontier
         self._log = log
         self._settings = settings or InductionSettings()
+        self._registry = registry
+        self._gold = gold
 
     # -- gap collection ---------------------------------------------------
 
@@ -156,13 +179,25 @@ class RuleInductionService:
         return len(by_shape)
 
     async def collect_extraction_gaps(self, source_key: str) -> int:
-        """Cluster unrecognised documents by page design; returns open gaps touched."""
+        """Cluster documents needing a template by page design; returns open gaps touched.
+
+        Unrecognised documents, plus parsed ones whose parse report shows the
+        winning template malfunctioning (identity problems, most items
+        dropped): a wrong-but-populated result is a gap too, not a success.
+        """
         await self._gaps.reset_open(source_key, RuleDomain.EXTRACTION)
         documents = await self._documents.list_by_status(
             source_key=source_key,
             status=RawDocumentStatus.UNRECOGNISED,
             limit=self._settings.extraction_scan_limit,
         )
+        parsed = await self._documents.list_by_status(
+            source_key=source_key,
+            status=RawDocumentStatus.PARSED,
+            limit=self._settings.extraction_scan_limit,
+        )
+        flagged = [raw for raw in parsed if self._needs_review(raw.parse_report)]
+        documents = [*documents, *flagged]
         known = [
             gap.fingerprint
             for gap in await self._gaps.list(source_key, RuleDomain.EXTRACTION, limit=5000)
@@ -204,10 +239,20 @@ class RuleInductionService:
         await self._log.info(
             "extraction gaps collected",
             source_key=source_key,
-            unrecognised_documents=len(documents),
+            unrecognised_documents=len(documents) - len(flagged),
+            flagged_parsed_documents=len(flagged),
             page_designs=len(touched),
         )
         return len(touched)
+
+    def _needs_review(self, report: dict[str, Any] | None) -> bool:
+        if not report:
+            return False
+        if int(report.get("identity_problems") or 0) > 0:
+            return True
+        total = int(report.get("items_total") or 0)
+        valid = int(report.get("items_valid") or 0)
+        return total >= 2 and valid / total < self._settings.min_valid_item_ratio
 
     # -- induction --------------------------------------------------------
 
@@ -270,6 +315,7 @@ class RuleInductionService:
             )
             try:
                 answer = await self._ask(
+                    source_key,
                     "nav_rules",
                     prompts.NAV_PROMPT_VERSION,
                     messages,
@@ -403,11 +449,26 @@ class RuleInductionService:
         accepted = [(index, rule) for _, index, rule in sorted(kept, key=lambda item: item[0])]
         return accepted, problems
 
+    async def _source_context(self, source_key: str) -> _SourceContext:
+        context = _SourceContext()
+        if self._registry is not None and self._registry.has(source_key):
+            source = self._registry.create(source_key)
+            try:
+                if isinstance(source, ArchiveDataSource):
+                    context.identity = source.identity_policy()
+                context.country_code = source.country_code
+            finally:
+                await source.aclose()
+        if self._gold is not None:
+            context.gold = await self._gold.documents(source_key)
+        return context
+
     async def _induce_extraction(self, source_key: str, budget: int) -> InductionReport:
         report = InductionReport()
         open_gaps = await self._gaps.list(
             source_key, RuleDomain.EXTRACTION, status=GapStatus.OPEN, limit=50
         )
+        context = await self._source_context(source_key) if open_gaps else _SourceContext()
         for gap in open_gaps:
             if report.llm_calls >= budget:
                 break
@@ -422,12 +483,19 @@ class RuleInductionService:
             graph = await self._graphs.active(source_key, RuleDomain.EXTRACTION) or RuleGraph.empty(
                 source_key, RuleDomain.EXTRACTION
             )
-            outcome = await self._induce_template(graph, gap, samples, budget - report.llm_calls)
+            outcome = await self._induce_template(
+                graph, gap, samples, budget - report.llm_calls, context
+            )
             report.merge(outcome)
         return report
 
     async def _induce_template(
-        self, graph: RuleGraph, gap: RuleGap, samples: list[_Sample], budget: int
+        self,
+        graph: RuleGraph,
+        gap: RuleGap,
+        samples: list[_Sample],
+        budget: int,
+        context: _SourceContext,
     ) -> InductionReport:
         report = InductionReport()
         primary = samples[0].document
@@ -462,6 +530,7 @@ class RuleInductionService:
             )
             try:
                 answer = await self._ask(
+                    graph.source_key,
                     "extraction_template",
                     prompts.TEMPLATE_PROMPT_VERSION,
                     messages,
@@ -478,7 +547,7 @@ class RuleInductionService:
 
             proposal, errors = self._parse_template(answer.data)
             if proposal is not None:
-                errors = self._validate_template(graph, proposal, samples)
+                errors = self._validate_template(graph, proposal, samples, context)
             await self._settle(answer, valid=not errors, error="; ".join(errors) or None)
             if proposal is not None and not errors:
                 key = _template_key(graph, proposal.name)
@@ -554,9 +623,20 @@ class RuleInductionService:
             ]
 
     def _validate_template(
-        self, graph: RuleGraph, proposal: TemplateProposal, samples: Sequence[_Sample]
+        self,
+        graph: RuleGraph,
+        proposal: TemplateProposal,
+        samples: Sequence[_Sample],
+        context: _SourceContext | None = None,
     ) -> list[str]:
-        """Try the proposal on real pages; empty list means accepted."""
+        """Try the proposal on real pages; empty list means accepted.
+
+        Plausibility first (conditions hold, items found, vocabulary covers
+        the wording), then correctness checks that populated fields cannot
+        fake: identity agrees with advert URLs and differs between adverts,
+        the price recipe keeps the amount, and gold answers do not regress.
+        """
+        context = context or _SourceContext()
         condition = proposal.condition()
         errors = self._engine.check_condition(condition)
         if errors:
@@ -566,7 +646,13 @@ class RuleInductionService:
         if proposal.page_kind == "LIST" and not proposal.items:
             return ["a LIST template needs 'items'"]
 
-        node = RuleNode(key="candidate", kind=NodeKind.TEMPLATE, action=proposal.action())
+        # An induced proposal ranks like one: curated templates still win.
+        node = RuleNode(
+            key="candidate",
+            kind=NodeKind.TEMPLATE,
+            action=proposal.action(),
+            origin=RuleOrigin.LLM,
+        )
         # Vocabulary proposed with the template is part of what is being tested.
         trial = graph.extended(vocab=proposal.vocab_dict()) if proposal.vocab else graph
         reports = [
@@ -576,7 +662,8 @@ class RuleInductionService:
                 condition=condition,
                 document=sample.document,
                 document_ref=sample.ref,
-                country_code=None,
+                country_code=context.country_code,
+                identity=context.identity,
             )
             for sample in samples
         ]
@@ -622,14 +709,19 @@ class RuleInductionService:
             )
         problems += [problem for problem in outcome.problems[:4] if "listing type" not in problem]
         # A field empty on every advert of every sample is a wrong selector or
-        # regex (e.g. "m2" where the page says "Square Meters: 170").
-        # Needs real evidence (2+ pages, 10+ adverts): one detail page without
-        # bedrooms is not proof the bedrooms field is wrong.
+        # regex (e.g. "m2" where the page says "Square Meters: 170"). Needs
+        # real evidence: 2+ list pages with 10+ adverts, or 3+ detail pages --
+        # one detail page without bedrooms is not proof the field is wrong.
         outcomes = [r.outcome for r in matched if r.outcome is not None and r.outcome.items_total]
         never_filled = set(outcome.empty_fields)
         for other_outcome in outcomes[1:]:
             never_filled &= set(other_outcome.empty_fields)
-        if len(outcomes) < 2 or sum(o.items_total for o in outcomes) < 10:
+        enough = (
+            len(outcomes) >= 3
+            if proposal.page_kind == "DETAIL"
+            else len(outcomes) >= 2 and sum(o.items_total for o in outcomes) >= 10
+        )
+        if not enough:
             never_filled = set()
         for name in sorted(never_filled - {"currency"}):
             problems.append(
@@ -639,15 +731,8 @@ class RuleInductionService:
         if not problems and outcome.items_valid == 0:
             problems.append("no valid adverts were extracted")
         if not problems:
-            drafts = outcome.drafts
-            if (
-                drafts
-                and all(draft.price.amount is None for draft in drafts)
-                and "price" in proposal.fields
-            ):
-                problems.append(
-                    "the price field never produced a number; point it at the raw price text"
-                )
+            problems += self._correctness_problems(proposal, matched, samples, context)
+        if not problems:
             for other in matched[1:]:
                 if other.outcome is None or not other.outcome.succeeded:
                     problems.append(
@@ -655,7 +740,101 @@ class RuleInductionService:
                         f"design ({other.document_ref})"
                     )
                     break
+        if not problems and context.gold:
+            problems += self._gold_regression(graph, trial, node, condition, context)
         return problems
+
+    def _correctness_problems(
+        self,
+        proposal: TemplateProposal,
+        matched: Sequence[CandidateReport],
+        samples: Sequence[_Sample],
+        context: _SourceContext,
+    ) -> list[str]:
+        problems: list[str] = []
+        outcomes = [r.outcome for r in matched if r.outcome is not None]
+        if any(outcome.warnings for outcome in outcomes):
+            problems.append(
+                "the url field points at the site home or a category page, not the advert; "
+                "use the advert's own link (a share/canonical URL or the item's title link)"
+            )
+        drafts = [draft for outcome in outcomes for draft in outcome.drafts]
+        sources = [(draft.attributes.get("_raw") or {}).get("price_source") for draft in drafts]
+        if "price" in proposal.fields and drafts:
+            if "field_fulltext" in sources:
+                problems.append(
+                    "the price regex captures something other than the amount (e.g. the dot "
+                    "in 'ج.م'); point price at the whole price text and let the parser read it"
+                )
+            elif not any(source in ("field", "field_fulltext") for source in sources):
+                problems.append(
+                    "the price field never produced a number; point it at the raw price text"
+                )
+        if proposal.page_kind == "DETAIL":
+            documents = {sample.ref: sample.document for sample in samples}
+            pages_by_id: dict[str, set[str]] = defaultdict(set)
+            for report in matched:
+                if report.outcome is None or report.document_ref not in documents:
+                    continue
+                page = _page_identity(documents[report.document_ref].url, context.identity)
+                for draft in report.outcome.drafts:
+                    pages_by_id[draft.external_id].add(page)
+            shared = sorted(i for i, pages in pages_by_id.items() if len(pages) > 1)
+            if shared:
+                problems.append(
+                    f"detail pages of different adverts got the same external id ({shared[0]}); "
+                    "the url/external_id recipe must read this advert's own id, not a link "
+                    "shared by every page (logo, home, category)"
+                )
+        return problems
+
+    def _gold_regression(
+        self,
+        graph: RuleGraph,
+        trial: RuleGraph,
+        node: RuleNode,
+        condition: dict[str, Any],
+        context: _SourceContext,
+    ) -> list[str]:
+        """Adding the candidate must not lower the exact-match rate on gold pages it matches."""
+        candidate_graph = trial.extended(
+            nodes=[node],
+            edges=[
+                RuleEdge(
+                    from_key=ROOT_KEY,
+                    to_key=node.key,
+                    condition=condition,
+                    priority=trial.next_edge_priority(),
+                )
+            ],
+        )
+        before, after = GoldScore(), GoldScore()
+        for gold in context.gold:
+            if not self._engine.evaluate_candidate(
+                trial,
+                node=node,
+                condition=condition,
+                document=gold.document,
+                document_ref=gold.ref,
+                country_code=context.country_code,
+                identity=context.identity,
+            ).condition_matched:
+                continue
+            for target, rules in ((before, graph), (after, candidate_graph)):
+                outcome = self._engine.extract(
+                    rules,
+                    gold.document,
+                    country_code=context.country_code,
+                    identity=context.identity,
+                )
+                target.add(score(outcome.drafts if outcome else [], gold.items))
+        if after.items and after.rate < before.rate:
+            return [
+                f"on hand-checked pages of this design the template is less accurate than the "
+                f"current rules ({after.exact}/{after.items} vs {before.exact}/{before.items} "
+                f"exact; wrong: {', '.join(sorted(after.misses))})"
+            ]
+        return []
 
     async def _load_samples(self, gap: RuleGap) -> list[_Sample]:
         samples: list[_Sample] = []
@@ -684,6 +863,7 @@ class RuleInductionService:
 
     async def _ask(
         self,
+        source_key: str,
         task: str,
         prompt_version: str,
         messages: Sequence[LlmMessage],
@@ -724,6 +904,7 @@ class RuleInductionService:
             input_fp=fingerprint,
             model=response.model,
             prompt_version=prompt_version,
+            source_key=source_key,
             request={"messages": [{"role": m.role, "chars": len(m.content)} for m in messages]},
             response=response.data,
             raw_text=response.raw_text,
@@ -748,6 +929,12 @@ class RuleInductionService:
     async def _settle(self, answer: _Answer, *, valid: bool, error: str | None) -> None:
         if answer.decision_id is not None and not answer.cached:
             await self._decisions.mark_valid(answer.decision_id, valid, error)
+
+
+def _page_identity(url: str, identity: IdentityPolicy | None) -> str:
+    """Which advert a detail page is, judged from its own archived URL."""
+    found = identity.canonical_id(url) if identity is not None else None
+    return found or surt_key(url)
 
 
 def _spread(items: Sequence[str], count: int) -> list[str]:

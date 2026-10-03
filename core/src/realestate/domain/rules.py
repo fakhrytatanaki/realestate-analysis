@@ -154,7 +154,36 @@ class RuleGraph:
         Node keys must be unique; vocabulary entries already present are not
         duplicated.
         """
-        existing = {node.key for node in self.nodes}
+        return self.revised(nodes=nodes, edges=edges, vocab=vocab, notes=notes)
+
+    def revised(
+        self,
+        *,
+        nodes: Sequence[RuleNode] = (),
+        edges: Sequence[RuleEdge] = (),
+        remove: Sequence[str] = (),
+        vocab: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+        notes: str | None = None,
+    ) -> RuleGraph:
+        """The next version, optionally retiring states.
+
+        Removed states take every edge into or out of them along; the root
+        cannot be removed. Retiring is how a faulty template is superseded:
+        appending a better one alone leaves the old one competing.
+        """
+        retired = set(remove)
+        if ROOT_KEY in retired:
+            raise ValueError("the root state cannot be removed")
+        unknown = retired - {node.key for node in self.nodes}
+        if unknown:
+            raise ValueError(f"no such states: {sorted(unknown)}")
+        kept_nodes = tuple(node for node in self.nodes if node.key not in retired)
+        kept_edges = tuple(
+            edge
+            for edge in self.edges
+            if edge.from_key not in retired and edge.to_key not in retired
+        )
+        existing = {node.key for node in kept_nodes}
         clashes = existing & {node.key for node in nodes}
         if clashes:
             raise ValueError(f"node keys already exist: {sorted(clashes)}")
@@ -167,8 +196,8 @@ class RuleGraph:
         return replace(
             self,
             version=self.version + 1,
-            nodes=(*self.nodes, *nodes),
-            edges=(*self.edges, *edges),
+            nodes=(*kept_nodes, *nodes),
+            edges=(*kept_edges, *edges),
             vocab=merged_vocab,
             status=RuleGraphStatus.ACTIVE,
             id=None,
@@ -177,10 +206,32 @@ class RuleGraph:
             notes=notes,
         )
 
+    def first_edge_priority(self, from_key: str = ROOT_KEY) -> int:
+        """A priority before every existing edge from ``from_key``."""
+        priorities = [edge.priority for edge in self.edges if edge.from_key == from_key]
+        return (min(priorities) - 10) if priorities else 100
+
     def next_edge_priority(self, from_key: str = ROOT_KEY) -> int:
         """A priority after every existing edge from ``from_key``."""
         priorities = [edge.priority for edge in self.edges if edge.from_key == from_key]
         return (max(priorities) + 10) if priorities else 100
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateSeed:
+    """A hand-written extraction template a source ships with."""
+
+    key: str
+    condition: dict[str, Any]
+    action: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class ExtractionSeed:
+    """Curated templates plus shared vocabulary, installed by ``rules seed``."""
+
+    templates: tuple[TemplateSeed, ...]
+    vocab: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
 
 
 # -- engine outcomes ------------------------------------------------------
@@ -213,6 +264,8 @@ class ExtractionOutcome:
     path: list[str] = field(default_factory=list)
     #: Fields the template declares that produced no value on any item.
     empty_fields: list[str] = field(default_factory=list)
+    #: Recipe faults that did not drop items (e.g. a home-page ``url``).
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def succeeded(self) -> bool:
@@ -267,3 +320,4 @@ class LlmDecision:
     tokens_out: int = 0
     latency_ms: int = 0
     created_at: datetime | None = None
+    source_key: str | None = None

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from realestate.domain.enums import RunStatus, RunTrigger
@@ -35,6 +37,7 @@ class TortoiseScrapeRunRepository(ScrapeRunRepository):
         listings_updated: int = 0,
         errors: int = 0,
         error_message: str | None = None,
+        stats: Mapping[str, Any] | None = None,
     ) -> ScrapeRun:
         row = await ScrapeRunModel.get_or_none(id=run_id)
         if row is None:
@@ -47,6 +50,7 @@ class TortoiseScrapeRunRepository(ScrapeRunRepository):
         row.errors = errors
         # The column is nullable; the field descriptor is typed non-optional.
         row.error_message = error_message[:8000] if error_message else None  # type: ignore[assignment]
+        row.stats = dict(stats or {})
         await row.save()
         return to_scrape_run(row)
 

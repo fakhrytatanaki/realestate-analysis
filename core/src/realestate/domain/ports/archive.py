@@ -10,9 +10,10 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
-from realestate.domain.archive import Capture, DiscoveredLink, FrontierEntry
-from realestate.domain.enums import CrawlStatus, LinkRel, PageKind
+from realestate.domain.archive import Capture, DiscoveredLink, FrontierEntry, LinkRequest
+from realestate.domain.enums import CrawlStatus, LinkRel, LinkRequestStatus, PageKind
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +40,21 @@ class ArchiveIndex(ABC):
 
         Implemented as an async generator; each page carries the resume key for
         the next, so an interrupted enumeration continues where it stopped.
+        """
+
+    @abstractmethod
+    async def lookup(
+        self,
+        url: str,
+        *,
+        around: str | None = None,
+        window_days: int = 183,
+        limit: int = 5,
+    ) -> list[Capture]:
+        """Successful HTML captures of exactly ``url``, closest to ``around`` first.
+
+        ``around`` is a capture timestamp (the linking page's); only captures
+        within ``window_days`` of it count. One index request per call.
         """
 
 
@@ -72,14 +88,54 @@ class CrawlFrontierRepository(ABC):
         """Record a routing outcome on captures."""
 
     @abstractmethod
-    async def next_queued(self, source_key: str, *, limit: int) -> list[FrontierEntry]:
-        """Captures to fetch next: highest priority first, then oldest."""
+    async def claim_queued(
+        self,
+        source_key: str,
+        *,
+        limit: int,
+        now: datetime,
+        per_quarter: int | None = None,
+    ) -> list[FrontierEntry]:
+        """Claim captures to fetch next (status ``FETCHING``), in :func:`stratified_order`.
+
+        Skips captures waiting out a retry (``next_retry_at`` after ``now``);
+        ``per_quarter`` caps fetched-plus-claimed captures per capture quarter.
+        """
 
     @abstractmethod
-    async def mark_fetched(self, entry_id: int) -> None: ...
+    async def release_stale_claims(self, source_key: str, *, claimed_before: datetime) -> int:
+        """Return ``FETCHING`` captures claimed before ``claimed_before`` to ``QUEUED``.
+
+        A claim that old belongs to a run that died between fetch and archive.
+        """
 
     @abstractmethod
-    async def mark_failed(self, entry_id: int, error: str) -> None: ...
+    async def mark_fetched(self, entry_id: int) -> None:
+        """The capture's payload is archived: the claim is complete."""
+
+    @abstractmethod
+    async def mark_failed(
+        self, entry_id: int, error: str, *, retry_at: datetime | None = None
+    ) -> None:
+        """Count a failed attempt: back to ``QUEUED`` until ``retry_at``, else ``FAILED``."""
+
+    @abstractmethod
+    async def known_url_keys(self, source_key: str, url_keys: Sequence[str]) -> set[str]:
+        """Which of ``url_keys`` have at least one capture in the frontier."""
+
+    @abstractmethod
+    async def captures_with_status(
+        self, source_key: str, statuses: Sequence[CrawlStatus]
+    ) -> list[tuple[int, str]]:
+        """``(id, timestamp)`` of every capture in ``statuses`` (exploration samples)."""
+
+    @abstractmethod
+    async def reopen_capped(self, source_key: str) -> int:
+        """Send captures skipped by the per-URL capture cap back to routing."""
+
+    @abstractmethod
+    async def status_by_quarter(self, source_key: str) -> dict[tuple[str, CrawlStatus], int]:
+        """Capture counts per ``(capture quarter, status)``, for coverage reports."""
 
     @abstractmethod
     async def add_evidence(self, source_key: str, rels_by_url_key: Mapping[str, LinkRel]) -> int:
@@ -119,9 +175,45 @@ class CrawlCursorRepository(ABC):
         """Persist progress."""
 
 
+class LinkRequestRepository(ABC):
+    """Linked URLs awaiting an exact-URL index lookup."""
+
+    @abstractmethod
+    async def request(self, requests: Sequence[LinkRequest]) -> int:
+        """Record new requests (a URL already requested is left alone); returns how many."""
+
+    @abstractmethod
+    async def pending(self, source_key: str, *, limit: int) -> list[LinkRequest]:
+        """Pending requests, detail links first, then oldest."""
+
+    @abstractmethod
+    async def resolve(
+        self,
+        request_id: int,
+        *,
+        status: LinkRequestStatus,
+        captures_found: int = 0,
+        error: str | None = None,
+    ) -> None:
+        """Record a lookup's outcome; ``PENDING`` counts a failed attempt for retry."""
+
+    @abstractmethod
+    async def counts(self, source_key: str) -> dict[LinkRequestStatus, int]: ...
+
+
 class LinkSink(ABC):
     """Receives links found on recognised pages during parsing."""
 
     @abstractmethod
-    async def offer(self, source_key: str, links: Sequence[DiscoveredLink]) -> int:
-        """Record the links; returns how many matched something crawlable."""
+    async def offer(
+        self,
+        source_key: str,
+        links: Sequence[DiscoveredLink],
+        *,
+        parent_timestamp: str | None = None,
+    ) -> int:
+        """Record the links; returns how many matched something crawlable.
+
+        ``parent_timestamp`` is the capture time of the linking page, used to
+        look up links the frontier has never seen near that moment.
+        """

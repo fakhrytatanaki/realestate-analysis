@@ -7,8 +7,9 @@ against in-memory fakes and the Tortoise implementation stays swappable.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from realestate.domain.enums import ListingType, RawDocumentStatus, RunStatus, RunTrigger
@@ -65,6 +66,18 @@ class ListingRepository(ABC):
     async def count(self, source_key: str | None = None) -> int:
         """Total listings, optionally restricted to one source."""
 
+    @abstractmethod
+    async def list_for_source(self, source_key: str) -> list[Listing]:
+        """Every listing of one source, for audits and rebuild reports."""
+
+    @abstractmethod
+    async def delete_source(self, source_key: str) -> int:
+        """Delete every listing (and observation) of one source; returns rows deleted.
+
+        Only for rebuilding an archive source from its archived payloads, which
+        remain the source of truth.
+        """
+
 
 class RawDocumentRepository(ABC):
     """Tracks archived payloads and their parse state."""
@@ -92,23 +105,49 @@ class RawDocumentRepository(ABC):
         status: RawDocumentStatus = RawDocumentStatus.PENDING,
         limit: int = 100,
         fetched_after: datetime | None = None,
+        graph_version_below: int | None = None,
     ) -> list[RawDocument]:
         """Documents in a given parse state, oldest first.
 
-        Passing ``PARSED`` is how a replay re-reads already-processed payloads.
+        Passing ``PARSED`` is how a replay re-reads already-processed payloads;
+        ``graph_version_below`` narrows that to documents parsed by an older
+        extraction graph (or before versions were recorded).
         """
 
     @abstractmethod
-    async def mark_parsed(self, document_id: UUID) -> None:
-        """Flag a document as successfully parsed."""
+    async def mark_parsed(
+        self,
+        document_id: UUID,
+        *,
+        graph_version: int | None = None,
+        report: Mapping[str, Any] | None = None,
+    ) -> None:
+        """Flag a document as successfully parsed, with what the parse saw."""
 
     @abstractmethod
     async def mark_failed(self, document_id: UUID, error: str) -> None:
         """Flag a document as unparseable and store the reason."""
 
     @abstractmethod
-    async def mark_unrecognised(self, document_id: UUID, reason: str) -> None:
+    async def mark_unrecognised(
+        self,
+        document_id: UUID,
+        reason: str,
+        *,
+        graph_version: int | None = None,
+        report: Mapping[str, Any] | None = None,
+    ) -> None:
         """Flag a document no extraction rule recognised yet (not a failure)."""
+
+    @abstractmethod
+    async def reset_status(
+        self,
+        source_key: str,
+        *,
+        from_statuses: Sequence[RawDocumentStatus],
+        to_status: RawDocumentStatus = RawDocumentStatus.PENDING,
+    ) -> int:
+        """Move a source's documents between states (rebuild); returns how many."""
 
     @abstractmethod
     async def find_by_sha256(self, source_key: str, sha256: str) -> RawDocument | None:
@@ -133,6 +172,7 @@ class ScrapeRunRepository(ABC):
         listings_updated: int = 0,
         errors: int = 0,
         error_message: str | None = None,
+        stats: Mapping[str, Any] | None = None,
     ) -> ScrapeRun:
         """Close a run with its final counters."""
 

@@ -69,7 +69,15 @@ class DataSourceNotImplementedError(RealEstateError):
 
 
 class FetchError(RealEstateError):
-    """A source failed while collecting raw payloads."""
+    """A source failed while collecting raw payloads.
+
+    ``retryable`` says whether trying again later may succeed (timeouts, rate
+    limits, server errors) or not (404, gone, forbidden).
+    """
+
+    def __init__(self, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.retryable = retryable
 
 
 class ParseError(RealEstateError):

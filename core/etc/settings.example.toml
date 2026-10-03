@@ -52,9 +52,15 @@ max_concurrency = 1      # the free tier allows one request at a time
 timeout_seconds = 600
 
 [archive]
-max_captures_list = 4    # distinct-content captures fetched per list URL
-max_captures_detail = 2
-max_captures_other = 1
+max_captures_list_per_year = 20    # distinct-content captures fetched per list URL, per year
+max_captures_detail_per_year = 1
+max_captures_other_per_year = 1
+enumeration_pages_per_crawl = 20  # CDX pages per crawl across not-yet-enumerated years
+max_fetch_attempts = 3            # retryable fetch failures before a capture is FAILED
+claim_timeout_minutes = 15        # FETCHING claims older than this are released
+link_lookups_per_round = 10       # exact-URL CDX lookups of linked pages not enumerated
+link_lookup_window_days = 183     # accept captures this close to the linking capture
+gold_dir = "var/gold"             # hand-checked labels: <gold_dir>/<source>/*.json
 nav_batch_size = 12      # URL-shape groups per navigation question
 max_repairs = 2          # feedback rounds per template question
 max_attempts = 3         # failed inductions before a gap is marked FAILED

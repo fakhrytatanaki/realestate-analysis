@@ -18,6 +18,18 @@ Archive sources (rule graphs + LLM induction):
     python -m realestate.cli rules show --source olx_eg_wayback --domain extraction
     python -m realestate.cli rules gaps --source olx_eg_wayback
     python -m realestate.cli parse --source olx_eg_wayback --unrecognised
+    python -m realestate.cli parse --source olx_eg_wayback --stale
+
+Data quality (offline, nothing written unless stated):
+
+    python -m realestate.cli archive audit --source olx_eg_wayback
+    python -m realestate.cli rules seed --source olx_eg_wayback --dry-run
+    python -m realestate.cli rules seed --source olx_eg_wayback --retire tpl.v4.x
+    python -m realestate.cli archive rebuild --source olx_eg_wayback --dry-run
+    python -m realestate.cli archive rebuild --source olx_eg_wayback --yes   # rewrites rows
+    python -m realestate.cli archive explore --source olx_eg_wayback --per-year 3
+    python -m realestate.cli archive lookup-links --source olx_eg_wayback --limit 20
+    python -m realestate.cli rules gaps --source olx_eg_wayback --reopen-failed
 
 Long crawls: ``crawl --rounds 0`` keeps going until a budget is spent or a round
 makes no progress; Ctrl-C stops it safely and re-running resumes. Add ``-v`` for
@@ -35,8 +47,11 @@ import asyncio
 import json
 import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
+from realestate.application.services.archive_audit_service import AuditReport
 from realestate.bootstrap import Container
+from realestate.config.paths import VAR_DIR, resolve
 from realestate.config.settings import Settings, load_settings
 from realestate.domain.enums import GapStatus, ListingType, RuleDomain, RunTrigger
 from realestate.domain.models import FetchContext
@@ -88,6 +103,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="re-parse payloads no extraction rule recognised (after rule induction)",
     )
     parse.add_argument(
+        "--stale",
+        action="store_true",
+        help="re-parse payloads parsed by an older extraction graph than the active one",
+    )
+    parse.add_argument(
         "--since-days",
         type=int,
         default=None,
@@ -113,7 +133,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-enumeration-pages",
         type=int,
         default=None,
-        help="cap CDX pages when the frontier is empty (each holds up to 5000 captures)",
+        help="cap CDX pages enumerated this crawl across unfinished years (5000 captures each)",
+    )
+    crawl.add_argument(
+        "--max-link-lookups",
+        type=int,
+        default=None,
+        help="exact-URL index lookups of linked pages missing from the frontier, all rounds",
     )
 
     archive = subparsers.add_parser("archive", parents=[common], help="archive frontier operations")
@@ -127,10 +153,56 @@ def build_parser() -> argparse.ArgumentParser:
     enumerate_.add_argument("--max-pages", type=int, default=None)
     route = archive_commands.add_parser("route", parents=[common], help="route discovered captures")
     route.add_argument("--source", required=True)
+    route.add_argument(
+        "--reopen-capped",
+        action="store_true",
+        help="first re-route captures skipped by the per-URL capture cap",
+    )
+    coverage = archive_commands.add_parser(
+        "coverage", parents=[common], help="per year and quarter: enumeration and capture states"
+    )
+    coverage.add_argument("--source", required=True)
+    gold_export = archive_commands.add_parser(
+        "gold-export",
+        parents=[common],
+        help="write unverified gold labels pre-filled from real captures, to check by hand",
+    )
+    gold_export.add_argument("--source", required=True)
+    gold_export.add_argument("--sample", type=int, default=12, help="documents to label")
+    explore = archive_commands.add_parser(
+        "explore",
+        parents=[common],
+        help="queue a random sample of skipped/deferred/unrouted captures per year",
+    )
+    explore.add_argument("--source", required=True)
+    explore.add_argument("--per-year", type=int, default=3)
+    explore.add_argument("--seed", default="explore", help="change to draw a different sample")
+    lookup = archive_commands.add_parser(
+        "lookup-links",
+        parents=[common],
+        help="look up linked pages the frontier has no capture of (one CDX query each)",
+    )
+    lookup.add_argument("--source", required=True)
+    lookup.add_argument("--limit", type=int, default=20)
     status = archive_commands.add_parser(
         "status", parents=[common], help="frontier, graphs, gaps, LLM usage"
     )
     status.add_argument("--source", required=True)
+    audit = archive_commands.add_parser(
+        "audit", parents=[common], help="replay archived pages offline and measure quality"
+    )
+    audit.add_argument("--source", required=True)
+    audit.add_argument("--graph-version", type=int, default=None, help="default: active")
+    audit.add_argument("--out", default=None, help="report path (default var/audit/...)")
+    rebuild = archive_commands.add_parser(
+        "rebuild",
+        parents=[common],
+        help="delete a source's listings and re-parse every archived payload",
+    )
+    rebuild.add_argument("--source", required=True)
+    rebuild.add_argument("--dry-run", action="store_true", help="audit and diff only")
+    rebuild.add_argument("--yes", action="store_true", help="confirm deleting listings")
+    rebuild.add_argument("--out", default=None, help="report path (default var/audit/...)")
 
     rules = subparsers.add_parser("rules", parents=[common], help="rule graphs and induction")
     rules_commands = rules.add_subparsers(dest="rules_command", required=True)
@@ -145,9 +217,21 @@ def build_parser() -> argparse.ArgumentParser:
     show.add_argument("--domain", choices=["navigation", "extraction"], default="extraction")
     show.add_argument("--version", type=int, default=None)
     show.add_argument("--json", action="store_true", help="dump nodes and edges as JSON")
+    seed = rules_commands.add_parser(
+        "seed", parents=[common], help="install the source's curated extraction templates"
+    )
+    seed.add_argument("--source", required=True)
+    seed.add_argument("--retire", nargs="*", default=[], help="induced template keys to remove")
+    seed.add_argument("--dry-run", action="store_true", help="audit the candidate graph only")
+    seed.add_argument("--out", default=None, help="audit report path (default var/audit/...)")
     gaps = rules_commands.add_parser("gaps", parents=[common], help="list open and failed gaps")
     gaps.add_argument("--source", required=True)
     gaps.add_argument("--domain", choices=["navigation", "extraction"], default=None)
+    gaps.add_argument(
+        "--reopen-failed",
+        action="store_true",
+        help="give FAILED gaps fresh attempts (after changing the model or prompts)",
+    )
 
     search = subparsers.add_parser("search", parents=[common], help="query aggregated listings")
     search.add_argument("--listing-type", choices=[t.value for t in ListingType], default=None)
@@ -222,7 +306,15 @@ async def run(args: argparse.Namespace) -> int:
                     return 1
 
             case "parse":
-                if args.unrecognised:
+                if args.stale:
+                    if not args.source:
+                        print("--stale requires --source")
+                        return 2
+                    graph = await container.audit.graph(args.source)
+                    outcome = await container.ingestion.reparse_stale(
+                        args.source, graph_version=graph.version
+                    )
+                elif args.unrecognised:
                     if not args.source:
                         print("--unrecognised requires --source")
                         return 2
@@ -257,6 +349,7 @@ async def run(args: argparse.Namespace) -> int:
                     max_llm_calls=args.max_llm_calls,
                     fetches_per_round=args.fetches_per_round,
                     max_enumeration_pages=args.max_enumeration_pages,
+                    max_link_lookups=args.max_link_lookups,
                 )
                 if report.enumeration:
                     print(
@@ -274,6 +367,7 @@ async def run(args: argparse.Namespace) -> int:
                         f"fetched {run.documents_fetched if run else 0}, "
                         f"created {created}; "
                         f"templates +{round_.extraction.accepted}; "
+                        f"linked pages found {round_.links.found}/{round_.links.looked_up}; "
                         f"llm calls {round_.navigation.llm_calls + round_.extraction.llm_calls}"
                     )
                     for note in round_.navigation.notes + round_.extraction.notes:
@@ -295,7 +389,9 @@ async def run(args: argparse.Namespace) -> int:
                             f"years completed: {enumeration.years_completed or 'none'}"
                         )
                     case "route":
-                        routed = await container.crawler.route(args.source)
+                        routed = await container.crawler.route(
+                            args.source, reopen_capped=args.reopen_capped
+                        )
                         print(
                             f"routed {routed.url_keys} urls: queued {routed.queued}, "
                             f"skipped {routed.skipped}, deferred {routed.deferred}, "
@@ -303,6 +399,70 @@ async def run(args: argparse.Namespace) -> int:
                         )
                     case "status":
                         await _print_status(container, args.source)
+                    case "coverage":
+                        await _print_coverage(container, args.source)
+                    case "explore":
+                        explored = await container.crawler.explore(
+                            args.source, per_year=args.per_year, seed=args.seed
+                        )
+                        print(
+                            "queued exploration samples: "
+                            + (", ".join(f"{y} {n}" for y, n in explored.queued.items()) or "none")
+                            + "; fetch them with `crawl`, then `archive audit` reports how many "
+                            "held adverts"
+                        )
+                    case "lookup-links":
+                        found = await container.crawler.resolve_links(args.source, limit=args.limit)
+                        print(
+                            f"looked up {found.looked_up}: {found.found} archived "
+                            f"({found.captures_added} new captures), {found.not_archived} not "
+                            f"archived, {found.failed} failed"
+                        )
+                    case "gold-export":
+                        labels = await container.audit.gold_candidates(
+                            args.source, sample=args.sample
+                        )
+                        directory = resolve(container.settings.archive.gold_dir) / args.source
+                        directory.mkdir(parents=True, exist_ok=True)
+                        for label in labels:
+                            name = label["document"]["raw_document_id"]
+                            path = directory / f"{name}.json"
+                            if path.exists():
+                                print(f"  kept existing {path.name}")
+                                continue
+                            path.write_text(
+                                json.dumps(label, ensure_ascii=False, indent=2), encoding="utf-8"
+                            )
+                            print(f"  wrote {path.name}: {len(label['items'])} items")
+                        print(
+                            f"{len(labels)} candidate labels in {directory}; check each against "
+                            'its page, correct it, and set "verified": true'
+                        )
+                    case "audit":
+                        graph = await container.audit.graph(args.source, args.graph_version)
+                        audited = await container.audit.audit(args.source, graph=graph)
+                        _print_report(audited, args.out, label="audit")
+                    case "rebuild":
+                        audited = await container.audit.audit(args.source)
+                        _print_report(audited, args.out, label="rebuild-dry-run")
+                        if args.dry_run:
+                            return 0
+                        if not args.yes:
+                            print(
+                                "rebuild deletes and re-creates this source's listings; "
+                                "re-run with --yes to proceed"
+                            )
+                            return 2
+                        before = await container.listings.count(args.source)
+                        rebuilt = await container.ingestion.rebuild(args.source)
+                        after = await container.listings.count(args.source)
+                        print(
+                            f"rebuilt: {before} rows before, {after} after "
+                            f"(created {rebuilt.created}, updated {rebuilt.updated}, "
+                            f"unchanged {rebuilt.unchanged})"
+                        )
+                        final = await container.audit.audit(args.source)
+                        _print_report(final, None, label="rebuild-after")
 
             case "rules":
                 match args.rules_command:
@@ -334,7 +494,33 @@ async def run(args: argparse.Namespace) -> int:
                             print("run `parse --source ... --unrecognised` to apply new templates")
                     case "show":
                         await _print_graph(container, args)
+                    case "seed":
+                        plan = await container.seeder.plan(args.source, retire=args.retire)
+                        print(
+                            f"extraction graph v{plan.current.version} -> "
+                            f"v{plan.candidate.version}: added {plan.added or 'none'}, "
+                            f"replaced {plan.replaced or 'none'}, "
+                            f"retired {plan.retired or 'none'}, "
+                            f"unchanged {len(plan.unchanged)}"
+                        )
+                        if not plan.changes:
+                            print("nothing to install")
+                            return 0
+                        audited = await container.audit.audit(args.source, graph=plan.candidate)
+                        _print_report(audited, args.out, label="seed-candidate")
+                        if args.dry_run:
+                            return 0
+                        saved = await container.seeder.apply(plan)
+                        print(
+                            f"saved extraction graph v{saved.version}; run "
+                            "`parse --source ... --stale` (or `archive rebuild`) to apply it"
+                        )
                     case "gaps":
+                        if args.reopen_failed:
+                            reopened = await container.rule_gaps.reopen_failed(
+                                args.source, _domain(args.domain)
+                            )
+                            print(f"reopened {reopened} failed gaps")
                         for status_ in (GapStatus.OPEN, GapStatus.FAILED):
                             listed = await container.rule_gaps.list(
                                 args.source, _domain(args.domain), status=status_, limit=30
@@ -373,6 +559,44 @@ async def run(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _print_coverage(container: Container, source_key: str) -> None:
+    """What exists, what was decided, what was fetched -- per year and quarter.
+
+    Keeps the reasons a period has no data apart: never enumerated, no
+    captures indexed, captures not selected, fetch failures, unextractable.
+    """
+    for year in await container.crawler.coverage(source_key):
+        total = sum(sum(statuses.values()) for statuses in year.quarters.values())
+        if year.enumeration == "not enumerated":
+            print(f"{year.year}: not enumerated")
+            continue
+        if not total:
+            print(f"{year.year}: enumeration {year.enumeration}, no captures indexed")
+            continue
+        print(f"{year.year}: enumeration {year.enumeration}, {total} captures")
+        for quarter, statuses in sorted(year.quarters.items()):
+            states = ", ".join(
+                f"{status.lower()} {count}" for status, count in sorted(statuses.items())
+            )
+            print(f"  {quarter}: {states}")
+
+
+def _print_report(report: AuditReport, out: str | None, *, label: str) -> None:
+    for line in report.summary_lines():
+        print(line)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
+    path = (
+        resolve(out)
+        if out
+        else VAR_DIR / "audit" / f"{report.source_key}-{label}-v{report.graph_version}-{stamp}.json"
+    )
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text(
+        json.dumps(report.as_dict(), ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+    )
+    print(f"report: {path}")
+
+
 def _domain(name: str | None) -> RuleDomain | None:
     return {"navigation": RuleDomain.NAVIGATION, "extraction": RuleDomain.EXTRACTION}.get(
         name or ""
@@ -398,10 +622,24 @@ async def _print_status(container: Container, source_key: str) -> None:
         open_gaps = await gaps.list(source_key, domain, status=GapStatus.OPEN, limit=1000)
         failed = await gaps.list(source_key, domain, status=GapStatus.FAILED, limit=1000)
         print(f"  gaps: {len(open_gaps)} open, {len(failed)} failed")
-    totals = await container.llm_decisions.totals()
+    totals = await container.llm_decisions.totals(source_key=source_key)
     print(
-        f"llm ledger: {totals['calls']} calls, {totals['valid']} valid, "
+        f"llm ledger (this source): {totals['calls']} calls, {totals['valid']} valid, "
         f"{totals['tokens_in']} tokens in, {totals['tokens_out']} out"
+    )
+    overall = await container.llm_decisions.totals()
+    unattributed = overall["calls"] - sum(
+        [
+            (await container.llm_decisions.totals(source_key=d.key))["calls"]
+            for d in container.registry.descriptors()
+        ]
+    )
+    if unattributed:
+        print(f"  plus {unattributed} older calls recorded without a source")
+    requests = await container.link_requests.counts(source_key)
+    print(
+        "linked pages to look up: "
+        + (", ".join(f"{s.value.lower()} {n}" for s, n in requests.items() if n) or "none")
     )
     print(f"listings: {await container.listings.count(source_key)}")
 

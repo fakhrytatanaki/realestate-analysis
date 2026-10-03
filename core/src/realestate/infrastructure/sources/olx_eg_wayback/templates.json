@@ -1,0 +1,721 @@
+{
+  "_comment": "Hand-written (curated) extraction templates for archived olx.com.eg, one per page design. Installed as HUMAN-origin rule states by `rules seed --source olx_eg_wayback`; they outrank induced templates on the designs they match. External ids come from advert URLs through the source's identity policy, not from these recipes; the id recipes here keep the templates usable without one (tests, other tools).",
+  "vocab": {
+    "listing_type": [
+      {
+        "pattern": "for[- ]rent|rental|للايجار|للإيجار|ايجار|إيجار",
+        "value": "RENT"
+      },
+      {
+        "pattern": "for[- ]sale|للبيع|بيع",
+        "value": "SALE"
+      }
+    ],
+    "property_type": [
+      {
+        "pattern": "villa|فيلا|فيلل",
+        "value": "VILLA"
+      },
+      {
+        "pattern": "duplex|دوبلكس",
+        "value": "APARTMENT"
+      },
+      {
+        "pattern": "apartment|flat|شقة|شقق|شقه",
+        "value": "APARTMENT"
+      },
+      {
+        "pattern": "\\bland\\b|ارض|أرض",
+        "value": "LAND"
+      },
+      {
+        "pattern": "office|مكتب|اداري",
+        "value": "OFFICE"
+      },
+      {
+        "pattern": "shop|store|محل|تجاري",
+        "value": "SHOP"
+      }
+    ]
+  },
+  "a1_2011_list": {
+    "condition": {
+      "type": "all",
+      "conditions": [
+        {
+          "type": "dom_css",
+          "css": "ul#the-list > li div.c-2 h3 a",
+          "min": 3
+        }
+      ]
+    },
+    "template": {
+      "page_kind": "LIST",
+      "items": {
+        "css": "ul#the-list > li"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": ".c-2 h3 a"
+          }
+        ],
+        "url": [
+          {
+            "css": ".c-2 h3 a",
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "css": ".c-2 h3 a",
+            "attr": "href",
+            "regex": "iid-(\\d+)"
+          }
+        ],
+        "price": [
+          {
+            "css": ".c-3"
+          }
+        ],
+        "category": [
+          {
+            "css": ".c-2 p span a"
+          }
+        ],
+        "location": [
+          {
+            "css": ".c-2 p span a",
+            "regex": "-\\s*([^-]+)$"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": ".c-2 p span"
+          }
+        ],
+        "description": [
+          {
+            "css": ".c-2 p"
+          }
+        ]
+      },
+      "links": [
+        {
+          "css": "a[href*='-p-']",
+          "rel": "PAGINATION"
+        }
+      ]
+    }
+  },
+  "a2_2013_list": {
+    "condition": {
+      "type": "dom_css",
+      "css": "#the-list .li h3 a, #itemListContent .the-list .li h3 a",
+      "min": 1
+    },
+    "template": {
+      "page_kind": "LIST",
+      "items": {
+        "css": "#the-list .li, #itemListContent .the-list .li"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": "h3 a"
+          }
+        ],
+        "url": [
+          {
+            "css": "h3 a",
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "css": "h3 a",
+            "attr": "href",
+            "regex": "iid-(\\d+)"
+          }
+        ],
+        "price": [
+          {
+            "css": ".third-column-container"
+          },
+          {
+            "css": "h3 a",
+            "regex": "(\\d[\\d,.]*\\s*(?:GBP|EGP|USD|EUR))"
+          }
+        ],
+        "category": [
+          {
+            "css": ".itemlistinginfo"
+          }
+        ],
+        "location": [
+          {
+            "css": ".itemlistinginfo",
+            "regex": "^.*(?:Sale|Rent|Rentals|Swap)\\s+-\\s+(.+)$"
+          },
+          {
+            "css": ".itemlistinginfo"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": ".fourth-column-container"
+          }
+        ],
+        "bedrooms": [
+          {
+            "css": ".c-4 span",
+            "regex": "Bedrooms:\\s*(\\d+)"
+          }
+        ],
+        "bathrooms": [
+          {
+            "css": ".c-4 span",
+            "regex": "Bathrooms:\\s*(\\d+)"
+          }
+        ],
+        "area": [
+          {
+            "css": ".c-4 span",
+            "regex": "Square Meters:\\s*([\\d,.]+)"
+          }
+        ],
+        "image": [
+          {
+            "css": ".cropit img",
+            "attr": "src"
+          }
+        ]
+      },
+      "links": [
+        {
+          "css": "a.ui-next",
+          "rel": "PAGINATION"
+        },
+        {
+          "css": "a[href*='-p-']",
+          "rel": "PAGINATION"
+        }
+      ],
+      "default_currency": "EGP"
+    }
+  },
+  "a2_2013_gallery": {
+    "condition": {
+      "type": "dom_css",
+      "css": "#the-gallery td .c-2 h3 a",
+      "min": 1
+    },
+    "template": {
+      "page_kind": "LIST",
+      "items": {
+        "css": "#the-gallery td:has(.c-2)"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": ".c-2 h3 a"
+          }
+        ],
+        "url": [
+          {
+            "css": ".c-2 h3 a",
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "css": ".c-2 h3 a",
+            "attr": "href",
+            "regex": "iid-(\\d+)"
+          }
+        ],
+        "price": [
+          {
+            "css": ".c-2 p strong"
+          }
+        ],
+        "location": [
+          {
+            "css": ".c-2 h3 a",
+            "attr": "title",
+            "regex": "\\s-\\s([^-]+(?:-[^-\\s]+)*)$"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": ".c-2 p",
+            "regex": "^\\s*(\\d{1,2}\\s+[A-Za-z]{3})\\s*$"
+          }
+        ],
+        "image": [
+          {
+            "css": ".cropit img",
+            "attr": "src"
+          }
+        ]
+      },
+      "default_currency": "EGP"
+    }
+  },
+  "a2_2013_detail": {
+    "condition": {
+      "type": "all",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "-iid-\\d+"
+        },
+        {
+          "type": "text_regex",
+          "pattern": "Ad details"
+        }
+      ]
+    },
+    "template": {
+      "page_kind": "DETAIL",
+      "items": null,
+      "fields": {
+        "title": [
+          {
+            "css": "h1",
+            "scope": "page"
+          },
+          {
+            "css": "title",
+            "scope": "page",
+            "regex": "^(.*?) - "
+          }
+        ],
+        "external_id": [
+          {
+            "script": "xtcustom",
+            "json": "ad_id"
+          }
+        ],
+        "category": [
+          {
+            "css": "title",
+            "scope": "page"
+          }
+        ],
+        "bathrooms": [
+          {
+            "css": "dl.optionals",
+            "regex": "Bathrooms:\\s*(\\d+)"
+          },
+          {
+            "css": "body",
+            "scope": "page",
+            "regex": "Bathrooms:\\s*(\\d+)"
+          }
+        ],
+        "bedrooms": [
+          {
+            "css": "dl.optionals",
+            "regex": "Bedrooms:\\s*(\\d+)"
+          },
+          {
+            "css": "body",
+            "scope": "page",
+            "regex": "Bedrooms:\\s*(\\d+)"
+          }
+        ],
+        "url": [
+          {
+            "css": "input.share-url",
+            "attr": "value"
+          },
+          {
+            "css": "meta[property='og:url']",
+            "attr": "content"
+          }
+        ],
+        "area": [
+          {
+            "css": "dl.optionals",
+            "regex": "Square Meters:\\s*([\\d,.]+)"
+          }
+        ]
+      }
+    }
+  },
+  "a2_2013_detail_item": {
+    "condition": {
+      "type": "all",
+      "conditions": [
+        {
+          "type": "dom_css",
+          "css": "#the-item"
+        },
+        {
+          "type": "dom_css",
+          "css": "#olx_item_title .h1"
+        }
+      ]
+    },
+    "template": {
+      "page_kind": "DETAIL",
+      "items": null,
+      "fields": {
+        "title": [
+          {
+            "css": "#olx_item_title .h1",
+            "regex": "^(.*?)\\s+—"
+          },
+          {
+            "css": "#olx_item_title .h1"
+          }
+        ],
+        "url": [
+          {
+            "css": "input.share-url",
+            "attr": "value"
+          },
+          {
+            "css": "meta[property='og:url']",
+            "attr": "content"
+          }
+        ],
+        "external_id": [
+          {
+            "css": "input.share-url",
+            "attr": "value",
+            "regex": "iid-(\\d+)"
+          }
+        ],
+        "price": [
+          {
+            "css": ".item-highlights.price"
+          }
+        ],
+        "category": [
+          {
+            "css": "#levelpath a#firstpath2"
+          }
+        ],
+        "location": [
+          {
+            "css": "#item-data li",
+            "index": 0
+          }
+        ],
+        "bedrooms": [
+          {
+            "css": "#description-text",
+            "regex": "Bedrooms:\\s*(\\d+)"
+          }
+        ],
+        "bathrooms": [
+          {
+            "css": "#description-text",
+            "regex": "Bathrooms:\\s*(\\d+)"
+          }
+        ],
+        "area": [
+          {
+            "css": "#description-text",
+            "regex": "Square Meters:\\s*([\\d,.]+)"
+          },
+          {
+            "css": ".item-highlights",
+            "regex": "([\\d,.]+)\\s*Square Meters"
+          }
+        ],
+        "description": [
+          {
+            "css": "#description-text"
+          }
+        ],
+        "image": [
+          {
+            "css": ".big-image img",
+            "attr": "src"
+          }
+        ]
+      },
+      "default_currency": "EGP"
+    }
+  },
+  "a2_2013_no_results": {
+    "condition": {
+      "type": "dom_css",
+      "css": "#noresults"
+    },
+    "template": {
+      "page_kind": "OTHER",
+      "name": "no results or removed advert"
+    }
+  },
+  "b_2015_list": {
+    "condition": {
+      "type": "dom_css",
+      "css": "div.d-listing__item a.d-listing__name",
+      "min": 3
+    },
+    "template": {
+      "page_kind": "LIST",
+      "items": {
+        "css": "div.d-listing__item"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": "a.d-listing__name"
+          }
+        ],
+        "url": [
+          {
+            "css": "a.d-listing__name",
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "css": "a.d-listing__name",
+            "attr": "href",
+            "regex": "listing/([^/]+)/show"
+          }
+        ],
+        "price": [
+          {
+            "css": ".d-listing__amount"
+          }
+        ],
+        "area": [
+          {
+            "css": ".d-listing__cat .value",
+            "index": 0
+          }
+        ],
+        "bedrooms": [
+          {
+            "css": ".d-listing__cat .value",
+            "index": 1
+          }
+        ],
+        "category": [
+          {
+            "const": "property-for-sale"
+          }
+        ]
+      },
+      "default_currency": "EGP"
+    }
+  },
+  "c_2019_list": {
+    "condition": {
+      "type": "dom_css",
+      "css": "li.item[data-ad-id]",
+      "min": 3
+    },
+    "template": {
+      "page_kind": "LIST",
+      "items": {
+        "css": "li.item[data-ad-id]"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": ".title"
+          }
+        ],
+        "url": [
+          {
+            "css": "a.adLink",
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "attr": "data-ad-id"
+          }
+        ],
+        "price": [
+          {
+            "css": ".price"
+          },
+          {
+            "attr": "data-ninja",
+            "decode": "urlencoded_json",
+            "json": "itemPrice"
+          }
+        ],
+        "category": [
+          {
+            "attr": "data-ninja",
+            "decode": "urlencoded_json",
+            "json": "categoryLevel3Name"
+          }
+        ],
+        "location": [
+          {
+            "attr": "data-ninja",
+            "decode": "urlencoded_json",
+            "json": "cityName"
+          }
+        ],
+        "listed_at": [
+          {
+            "attr": "data-ninja",
+            "decode": "urlencoded_json",
+            "json": "creationDate"
+          }
+        ],
+        "extra.seller_type": [
+          {
+            "attr": "data-ninja",
+            "decode": "urlencoded_json",
+            "json": "sellerType"
+          }
+        ]
+      },
+      "default_currency": "EGP"
+    }
+  },
+  "c_2021_list": {
+    "condition": {
+      "type": "dom_css",
+      "css": "div.ads__item a.ads__item__ad--title",
+      "min": 3
+    },
+    "template": {
+      "page_kind": "LIST",
+      "items": {
+        "css": "div.ads__item"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": "a.ads__item__ad--title"
+          }
+        ],
+        "url": [
+          {
+            "css": "a.ads__item__ad--title",
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "css": "a.ads__item__ad--title",
+            "attr": "href",
+            "regex": "-ID([A-Za-z0-9]+)\\.html"
+          }
+        ],
+        "price": [
+          {
+            "css": ".ads__item__price"
+          }
+        ],
+        "category": [
+          {
+            "css": ".ads__item__breadcrumbs"
+          }
+        ],
+        "location": [
+          {
+            "css": ".ads__item__location"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": ".ads__item__date"
+          }
+        ]
+      },
+      "default_currency": "EGP"
+    }
+  },
+  "d_2023_list": {
+    "condition": {
+      "type": "json_path",
+      "script": "state",
+      "path": "algolia.content.hits",
+      "min": 3
+    },
+    "template": {
+      "page_kind": "LIST",
+      "items": {
+        "script": "state",
+        "path": "algolia.content.hits"
+      },
+      "fields": {
+        "title": [
+          {
+            "json": "title"
+          }
+        ],
+        "external_id": [
+          {
+            "json": "externalID"
+          }
+        ],
+        "url": [
+          {
+            "template": "/ad/{slug}-ID{externalID}.html"
+          }
+        ],
+        "price": [
+          {
+            "json": "extraFields.price"
+          },
+          {
+            "json": "price"
+          }
+        ],
+        "location": [
+          {
+            "json": "location.lvl2.name_l1"
+          },
+          {
+            "json": "location.lvl1.name_l1"
+          }
+        ],
+        "listed_at": [
+          {
+            "json": "createdAt"
+          }
+        ],
+        "bedrooms": [
+          {
+            "json": "extraFields.rooms"
+          }
+        ],
+        "bathrooms": [
+          {
+            "json": "extraFields.baths"
+          }
+        ],
+        "area": [
+          {
+            "json": "extraFields.ft"
+          }
+        ],
+        "category": [
+          {
+            "json": "category.lvl1.name"
+          },
+          {
+            "script": "state",
+            "json": "router.location.pathname"
+          }
+        ]
+      },
+      "default_currency": "EGP"
+    }
+  },
+  "c_2019_detail_other": {
+    "condition": {
+      "type": "text_regex",
+      "pattern": "Industrial Equipment|Ad archived"
+    },
+    "template": {
+      "page_kind": "OTHER"
+    }
+  }
+}

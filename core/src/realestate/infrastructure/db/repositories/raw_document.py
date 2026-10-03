@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
+
+from tortoise.expressions import Q
 
 from realestate.domain.enums import RawDocumentStatus
 from realestate.domain.models import BlobRef, RawDocument, RawPayload
@@ -51,20 +55,33 @@ class TortoiseRawDocumentRepository(RawDocumentRepository):
         status: RawDocumentStatus = RawDocumentStatus.PENDING,
         limit: int = 100,
         fetched_after: datetime | None = None,
+        graph_version_below: int | None = None,
     ) -> list[RawDocument]:
         queryset = RawDocumentModel.filter(status=status)
         if source_key is not None:
             queryset = queryset.filter(source_key=source_key)
         if fetched_after is not None:
             queryset = queryset.filter(fetched_at__gte=fetched_after)
+        if graph_version_below is not None:
+            queryset = queryset.filter(
+                Q(graph_version__lt=graph_version_below) | Q(graph_version__isnull=True)
+            )
         rows = await queryset.order_by("fetched_at").limit(limit)
         return [to_raw_document(row) for row in rows]
 
-    async def mark_parsed(self, document_id: UUID) -> None:
+    async def mark_parsed(
+        self,
+        document_id: UUID,
+        *,
+        graph_version: int | None = None,
+        report: Mapping[str, Any] | None = None,
+    ) -> None:
         await RawDocumentModel.filter(id=document_id).update(
             status=RawDocumentStatus.PARSED,
             parsed_at=datetime.now(UTC),
             parse_error=None,
+            graph_version=graph_version,
+            parse_report=dict(report) if report is not None else None,
         )
 
     async def mark_failed(self, document_id: UUID, error: str) -> None:
@@ -76,12 +93,32 @@ class TortoiseRawDocumentRepository(RawDocumentRepository):
         row.attempts += 1
         await row.save()
 
-    async def mark_unrecognised(self, document_id: UUID, reason: str) -> None:
+    async def mark_unrecognised(
+        self,
+        document_id: UUID,
+        reason: str,
+        *,
+        graph_version: int | None = None,
+        report: Mapping[str, Any] | None = None,
+    ) -> None:
         await RawDocumentModel.filter(id=document_id).update(
             status=RawDocumentStatus.UNRECOGNISED,
             parsed_at=datetime.now(UTC),
             parse_error=reason[:8000],
+            graph_version=graph_version,
+            parse_report=dict(report) if report is not None else None,
         )
+
+    async def reset_status(
+        self,
+        source_key: str,
+        *,
+        from_statuses: Sequence[RawDocumentStatus],
+        to_status: RawDocumentStatus = RawDocumentStatus.PENDING,
+    ) -> int:
+        return await RawDocumentModel.filter(
+            source_key=source_key, status__in=list(from_statuses)
+        ).update(status=to_status, parse_error=None)
 
     async def find_by_sha256(self, source_key: str, sha256: str) -> RawDocument | None:
         row = (

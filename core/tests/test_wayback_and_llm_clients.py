@@ -164,7 +164,11 @@ async def test_wayback_source_fetches_queued_captures_and_parses_with_pinned_gra
         client=WaybackClient(FAST, log=NullLogProvider(), transport=httpx.MockTransport(handler)),
     )
     payloads = [p async for p in source.fetch(FetchContext(max_items=5))]
-    assert len(payloads) == 1 and frontier.rows[1].status is CrawlStatus.FETCHED
+    # Claimed, not done: only an acknowledged (archived) payload completes it.
+    assert len(payloads) == 1 and frontier.rows[1].status is CrawlStatus.FETCHING
+    await source.acknowledge(payloads[0])
+    assert frontier.rows[1].status is CrawlStatus.FETCHED
+    assert source.fetch_stats()["fetch_attempts"] == 1
     assert payloads[0].meta["captured_at"].startswith("2013-03-05")
 
     with pytest.raises(UnrecognisedDocumentError, match="graph v0"):

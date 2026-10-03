@@ -113,7 +113,9 @@ reports upsert counts, so consult document state/logs for parse failures. A
 
 Archive sources (`olx_eg_wayback`) are crawled, not scheduled. `crawl` runs rounds of
 route → induce navigation rules → fetch and parse → induce templates → re-parse,
-within explicit budgets, enumerating the CDX index first when the frontier is empty:
+within explicit budgets. Each crawl first releases captures claimed by a run that
+died and continues CDX enumeration of any year in the source's range not yet
+complete (up to `enumeration_pages_per_crawl` index pages):
 
 ```bash
 ./venv/bin/python -m realestate.cli crawl --source olx_eg_wayback --rounds 3 --max-fetches 60 --max-llm-calls 10
@@ -124,10 +126,34 @@ within explicit budgets, enumerating the CDX index first when the frontier is em
 ./venv/bin/python -m realestate.cli rules show --source olx_eg_wayback --domain extraction [--json]
 ./venv/bin/python -m realestate.cli rules gaps --source olx_eg_wayback
 ./venv/bin/python -m realestate.cli parse --source olx_eg_wayback --unrecognised
+./venv/bin/python -m realestate.cli parse --source olx_eg_wayback --stale
+./venv/bin/python -m realestate.cli archive coverage --source olx_eg_wayback
+./venv/bin/python -m realestate.cli archive audit --source olx_eg_wayback
+./venv/bin/python -m realestate.cli archive explore --source olx_eg_wayback --per-year 3
+./venv/bin/python -m realestate.cli archive lookup-links --source olx_eg_wayback --limit 20
+./venv/bin/python -m realestate.cli rules gaps --source olx_eg_wayback --reopen-failed
 ```
 
-Enumeration resumes per year (`crawl_cursor`). Routing retries `UNROUTED` captures
-each time, so new navigation rules apply to old misses. Documents no template
+Several crawl processes may run at once: claims keep them off each other's
+captures, and request spacing to the archive is shared through
+`archive_rate_gate`. `crawl --max-link-lookups` bounds exact-URL lookups of
+linked pages the enumeration missed (default `link_lookups_per_round` per round).
+
+**Repairing an archive source.** Rule changes are measured offline before they
+are applied: `rules seed --dry-run` (or `archive audit --graph-version N`) replays
+every archived page and reports identity, completeness and a diff against stored
+rows, writing JSON to `var/audit/`. `parse --stale` re-reads already-parsed
+documents with the active graph. Merged identities and false histories need
+`archive rebuild --source ... --yes`: it deletes the source's listings and
+observations and re-parses every archived payload in capture order. The archived
+payloads are the source of truth, so a rebuild is repeatable; an interrupted one
+leaves documents `PENDING` for the next `parse` or `crawl`. See
+[Measuring quality](wayback-crawler-state-machine.md#measuring-quality).
+
+Enumeration resumes per domain and year (`crawl_cursor`). Routing retries
+`UNROUTED` captures each time, so new navigation rules apply to old misses.
+`--max-fetches` counts fetch attempts, failures included; transient failures are
+retried with a backoff, permanent ones (404/410/403) become `FAILED`. Documents no template
 recognises are `UNRECOGNISED`, not `FAILED`; after induction, `parse --unrecognised`
 re-parses them. Without an API key, induction reports "model unavailable" and the
 rest of the crawl still runs on existing rules. Every model answer is in

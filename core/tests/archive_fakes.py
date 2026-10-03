@@ -6,15 +6,26 @@ import gzip
 import json
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
 
-from realestate.domain.archive import ArchivedDocument, Capture, FrontierEntry, parse_timestamp
+from realestate.domain.archive import (
+    ArchivedDocument,
+    Capture,
+    FrontierEntry,
+    LinkRequest,
+    capture_quarter,
+    parse_timestamp,
+    stratified_order,
+    surt_key,
+)
 from realestate.domain.enums import (
     CrawlStatus,
     GapStatus,
     LinkRel,
+    LinkRequestStatus,
     PageKind,
     RuleDomain,
     RuleGraphStatus,
@@ -24,6 +35,7 @@ from realestate.domain.ports.archive import (
     CapturePage,
     CrawlCursorRepository,
     CrawlFrontierRepository,
+    LinkRequestRepository,
 )
 from realestate.domain.ports.llm import LlmMessage, LlmResponse, StructuredLlm
 from realestate.domain.ports.rules import (
@@ -34,8 +46,11 @@ from realestate.domain.ports.rules import (
 from realestate.domain.rules import LlmDecision, RuleGap, RuleGraph
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "wayback_olx_eg"
+SRC = Path(__file__).resolve().parents[1] / "src"
 _INDEX = json.loads((FIXTURES / "index.json").read_text())
-TEMPLATES: dict[str, Any] = json.loads((FIXTURES / "templates.json").read_text())
+TEMPLATES: dict[str, Any] = json.loads(
+    (SRC / "realestate/infrastructure/sources/olx_eg_wayback/templates.json").read_text()
+)
 
 
 def fixture_names() -> list[str]:
@@ -63,6 +78,8 @@ class InMemoryFrontier(CrawlFrontierRepository):
     def __init__(self) -> None:
         self.rows: dict[int, FrontierEntry] = {}
         self._next = 1
+        self.claimed_at: dict[int, datetime] = {}
+        self.retry_at: dict[int, datetime] = {}
 
     async def add_captures(self, source_key: str, captures: Sequence[Capture]) -> int:
         existing = {(e.source_key, e.url_key, e.timestamp) for e in self.rows.values()}
@@ -118,23 +135,102 @@ class InMemoryFrontier(CrawlFrontierRepository):
                 page_kind=page_kind,
             )
 
-    async def next_queued(self, source_key: str, *, limit: int) -> list[FrontierEntry]:
+    async def claim_queued(
+        self,
+        source_key: str,
+        *,
+        limit: int,
+        now: datetime,
+        per_quarter: int | None = None,
+    ) -> list[FrontierEntry]:
         queued = [
-            e
+            (e.id, e.timestamp, e.priority)
             for e in self.rows.values()
-            if e.source_key == source_key and e.status is CrawlStatus.QUEUED
+            if e.source_key == source_key
+            and e.status is CrawlStatus.QUEUED
+            and (e.id not in self.retry_at or self.retry_at[e.id] <= now)
         ]
-        queued.sort(key=lambda e: (-e.priority, e.timestamp, e.id))
-        return queued[:limit]
+        taken: dict[str, int] = {}
+        for e in self.rows.values():
+            if e.source_key == source_key and e.status in (
+                CrawlStatus.FETCHED,
+                CrawlStatus.FETCHING,
+            ):
+                quarter = capture_quarter(e.timestamp)
+                taken[quarter] = taken.get(quarter, 0) + 1
+        ordered = stratified_order(queued, taken=taken, per_stratum=per_quarter)[:limit]
+        for entry_id in ordered:
+            self.rows[entry_id] = replace(self.rows[entry_id], status=CrawlStatus.FETCHING)
+            self.claimed_at[entry_id] = now
+        return [self.rows[entry_id] for entry_id in ordered]
+
+    async def release_stale_claims(self, source_key: str, *, claimed_before: datetime) -> int:
+        released = 0
+        for entry_id, entry in list(self.rows.items()):
+            if (
+                entry.source_key == source_key
+                and entry.status is CrawlStatus.FETCHING
+                and self.claimed_at.get(entry_id, claimed_before) <= claimed_before
+            ):
+                self.rows[entry_id] = replace(entry, status=CrawlStatus.QUEUED)
+                self.claimed_at.pop(entry_id, None)
+                released += 1
+        return released
 
     async def mark_fetched(self, entry_id: int) -> None:
         self.rows[entry_id] = replace(self.rows[entry_id], status=CrawlStatus.FETCHED)
+        self.claimed_at.pop(entry_id, None)
 
-    async def mark_failed(self, entry_id: int, error: str) -> None:
+    async def mark_failed(
+        self, entry_id: int, error: str, *, retry_at: datetime | None = None
+    ) -> None:
         entry = self.rows[entry_id]
+        self.claimed_at.pop(entry_id, None)
+        if retry_at is not None:
+            self.retry_at[entry_id] = retry_at
+        else:
+            self.retry_at.pop(entry_id, None)
         self.rows[entry_id] = replace(
-            entry, status=CrawlStatus.FAILED, error=error, attempts=entry.attempts + 1
+            entry,
+            status=CrawlStatus.QUEUED if retry_at is not None else CrawlStatus.FAILED,
+            error=error,
+            attempts=entry.attempts + 1,
         )
+
+    async def known_url_keys(self, source_key: str, url_keys: Sequence[str]) -> set[str]:
+        present = {e.url_key for e in self.rows.values() if e.source_key == source_key}
+        return {key for key in url_keys if key in present}
+
+    async def captures_with_status(
+        self, source_key: str, statuses: Sequence[CrawlStatus]
+    ) -> list[tuple[int, str]]:
+        return [
+            (e.id, e.timestamp)
+            for e in self.rows.values()
+            if e.source_key == source_key and e.status in statuses
+        ]
+
+    async def reopen_capped(self, source_key: str) -> int:
+        reopened = 0
+        for entry_id, entry in list(self.rows.items()):
+            if (
+                entry.source_key == source_key
+                and entry.status is CrawlStatus.SKIPPED
+                and (entry.route_node or "").endswith("#capture-cap")
+            ):
+                self.rows[entry_id] = replace(
+                    entry, status=CrawlStatus.DISCOVERED, route_node=None
+                )
+                reopened += 1
+        return reopened
+
+    async def status_by_quarter(self, source_key: str) -> dict[tuple[str, CrawlStatus], int]:
+        counts: dict[tuple[str, CrawlStatus], int] = {}
+        for entry in self.rows.values():
+            if entry.source_key == source_key:
+                key = (capture_quarter(entry.timestamp), entry.status)
+                counts[key] = counts.get(key, 0) + 1
+        return counts
 
     async def add_evidence(self, source_key: str, rels_by_url_key: Mapping[str, LinkRel]) -> int:
         matched: set[str] = set()
@@ -182,6 +278,52 @@ class InMemoryFrontier(CrawlFrontierRepository):
 
     def by_status(self, status: CrawlStatus) -> list[FrontierEntry]:
         return [e for e in self.rows.values() if e.status is status]
+
+
+class InMemoryLinkRequests(LinkRequestRepository):
+    def __init__(self) -> None:
+        self.rows: dict[int, LinkRequest] = {}
+        self.found: dict[int, int] = {}
+
+    async def request(self, requests: Sequence[LinkRequest]) -> int:
+        known = {(r.source_key, r.url_key) for r in self.rows.values()}
+        added = 0
+        for request in requests:
+            if (request.source_key, request.url_key) in known:
+                continue
+            request_id = len(self.rows) + 1
+            self.rows[request_id] = replace(request, id=request_id)
+            known.add((request.source_key, request.url_key))
+            added += 1
+        return added
+
+    async def pending(self, source_key: str, *, limit: int) -> list[LinkRequest]:
+        rank = {LinkRel.DETAIL: 0, LinkRel.LIST: 1, LinkRel.PAGINATION: 2}
+        waiting = [
+            r
+            for r in self.rows.values()
+            if r.source_key == source_key and r.status is LinkRequestStatus.PENDING
+        ]
+        return sorted(waiting, key=lambda r: (rank[r.rel], r.id or 0))[:limit]
+
+    async def resolve(
+        self,
+        request_id: int,
+        *,
+        status: LinkRequestStatus,
+        captures_found: int = 0,
+        error: str | None = None,
+    ) -> None:
+        row = self.rows[request_id]
+        self.rows[request_id] = replace(row, status=status, attempts=row.attempts + 1)
+        self.found[request_id] = captures_found
+
+    async def counts(self, source_key: str) -> dict[LinkRequestStatus, int]:
+        out = dict.fromkeys(LinkRequestStatus, 0)
+        for row in self.rows.values():
+            if row.source_key == source_key:
+                out[row.status] += 1
+        return out
 
 
 class InMemoryCursors(CrawlCursorRepository):
@@ -321,6 +463,18 @@ class InMemoryGaps(RuleGapRepository):
         self.gaps[gap_id] = gap
         return gap
 
+    async def reopen_failed(self, source_key: str, domain: RuleDomain | None = None) -> int:
+        reopened = 0
+        for gap_id, gap in list(self.gaps.items()):
+            if (
+                gap.source_key == source_key
+                and gap.status is GapStatus.FAILED
+                and (domain is None or gap.domain is domain)
+            ):
+                self.gaps[gap_id] = replace(gap, status=GapStatus.OPEN, attempts=0)
+                reopened += 1
+        return reopened
+
 
 class InMemoryDecisions(LlmDecisionRepository):
     def __init__(self) -> None:
@@ -352,6 +506,7 @@ class InMemoryDecisions(LlmDecisionRepository):
             error=kwargs.get("error"),
             tokens_in=kwargs.get("tokens_in", 0),
             tokens_out=kwargs.get("tokens_out", 0),
+            source_key=kwargs.get("source_key"),
         )
         self.decisions[decision.id] = decision
         return decision
@@ -359,9 +514,14 @@ class InMemoryDecisions(LlmDecisionRepository):
     async def mark_valid(self, decision_id: UUID, valid: bool, error: str | None = None) -> None:
         self.decisions[decision_id] = replace(self.decisions[decision_id], valid=valid, error=error)
 
-    async def totals(self, task_prefix: str | None = None) -> dict[str, int]:
+    async def totals(
+        self, task_prefix: str | None = None, *, source_key: str | None = None
+    ) -> dict[str, int]:
         found = [
-            d for d in self.decisions.values() if not task_prefix or d.task.startswith(task_prefix)
+            d
+            for d in self.decisions.values()
+            if (not task_prefix or d.task.startswith(task_prefix))
+            and (source_key is None or d.source_key == source_key)
         ]
         return {
             "calls": len(found),
@@ -409,9 +569,12 @@ class ScriptedLlm(StructuredLlm):
 class FixtureIndex(ArchiveIndex):
     """An archive index serving a fixed list of captures, two pages per year."""
 
-    def __init__(self, captures: Sequence[Capture]) -> None:
+    def __init__(self, captures: Sequence[Capture], hidden: Sequence[Capture] = ()) -> None:
         self.captures = list(captures)
+        #: Captures the domain enumeration does not return, found only by exact lookup.
+        self.hidden = list(hidden)
         self.requests: list[tuple[str, int, str | None]] = []
+        self.lookups: list[tuple[str, str | None]] = []
 
     async def iter_captures(
         self, domain: str, year: int, *, resume_key: str | None = None, page_size: int = 5000
@@ -427,3 +590,24 @@ class FixtureIndex(ArchiveIndex):
             if next_key is None:
                 return
             resume_key = next_key
+
+    async def lookup(
+        self,
+        url: str,
+        *,
+        around: str | None = None,
+        window_days: int = 183,
+        limit: int = 5,
+    ) -> list[Capture]:
+        self.lookups.append((url, around))
+        key = surt_key(url)
+        found = [c for c in self.hidden if c.url_key == key]
+        if around:
+            centre = parse_timestamp(around)
+            found = [
+                c
+                for c in found
+                if abs((parse_timestamp(c.timestamp) - centre).days) <= window_days
+            ]
+            found.sort(key=lambda c: abs((parse_timestamp(c.timestamp) - centre).total_seconds()))
+        return found[:limit]

@@ -172,10 +172,10 @@ def test_2013_list_reads_gbp_from_titles_and_yearless_dates() -> None:
     )
     assert outcome is not None
     by_id = {draft.external_id: draft for draft in outcome.drafts}
-    first = by_id["iid-487590261"]
+    first = by_id["487590261"]
     assert (first.price.amount, first.price.currency) == (Decimal("35500.00"), "EGP")
     assert first.listed_at == datetime(2013, 3, 2, tzinfo=UTC)
-    gbp = by_id["iid-487301158"]
+    gbp = by_id["487301158"]
     assert (gbp.price.amount, gbp.price.currency, gbp.bedrooms) == (Decimal("126322.00"), "GBP", 3)
     assert any(link.rel is LinkRel.PAGINATION and "-p-2" in link.url for link in outcome.links)
 
@@ -210,7 +210,7 @@ def test_title_beats_coarse_category_for_property_type() -> None:
         graph_with("a1_2011_list"), fixture_document("a1_2011_list"), country_code="EG"
     )
     assert outcome is not None
-    villa = next(d for d in outcome.drafts if d.external_id == "iid-191449087")
+    villa = next(d for d in outcome.drafts if d.external_id == "191449087")
     assert villa.property_type is PropertyType.VILLA
 
 
