@@ -2,6 +2,11 @@
 
 [Guide index](README.md) · [Data sources](sources.md) · [Operations](operations.md)
 
+For measured behavior and data-quality limitations in the configured database,
+see the [2026-10-03 performance assessment](wayback-performance-assessment.md).
+It compares saved HTML with final records; successful workflow states alone do
+not establish extraction accuracy or coverage across years.
+
 The historical OLX crawler learns reusable rules for deciding **which archived
 pages to fetch** and **how to extract property adverts from them**. It starts with
 almost no rules, asks an LLM about inputs it cannot handle, validates the answers,
