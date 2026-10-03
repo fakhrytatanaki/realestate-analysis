@@ -53,13 +53,13 @@ settings file/environment overrides. It can be called from any working directory
 The database must already be running and migrated; no API or worker is required.
 
 ```bash
-# With no arguments, crawl/scrape every enabled, implemented source.
+# With no arguments, crawl/scrape enabled live and IA/Wayback sources.
 ./scripts/ingest.sh
 
 # Choose one or several sources; repeated keys run only once.
-./scripts/ingest.sh --source fixture --source dubizzle_eg --max-items 2
+./scripts/ingest.sh --source dubizzle_eg --max-items 2
 
-# Preview every enabled, implemented source without database or network access.
+# Preview enabled live and archive sources without database or network access.
 ./scripts/ingest.sh --all-enabled --dry-run
 
 # Archive adapters use the crawl workflow; budgets apply per archive source.
@@ -75,8 +75,11 @@ Prepare reviewed archive rules as described below before starting a new archive
 source; this helper does not seed them. Use `--require-complete-enumeration` to
 hold archive processing until all configured years have been enumerated.
 
-Omitting source selection defaults to `--all-enabled`, which selects only enabled
-implementations. An explicit `--source` allows a disabled implementation for a
+Omitting source selection defaults to `--all-enabled`, which selects enabled,
+implemented live and IA/Wayback sources. The helper excludes `fixture`, including
+when explicitly requested with `--source fixture`. Enable at least one live or
+archive source in `etc/settings.toml` to use the default selection.
+An explicit `--source` allows a disabled live or archive implementation for a
 manual run. `--scheduled` also requires every explicitly selected source to be
 enabled and marks live runs `SCHEDULED`.
 The script ignores source schedules because cron supplies the schedule.

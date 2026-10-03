@@ -37,7 +37,9 @@ def build_parser() -> argparse.ArgumentParser:
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--source", action="append", help="source key; repeat for a batch")
     selection.add_argument(
-        "--all-enabled", action="store_true", help="all enabled implementations (default)"
+        "--all-enabled",
+        action="store_true",
+        help="enabled live and archive sources (default; excludes fixture)",
     )
     parser.add_argument("--scheduled", action="store_true", help="require enabled sources (cron)")
     parser.add_argument(
@@ -105,15 +107,23 @@ def _print_run(run: ScrapeRun) -> bool:
 async def run(args: argparse.Namespace) -> int:
     container = Container()
     try:
-        keys = args.source if args.source is not None else container.registry.enabled_keys()
+        keys = (
+            args.source
+            if args.source is not None
+            else [key for key in container.registry.enabled_keys() if key != "fixture"]
+        )
         keys = list(dict.fromkeys(keys))
         if not keys:
             raise ConfigurationError(
-                "no enabled, implemented sources selected; "
-                "enable a source in etc/settings.toml or pass --source KEY"
+                "no enabled live or archive sources selected; "
+                "enable a live or archive source in etc/settings.toml or pass --source KEY"
             )
         # Validate the entire selection before writing anything.
         for key in keys:
+            if key == "fixture":
+                raise ConfigurationError(
+                    "fixture ingestion is excluded; select a live or archive source"
+                )
             if not container.registry.has(key):
                 raise ConfigurationError(f"unknown source: {key}")
             descriptor = container.registry.descriptor(key)

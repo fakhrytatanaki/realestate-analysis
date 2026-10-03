@@ -44,10 +44,11 @@ def container(monkeypatch: pytest.MonkeyPatch) -> MagicMock:
             "archive": SourceSettings(enabled=True),
             "disabled": SourceSettings(enabled=False),
             "stub": SourceSettings(enabled=True),
+            "fixture": SourceSettings(enabled=True),
         }
     )
     registry = DataSourceRegistry(settings, NullLogProvider())
-    for key in ("live", "archive", "disabled", "stub"):
+    for key in ("live", "archive", "disabled", "stub", "fixture"):
         source = MagicMock(spec=ArchiveDataSource if key == "archive" else DataSource)
         source.aclose = AsyncMock()
         registry.register(
@@ -172,7 +173,7 @@ async def test_empty_enabled_selection_is_configuration_error(
 ) -> None:
     container.registry = DataSourceRegistry(Settings(sources={}), NullLogProvider())
     assert await ingest.run(ingest.build_parser().parse_args(options)) == 2
-    assert "enable a source in etc/settings.toml or pass --source KEY" in capsys.readouterr().err
+    assert "enable a live or archive source in etc/settings.toml" in capsys.readouterr().err
     container.init_db.assert_not_awaited()
 
 
@@ -191,6 +192,7 @@ async def test_omitted_selection_runs_enabled_sources(
     assert "live: scrape" in output
     assert "disabled:" not in output
     assert "stub:" not in output
+    assert "fixture:" not in output
     if args.dry_run:
         container.init_db.assert_not_awaited()
         container.crawler.crawl.assert_not_awaited()
@@ -199,6 +201,39 @@ async def test_omitted_selection_runs_enabled_sources(
         container.crawler.crawl.assert_awaited_once()
         container.ingestion.ingest.assert_awaited_once()
     container.aclose.assert_awaited_once()
+
+
+@pytest.mark.parametrize("options", [[], ["--all-enabled"], ["--dry-run"]])
+async def test_only_enabled_fixture_leaves_no_runnable_sources(
+    container: MagicMock,
+    options: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    for key in ("live", "archive"):
+        container.settings.sources[key].enabled = False
+
+    assert await ingest.run(ingest.build_parser().parse_args(options)) == 2
+
+    assert "no enabled live or archive sources selected" in capsys.readouterr().err
+    container.init_db.assert_not_awaited()
+    container.ingestion.ingest.assert_not_awaited()
+    container.crawler.crawl.assert_not_awaited()
+
+
+@pytest.mark.parametrize("options", [[], ["--scheduled"], ["--dry-run"]])
+async def test_explicit_fixture_is_rejected_before_any_work(
+    container: MagicMock,
+    options: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args = ingest.build_parser().parse_args(["--source", "live", "--source", "fixture", *options])
+
+    assert await ingest.run(args) == 2
+
+    assert "fixture ingestion is excluded" in capsys.readouterr().err
+    container.init_db.assert_not_awaited()
+    container.ingestion.ingest.assert_not_awaited()
+    container.crawler.crawl.assert_not_awaited()
 
 
 def test_main_with_no_arguments_runs_enabled_batch(
