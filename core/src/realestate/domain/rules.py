@@ -266,6 +266,8 @@ class ExtractionOutcome:
     empty_fields: list[str] = field(default_factory=list)
     #: Recipe faults that did not drop items (e.g. a home-page ``url``).
     warnings: list[str] = field(default_factory=list)
+    #: Non-fatal extraction evidence, separate from normalized business values.
+    diagnostics: list[str] = field(default_factory=list)
 
     @property
     def succeeded(self) -> bool:

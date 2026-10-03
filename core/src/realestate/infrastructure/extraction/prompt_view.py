@@ -24,6 +24,11 @@ from selectolax.lexbor import LexborNode
 
 from realestate.infrastructure.extraction.document import ParsedDocument
 from realestate.infrastructure.extraction.jsondata import summarise
+from realestate.infrastructure.extraction.privacy import (
+    redact_attribute,
+    redact_text,
+    sensitive_key,
+)
 from realestate.infrastructure.extraction.text import clean_text
 
 _SKIPPED = frozenset(
@@ -90,9 +95,9 @@ _KEPT_ATTRIBUTES = (
     "lang",
     "dir",
     "name",
-    "onclick",
     "role",
     "action",
+    "aria-label",
 )
 
 
@@ -114,7 +119,7 @@ _STYLES = (
 
 def render(document: ParsedDocument, *, budget_chars: int = 24_000) -> str:
     """Structure + embedded-JSON summary, within ``budget_chars``."""
-    header = f"<title>{document.title[:200]}</title>\n"
+    header = f"<title>{redact_text(document.title)[:200]}</title>\n"
     json_summary = summarise(document.scripts)
     json_part = f"\n\nEMBEDDED JSON (scripts):\n{json_summary}" if json_summary else ""
     json_part = json_part[: budget_chars // 2]
@@ -134,10 +139,10 @@ def render(document: ParsedDocument, *, budget_chars: int = 24_000) -> str:
 def _attributes(node: LexborNode, style: _Style) -> str:
     parts: list[str] = []
     for name, value in node.attributes.items():
-        if value is None:
+        if value is None or sensitive_key(name):
             continue
         if name in _KEPT_ATTRIBUTES or name.startswith("data-"):
-            text = " ".join(value.split())
+            text = " ".join(redact_attribute(value).split())
             if len(text) > style.attribute_chars:
                 text = text[: style.attribute_chars] + "…"
             parts.append(f'{name}="{text}"')
@@ -160,8 +165,10 @@ def _signature(node: LexborNode) -> str:
 def _render_node(node: LexborNode, style: _Style, depth: int) -> str:
     tag = node.tag or ""
     if tag == "-text":
-        return clean_text(node.text(deep=False), max_length=style.text_chars)
+        return clean_text(redact_text(node.text(deep=False)), max_length=style.text_chars)
     if tag.startswith("-") or tag in _SKIPPED:
+        return ""
+    if sensitive_key(node.attributes.get("aria-label") or ""):
         return ""
     if depth > style.max_depth:
         return "…"
@@ -186,7 +193,7 @@ def _render_node(node: LexborNode, style: _Style, depth: int) -> str:
     while child is not None:
         child_tag = child.tag or ""
         if child_tag == "-text":
-            text = clean_text(child.text(deep=False), max_length=style.text_chars)
+            text = clean_text(redact_text(child.text(deep=False)), max_length=style.text_chars)
             if text:
                 flush()
                 run_signature, run_length = None, 0

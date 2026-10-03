@@ -24,7 +24,7 @@ Domain values and ports are framework-free; start here to understand contracts.
 
 | Module | Owns |
 |---|---|
-| [domain/models.py](../core/src/realestate/domain/models.py) | Frozen dataclasses: price/location, draft/listing, payload/document, blob reference, run, source descriptor, fetch context, page, upsert counts |
+| [domain/models.py](../core/src/realestate/domain/models.py) | Price/location, draft/listing, payload/document, blob reference, run, source descriptor, fetch context with mutable progress counters, page, upsert counts |
 | [domain/enums.py](../core/src/realestate/domain/enums.py) | Persisted/shared vocabulary for listing, property, price, document/run status, triggers, sorting, logging |
 | [domain/exceptions.py](../core/src/realestate/domain/exceptions.py) | Typed failures without HTTP status knowledge |
 | [domain/query.py](../core/src/realestate/domain/query.py) | `ListingQuery`, `GeoFilter`, maximum page size |
@@ -50,8 +50,9 @@ Services depend on domain ports. DTOs own transport validation and serialization
 |---|---|
 | [application/services/ingestion_service.py](../core/src/realestate/application/services/ingestion_service.py) | Run validation, archive-before-parse workflow, pending recovery, replay, error accounting |
 | [application/services/listing_query_service.py](../core/src/realestate/application/services/listing_query_service.py) | Search cap, listing/provenance lookup, missing-record errors, counts |
-| [application/services/archive_crawl_service.py](../core/src/realestate/application/services/archive_crawl_service.py) | Enumerate CDX into the frontier, route captures, capture selection, the crawl rounds loop |
+| [application/services/archive_crawl_service.py](../core/src/realestate/application/services/archive_crawl_service.py) | Enumerate CDX into the frontier, optional enumeration gate, route captures, capture selection, attempt budgets across crawl rounds |
 | [application/services/rule_induction_service.py](../core/src/realestate/application/services/rule_induction_service.py) | Gap collection (URL shapes, DOM fingerprints), LLM questions, validation against samples, compiling answers into graph versions |
+| [application/services/initial_rule_seed_service.py](../core/src/realestate/application/services/initial_rule_seed_service.py) | Explicit initial-graph installation through ports; retains each domain's active operator graph |
 | [application/services/frontier_link_sink.py](../core/src/realestate/application/services/frontier_link_sink.py) | Links from recognised pages to frontier evidence |
 | [application/rules/proposals.py](../core/src/realestate/application/rules/proposals.py) | Pydantic models validating LLM navigation rules and extraction templates |
 | [application/rules/prompts.py](../core/src/realestate/application/rules/prompts.py) | Prompt text, tool schemas and prompt versions (part of the LLM cache key) |
@@ -90,13 +91,16 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [infrastructure/sources/dubizzle_eg/source.py](../core/src/realestate/infrastructure/sources/dubizzle_eg/source.py) | Dubizzle query construction, category pagination, response normalization, endpoint healthcheck |
 | [infrastructure/sources/wayback/source.py](../core/src/realestate/infrastructure/sources/wayback/source.py) | Generic archive source: frontier-driven fetch, pinned-graph parse and link discovery |
 | [infrastructure/sources/olx_eg_wayback/source.py](../core/src/realestate/infrastructure/sources/olx_eg_wayback/source.py) | OLX Egypt 2010-2023 archive: domain and year range only |
-| [infrastructure/archive/wayback.py](../core/src/realestate/infrastructure/archive/wayback.py) | Polite Wayback client (single flight, 429 cool-down, fixed UA), `id_` replay, CDX paging by resume key |
+| [infrastructure/sources/dubizzle_eg_wayback/source.py](../core/src/realestate/infrastructure/sources/dubizzle_eg_wayback/source.py) | Separate Dubizzle Egypt 2023-2026 archive; packaged reviewed rules alongside the adapter |
+| [infrastructure/extraction/seeds.py](../core/src/realestate/infrastructure/extraction/seeds.py) | Packaged JSON loading, proposal/condition validation and compilation into version-one graphs |
+| [infrastructure/archive/wayback.py](../core/src/realestate/infrastructure/archive/wayback.py) | Polite Wayback client, validated/throttled redirects, original-byte replay with requested/served provenance and time proof, CDX paging |
 | [infrastructure/llm/ollama.py](../core/src/realestate/infrastructure/llm/ollama.py) | Ollama Cloud/self-hosted chat: tool-call structure, JSON fallback, retries, concurrency cap |
 | [infrastructure/extraction/engine.py](../core/src/realestate/infrastructure/extraction/engine.py) | `HtmlRuleEngine`: graph walks for routing/extraction, candidate evaluation, condition checks |
 | [infrastructure/extraction/conditions.py](../core/src/realestate/infrastructure/extraction/conditions.py) | Condition types (DOM, regex, JSON path, spaCy, fingerprint, evidence, capture range) |
 | [infrastructure/extraction/template.py](../core/src/realestate/infrastructure/extraction/template.py) | Template execution: items, field alternatives, vocabulary, drafts and links |
 | [infrastructure/extraction/normalisers.py](../core/src/realestate/infrastructure/extraction/normalisers.py) | Deterministic price/currency/area/rooms/date parsing, Arabic and English, capture-anchored dates |
-| [infrastructure/extraction/jsondata.py](../core/src/realestate/infrastructure/extraction/jsondata.py) | Embedded JSON discovery (`window.x =`, ld+json, data attributes), path resolution, summaries |
+| [infrastructure/extraction/jsondata.py](../core/src/realestate/infrastructure/extraction/jsondata.py) | Embedded JSON discovery and decode diagnostics, paths/array selection, advert-first summaries |
+| [infrastructure/extraction/privacy.py](../core/src/realestate/infrastructure/extraction/privacy.py) | Contact/runtime redaction for induction prompt copies; captured data remains independent |
 | [infrastructure/extraction/prompt_view.py](../core/src/realestate/infrastructure/extraction/prompt_view.py) | Compact DOM rendering for prompts: collapsed repeats, trimmed attributes, budget |
 | [infrastructure/extraction/fingerprint.py](../core/src/realestate/infrastructure/extraction/fingerprint.py) | Structural simhash of page designs and Hamming distance |
 | [infrastructure/extraction/document.py](../core/src/realestate/infrastructure/extraction/document.py) | Lazily parsed document views and safe CSS selection |
@@ -139,8 +143,11 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [archive_fakes.py](../core/tests/archive_fakes.py) | In-memory archive/rule repositories, scripted LLM, fixture index and loaders |
 | [test_archive_domain.py](../core/tests/test_archive_domain.py) | SURT keys vs live CDX, URL shapes, graph walks, versions, seed graph |
 | [test_extraction_engine.py](../core/tests/test_extraction_engine.py) | Normalisers; templates for every archived OLX generation; fall-through; conditions; fingerprints; prompt view |
+| [test_extraction_jsondata.py](../core/tests/test_extraction_jsondata.py) | Typed array selection, malformed-state diagnostics, advert-prioritized summaries and prompt redaction |
 | [test_wayback_and_llm_clients.py](../core/tests/test_wayback_and_llm_clients.py) | Wayback 429/404/replay/CDX paging, archive source pinning, Ollama tools/fallback/retries |
+| [test_wayback_replay.py](../core/tests/test_wayback_replay.py) | Redirect confinement before I/O, nearest-capture provenance/time proof, throttled hops and served-year scope |
 | [test_rule_induction_and_crawl.py](../core/tests/test_rule_induction_and_crawl.py) | Navigation and template induction, repair feedback, cache reuse, end-to-end crawl with evidence |
+| [test_archive_pilot_limits.py](../core/tests/test_archive_pilot_limits.py) | Failed-attempt budgets across rounds/batches, zero limits, enumeration completion and resume, source-scoped cursors |
 | [test_archive_repositories_integration.py](../core/tests/test_archive_repositories_integration.py) | Real DB frontier, graphs, gaps, ledger; observation-ordered upserts |
 | [fixtures/wayback_olx_eg/](../core/tests/fixtures/wayback_olx_eg/) | Gzipped real captures (2011-2023) and hand-written reference templates |
 | [Initial migration](../core/migrations/models/0_20260918095340_init.py) | Aerich initial schema and reverse migration |

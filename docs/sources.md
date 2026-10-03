@@ -14,6 +14,7 @@ parameters. `enabled=false` still permits manual runs of implemented sources.
 | `dubizzle_eg` | HTTP collector and parser for Elasticsearch `_msearch` responses | Implemented; disabled in example settings |
 | `zillow` | Registered stub; fetch/parse raise `DataSourceNotImplementedError` | Cannot run; HTTP trigger returns 501 |
 | `olx_eg_wayback` | OLX Egypt 2010-2023 from the Wayback Machine; navigation and extraction rules induced by an LLM and stored as rule graphs | `params.domain`, `from_year`, `to_year`, `user_agent`, `min_delay_seconds`, `max_fetches_per_run`; crawl with `cli crawl` |
+| `dubizzle_eg_wayback` | Separate Dubizzle Egypt archive, 2023-2026; reviewed JSON-list rules plus observed 2023 JSON detail and sales-card fallback | Disabled by default; same archive parameters; explicitly install rules with `cli rules seed --source dubizzle_eg_wayback` |
 
 The shared fixture directory currently contains both generic `results` fixtures
 and `dubizzle_eg_apartments_sale.json` in Dubizzle's format. A full `fixture` run
@@ -77,6 +78,58 @@ Two things a subclass can fix in code instead of leaving to induction:
   every induced one, optionally retiring faulty induced states; a curated template
   that works always wins.
 
+Dubizzle also ships reviewed source-specific graphs, installed explicitly with
+`rules seed` without replacing either domain's active graph.
+
+Wayback collection limits count selected capture attempts, including failures,
+rather than only yielded payloads. The source reports attempts and handled
+failures through `FetchContext.progress`; ingestion records failures as run
+errors and the crawler deducts attempts across rounds. HTTP retries and redirect
+hops are part of one selected capture attempt. For a bounded pilot, use the
+optional `crawl --require-complete-enumeration` gate; see [operations](operations.md).
+
+Replay follows redirects explicitly. Each request must stay on `web.archive.org`;
+each replay must retain `id_` mode and an original host equal to the configured
+domain or its `www` variant. OLX additionally permits the requested in-domain
+city subdomain, matching its older layouts. Other subdomains and live-site escapes are rejected
+before requesting the target. Redirect hops receive the same throttle as initial
+requests. A timezone-aware `Memento-Datetime`, normalized to UTC, determines the
+served time; otherwise a valid full timestamp in the final replay URL is required.
+Short prefixes alone cannot supply an observation time. The header takes precedence
+when it differs from the final URL, and `replay_timestamp` retains that URL's time.
+
+New raw metadata keeps `requested_timestamp`, `requested_original_url`,
+`requested_replay_url`, `served_timestamp`, `served_original_url`,
+`timestamp_source`, `capture_drift_seconds`, `served_url_key` and `redirect_chain`
+(all visited replay URLs, including the final one). Existing `timestamp`,
+`captured_at`, `original_url`, `replay_url` and `source_url` describe the served
+capture, so offline extraction uses its actual URL/time. `url_key`, `digest` and
+`cdx_digest` refer to the requested frontier/CDX row; a redirected capture's digest
+is not inferred from that row. Earlier raw documents retain their original metadata.
+Captures served outside the configured `from_year`/`to_year` range are held for
+review as failed frontier entries and do not emit raw payloads or observations.
+
+Dubizzle seed v1 supports complete Arabic/English apartment/duplex category
+JSON lists (`state.algolia.content.hits`). It validates each item's property
+taxonomy, reads `extraFields.price`, deduplicates numeric external IDs, and uses
+the original language path. Missing rental periods remain `UNKNOWN` with their
+known amount. Subtypes remain `OTHER` until code meanings are validated; raw
+subtype/payment/down-payment fields are retained as attributes. The observed
+2023 detail shape (`state.ad.data`) requires matching numeric URL/advert IDs,
+selects unique category/location levels and maps valid coordinates. Explicit
+daily-period text sets price basis independently of amount; JSON-LD cannot
+override the advert's taxonomy or price.
+
+The 2023 English sales-card fallback recovers labelled cards when list state is
+missing, malformed or not an array. Its guard excludes every decoded list array,
+so HTML cannot override JSON, including rejected taxonomy or empty arrays. A
+narrow empty-results rule requires an empty array, zero count, explicit visible
+signal and no cards. Unsupported designs and challenges remain gaps. Structured
+`archive extraction`/`archive extraction gap` logs report template, counts,
+bounded rejection reasons, malformed state, unknown basis and category/purpose
+conflicts. The fixture README and [Dubizzle plan](dubizzle-eg-wayback-plan.md)
+record the remaining evidence and mapping gates before the bounded pilot.
+
 Observations carry the capture time (`observed_at`); the listing row always reflects
 the newest capture and `listing_observation` keeps one row per capture with that
 capture's complete normalized `snapshot`, graph version and template (a re-parse
@@ -100,11 +153,21 @@ Deterministic engine rules the templates rely on:
   when it carries a currency marker (`ج.م125,000`).
 - Cities come from a curated alias table matched on whole names, never by
   splitting on hyphens; a country name is not a city.
+- Reviewed templates can opt into `strict_classification` to use only per-item mapped fields.
 - A `css` + `regex` field without `index` tries every matching node ("Bedrooms: 3"
   and "Bathrooms: 2" spans sharing one selector); a `title`/`alt` attribute that
   only adds a suffix to the visible text ("... - Cairo") yields the visible text.
 - Prices below 100 (5 per night/week/m²) are placeholders and stored as unknown; with
   no price field value, a title price is used only if it carries a currency marker.
+  `allow_title_price=false` disables that fallback; `default_rental_price_type`
+  controls whether a missing rental period defaults to monthly or stays unknown.
+- `price_period` parses explicit period text independently of amount. JSON fields
+  and filters may select a unique array member with `select: {path, field, equals}`;
+  missing or duplicate levels fail. `identity_url_pattern` requires URL/ID agreement,
+  including the original page URL for detail templates. Coordinate pairs must be
+  finite and within WGS-84 bounds.
+- Induction summaries prioritize advert arrays and singleton detail objects;
+  prompt copies redact contacts and runtime fields while retaining captured bytes.
 - Induction rejects a field that stays empty on every advert of 2+ list sample pages
   (10+ adverts) or 3+ detail pages, doubly escaped regexes, home-page `url` recipes,
   one id across different adverts, price regexes that drop the amount, and any

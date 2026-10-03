@@ -38,6 +38,9 @@ class DataSource(ABC):
         Implemented as an async generator. Must not parse or persist anything:
         failures here mean the site is unreachable, never that a selector broke.
 
+        Sources that continue after individual fetch failures record attempts
+        and failures in ``ctx.progress`` so the caller can budget and report them.
+
         Raises:
             FetchError: when collection fails irrecoverably.
         """

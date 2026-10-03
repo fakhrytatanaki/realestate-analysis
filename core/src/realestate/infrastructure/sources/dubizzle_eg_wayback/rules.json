@@ -1,0 +1,933 @@
+{
+  "source_key": "dubizzle_eg_wayback",
+  "navigation": [
+    {
+      "pattern": "^https?://(?!(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?(?:/|$))",
+      "decision": "SKIP",
+      "page_kind": "OTHER",
+      "priority": 0,
+      "group": 1,
+      "reason": "reviewed archive navigation"
+    },
+    {
+      "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?:en/)?properties(?:/|$)",
+      "decision": "FETCH",
+      "page_kind": "LIST",
+      "priority": 90,
+      "group": 2,
+      "reason": "reviewed archive navigation"
+    },
+    {
+      "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?:en/)?ad/[^/?]+-ID[0-9]+\\.html(?:\\?|$)",
+      "decision": "DEFER",
+      "page_kind": "DETAIL",
+      "priority": 60,
+      "group": 3,
+      "reason": "reviewed archive navigation"
+    },
+    {
+      "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?!properties(?:/|$)|en/properties(?:/|$))",
+      "decision": "SKIP",
+      "page_kind": "OTHER",
+      "priority": 0,
+      "group": 4,
+      "reason": "reviewed archive navigation"
+    }
+  ],
+  "extraction": [
+    {
+      "page_kind": "LIST",
+      "items": {
+        "script": "state",
+        "path": "algolia.content.hits",
+        "filters": [
+          {
+            "path": "category.lvl0.slug",
+            "pattern": "properties"
+          },
+          {
+            "path": "category.lvl1.slug",
+            "pattern": "apartments-duplex-for-(?:sale|rent)"
+          }
+        ]
+      },
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "required_fields": [
+        "external_id",
+        "url",
+        "title",
+        "listing_type"
+      ],
+      "links": [
+        {
+          "css": "a[href*=\"page=\"]",
+          "rel": "PAGINATION",
+          "regex": "/properties/"
+        }
+      ],
+      "name": "category_json_ar",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/properties/apartments-duplex-for-(?:sale|rent)/(?:[^?]*)?(?:\\?.*)?$"
+        },
+        {
+          "type": "capture_range",
+          "from": "2023",
+          "to": "2026"
+        },
+        {
+          "type": "json_path",
+          "script": "state",
+          "path": "algolia.content.hits",
+          "min": 1,
+          "value_type": "array"
+        }
+      ],
+      "fields": {
+        "title": [
+          {
+            "json": "title"
+          }
+        ],
+        "external_id": [
+          {
+            "json": "externalID",
+            "regex": "^([0-9]+)$"
+          }
+        ],
+        "price": [
+          {
+            "json": "extraFields.price"
+          }
+        ],
+        "listed_at": [
+          {
+            "json": "createdAt"
+          }
+        ],
+        "area": [
+          {
+            "json": "extraFields.ft"
+          }
+        ],
+        "bedrooms": [
+          {
+            "json": "extraFields.rooms"
+          }
+        ],
+        "bathrooms": [
+          {
+            "json": "extraFields.bathrooms"
+          }
+        ],
+        "location": [
+          {
+            "json": "location.lvl2.name"
+          }
+        ],
+        "city": [
+          {
+            "json": "location.lvl1.name"
+          }
+        ],
+        "district": [
+          {
+            "json": "location.lvl2.name"
+          }
+        ],
+        "category": [
+          {
+            "json": "category.lvl1.slug"
+          }
+        ],
+        "listing_type": [
+          {
+            "json": "category.lvl1.slug"
+          }
+        ],
+        "extra.property_type_code": [
+          {
+            "json": "extraFields.type"
+          }
+        ],
+        "extra.down_payment": [
+          {
+            "json": "extraFields.down_payment"
+          }
+        ],
+        "extra.payment_option_code": [
+          {
+            "json": "extraFields.payment_option"
+          }
+        ],
+        "extra.rental_period_code": [
+          {
+            "json": "extraFields.rental_period"
+          }
+        ],
+        "property_type": [
+          {
+            "const": "OTHER"
+          }
+        ],
+        "url": [
+          {
+            "template": "/ad/{slug}-ID{externalID}.html"
+          }
+        ],
+        "latitude": [
+          {
+            "json": "geography.lat"
+          }
+        ],
+        "longitude": [
+          {
+            "json": "geography.lng"
+          }
+        ],
+        "extra.purpose": [
+          {
+            "json": "purpose"
+          }
+        ]
+      },
+      "allow_title_price": false,
+      "identity_url_pattern": "https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?:en/)?ad/[^/?]+-ID([0-9]+)\\.html(?:\\?[^#]*)?"
+    },
+    {
+      "page_kind": "LIST",
+      "items": {
+        "script": "state",
+        "path": "algolia.content.hits",
+        "filters": [
+          {
+            "path": "category.lvl0.slug",
+            "pattern": "properties"
+          },
+          {
+            "path": "category.lvl1.slug",
+            "pattern": "apartments-duplex-for-(?:sale|rent)"
+          }
+        ]
+      },
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "required_fields": [
+        "external_id",
+        "url",
+        "title",
+        "listing_type"
+      ],
+      "links": [
+        {
+          "css": "a[href*=\"page=\"]",
+          "rel": "PAGINATION",
+          "regex": "/properties/"
+        }
+      ],
+      "name": "category_json_en",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/en/properties/apartments-duplex-for-(?:sale|rent)/(?:[^?]*)?(?:\\?.*)?$"
+        },
+        {
+          "type": "capture_range",
+          "from": "2023",
+          "to": "2026"
+        },
+        {
+          "type": "json_path",
+          "script": "state",
+          "path": "algolia.content.hits",
+          "min": 1,
+          "value_type": "array"
+        }
+      ],
+      "fields": {
+        "title": [
+          {
+            "json": "title"
+          }
+        ],
+        "external_id": [
+          {
+            "json": "externalID",
+            "regex": "^([0-9]+)$"
+          }
+        ],
+        "price": [
+          {
+            "json": "extraFields.price"
+          }
+        ],
+        "listed_at": [
+          {
+            "json": "createdAt"
+          }
+        ],
+        "area": [
+          {
+            "json": "extraFields.ft"
+          }
+        ],
+        "bedrooms": [
+          {
+            "json": "extraFields.rooms"
+          }
+        ],
+        "bathrooms": [
+          {
+            "json": "extraFields.bathrooms"
+          }
+        ],
+        "location": [
+          {
+            "json": "location.lvl2.name"
+          }
+        ],
+        "city": [
+          {
+            "json": "location.lvl1.name"
+          }
+        ],
+        "district": [
+          {
+            "json": "location.lvl2.name"
+          }
+        ],
+        "category": [
+          {
+            "json": "category.lvl1.slug"
+          }
+        ],
+        "listing_type": [
+          {
+            "json": "category.lvl1.slug"
+          }
+        ],
+        "extra.property_type_code": [
+          {
+            "json": "extraFields.type"
+          }
+        ],
+        "extra.down_payment": [
+          {
+            "json": "extraFields.down_payment"
+          }
+        ],
+        "extra.payment_option_code": [
+          {
+            "json": "extraFields.payment_option"
+          }
+        ],
+        "extra.rental_period_code": [
+          {
+            "json": "extraFields.rental_period"
+          }
+        ],
+        "property_type": [
+          {
+            "const": "OTHER"
+          }
+        ],
+        "url": [
+          {
+            "template": "/en/ad/{slug}-ID{externalID}.html"
+          }
+        ],
+        "latitude": [
+          {
+            "json": "geography.lat"
+          }
+        ],
+        "longitude": [
+          {
+            "json": "geography.lng"
+          }
+        ],
+        "extra.purpose": [
+          {
+            "json": "purpose"
+          }
+        ]
+      },
+      "allow_title_price": false,
+      "identity_url_pattern": "https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?:en/)?ad/[^/?]+-ID([0-9]+)\\.html(?:\\?[^#]*)?"
+    },
+    {
+      "page_kind": "DETAIL",
+      "items": {
+        "script": "state",
+        "path": "ad.data",
+        "filters": [
+          {
+            "select": {
+              "path": "category",
+              "field": "level",
+              "equals": 0
+            },
+            "path": "slug",
+            "pattern": "properties"
+          },
+          {
+            "select": {
+              "path": "category",
+              "field": "level",
+              "equals": 1
+            },
+            "path": "slug",
+            "pattern": "apartments-duplex-for-(?:rent|sale)"
+          }
+        ]
+      },
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "required_fields": [
+        "external_id",
+        "url",
+        "title",
+        "listing_type"
+      ],
+      "links": [],
+      "name": "detail_json_ar_2023",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/ad/[^/?]+-ID[0-9]+\\.html(?:\\?.*)?$"
+        },
+        {
+          "type": "capture_range",
+          "from": "2023",
+          "to": "2023"
+        },
+        {
+          "type": "json_path",
+          "script": "state",
+          "path": "ad.data",
+          "value_type": "object"
+        }
+      ],
+      "fields": {
+        "title": [
+          {
+            "json": "title"
+          }
+        ],
+        "external_id": [
+          {
+            "json": "externalID",
+            "regex": "^([0-9]+)$"
+          }
+        ],
+        "price": [
+          {
+            "json": "extraFields.price"
+          }
+        ],
+        "listed_at": [
+          {
+            "json": "createdAt"
+          }
+        ],
+        "area": [
+          {
+            "json": "extraFields.ft"
+          }
+        ],
+        "bedrooms": [
+          {
+            "json": "extraFields.rooms"
+          }
+        ],
+        "bathrooms": [
+          {
+            "json": "extraFields.bathrooms"
+          }
+        ],
+        "location": [
+          {
+            "select": {
+              "path": "location",
+              "field": "level",
+              "equals": 2
+            },
+            "json": "name"
+          }
+        ],
+        "city": [
+          {
+            "select": {
+              "path": "location",
+              "field": "level",
+              "equals": 1
+            },
+            "json": "name"
+          }
+        ],
+        "district": [
+          {
+            "select": {
+              "path": "location",
+              "field": "level",
+              "equals": 2
+            },
+            "json": "name"
+          }
+        ],
+        "category": [
+          {
+            "select": {
+              "path": "category",
+              "field": "level",
+              "equals": 1
+            },
+            "json": "slug"
+          }
+        ],
+        "listing_type": [
+          {
+            "select": {
+              "path": "category",
+              "field": "level",
+              "equals": 1
+            },
+            "json": "slug"
+          }
+        ],
+        "extra.property_type_code": [
+          {
+            "json": "extraFields.type"
+          }
+        ],
+        "extra.down_payment": [
+          {
+            "json": "extraFields.down_payment"
+          }
+        ],
+        "extra.payment_option_code": [
+          {
+            "json": "extraFields.payment_option"
+          }
+        ],
+        "extra.rental_period_code": [
+          {
+            "json": "extraFields.rental_period"
+          }
+        ],
+        "property_type": [
+          {
+            "const": "OTHER"
+          }
+        ],
+        "url": [
+          {
+            "document_url": true
+          }
+        ],
+        "latitude": [
+          {
+            "json": "geography.lat"
+          }
+        ],
+        "longitude": [
+          {
+            "json": "geography.lng"
+          }
+        ],
+        "price_period": [
+          {
+            "json": "title"
+          }
+        ],
+        "extra.purpose": [
+          {
+            "json": "purpose"
+          }
+        ]
+      },
+      "allow_title_price": false,
+      "identity_url_pattern": "https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?:en/)?ad/[^/?]+-ID([0-9]+)\\.html(?:\\?[^#]*)?"
+    },
+    {
+      "page_kind": "DETAIL",
+      "items": {
+        "script": "state",
+        "path": "ad.data",
+        "filters": [
+          {
+            "select": {
+              "path": "category",
+              "field": "level",
+              "equals": 0
+            },
+            "path": "slug",
+            "pattern": "properties"
+          },
+          {
+            "select": {
+              "path": "category",
+              "field": "level",
+              "equals": 1
+            },
+            "path": "slug",
+            "pattern": "apartments-duplex-for-(?:rent|sale)"
+          }
+        ]
+      },
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "required_fields": [
+        "external_id",
+        "url",
+        "title",
+        "listing_type"
+      ],
+      "links": [],
+      "name": "detail_json_en_2023",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/en/ad/[^/?]+-ID[0-9]+\\.html(?:\\?.*)?$"
+        },
+        {
+          "type": "capture_range",
+          "from": "2023",
+          "to": "2023"
+        },
+        {
+          "type": "json_path",
+          "script": "state",
+          "path": "ad.data",
+          "value_type": "object"
+        }
+      ],
+      "fields": {
+        "title": [
+          {
+            "json": "title"
+          }
+        ],
+        "external_id": [
+          {
+            "json": "externalID",
+            "regex": "^([0-9]+)$"
+          }
+        ],
+        "price": [
+          {
+            "json": "extraFields.price"
+          }
+        ],
+        "listed_at": [
+          {
+            "json": "createdAt"
+          }
+        ],
+        "area": [
+          {
+            "json": "extraFields.ft"
+          }
+        ],
+        "bedrooms": [
+          {
+            "json": "extraFields.rooms"
+          }
+        ],
+        "bathrooms": [
+          {
+            "json": "extraFields.bathrooms"
+          }
+        ],
+        "location": [
+          {
+            "select": {
+              "path": "location",
+              "field": "level",
+              "equals": 2
+            },
+            "json": "name"
+          }
+        ],
+        "city": [
+          {
+            "select": {
+              "path": "location",
+              "field": "level",
+              "equals": 1
+            },
+            "json": "name"
+          }
+        ],
+        "district": [
+          {
+            "select": {
+              "path": "location",
+              "field": "level",
+              "equals": 2
+            },
+            "json": "name"
+          }
+        ],
+        "category": [
+          {
+            "select": {
+              "path": "category",
+              "field": "level",
+              "equals": 1
+            },
+            "json": "slug"
+          }
+        ],
+        "listing_type": [
+          {
+            "select": {
+              "path": "category",
+              "field": "level",
+              "equals": 1
+            },
+            "json": "slug"
+          }
+        ],
+        "extra.property_type_code": [
+          {
+            "json": "extraFields.type"
+          }
+        ],
+        "extra.down_payment": [
+          {
+            "json": "extraFields.down_payment"
+          }
+        ],
+        "extra.payment_option_code": [
+          {
+            "json": "extraFields.payment_option"
+          }
+        ],
+        "extra.rental_period_code": [
+          {
+            "json": "extraFields.rental_period"
+          }
+        ],
+        "property_type": [
+          {
+            "const": "OTHER"
+          }
+        ],
+        "url": [
+          {
+            "document_url": true
+          }
+        ],
+        "latitude": [
+          {
+            "json": "geography.lat"
+          }
+        ],
+        "longitude": [
+          {
+            "json": "geography.lng"
+          }
+        ],
+        "price_period": [
+          {
+            "json": "title"
+          }
+        ],
+        "extra.purpose": [
+          {
+            "json": "purpose"
+          }
+        ]
+      },
+      "allow_title_price": false,
+      "identity_url_pattern": "https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?:en/)?ad/[^/?]+-ID([0-9]+)\\.html(?:\\?[^#]*)?"
+    },
+    {
+      "name": "category_html_en_sale_2023",
+      "page_kind": "LIST",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/en/properties/apartments-duplex-for-(?:sale|rent)/(?:[^?]*)?(?:\\?.*)?$"
+        },
+        {
+          "type": "url_regex",
+          "pattern": "/apartments-duplex-for-sale/"
+        },
+        {
+          "type": "capture_range",
+          "from": "2023",
+          "to": "2023"
+        },
+        {
+          "type": "not",
+          "condition": {
+            "type": "json_path",
+            "script": "state",
+            "path": "algolia.content.hits",
+            "value_type": "array",
+            "min": 0
+          }
+        },
+        {
+          "type": "dom_css",
+          "css": "li[aria-label=\"Listing\"] [aria-label=\"Price\"]"
+        }
+      ],
+      "items": {
+        "css": "li[aria-label=\"Listing\"]"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": "[aria-label=\"Title\"]"
+          }
+        ],
+        "url": [
+          {
+            "css": "a[href*=\"/ad/\"]",
+            "attr": "href",
+            "regex": "^(/en/ad/[^?]+-ID[0-9]+\\.html)$"
+          }
+        ],
+        "external_id": [
+          {
+            "css": "a[href*=\"/ad/\"]",
+            "attr": "href",
+            "regex": "-ID([0-9]+)\\.html$"
+          }
+        ],
+        "price": [
+          {
+            "css": "[aria-label=\"Price\"]"
+          }
+        ],
+        "currency": [
+          {
+            "css": "[aria-label=\"Price\"]"
+          }
+        ],
+        "area": [
+          {
+            "css": "[aria-label=\"Area\"]"
+          }
+        ],
+        "bedrooms": [
+          {
+            "css": "[aria-label=\"Bedrooms\"]"
+          }
+        ],
+        "bathrooms": [
+          {
+            "css": "[aria-label=\"Bathrooms\"]"
+          }
+        ],
+        "location": [
+          {
+            "css": "[aria-label=\"Location\"]",
+            "regex": "^(.+?)(?:\\s*•)?$"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": "[aria-label=\"Creation date\"]"
+          }
+        ],
+        "listing_type": [
+          {
+            "const": "apartments-duplex-for-sale"
+          }
+        ],
+        "property_type": [
+          {
+            "const": "OTHER"
+          }
+        ]
+      },
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "allow_title_price": false,
+      "required_fields": [
+        "title",
+        "url",
+        "external_id",
+        "listing_type"
+      ],
+      "identity_url_pattern": "https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?:en/)?ad/[^/?]+-ID([0-9]+)\\.html(?:\\?[^#]*)?",
+      "links": [
+        {
+          "css": "a[href*=\"page=\"]",
+          "rel": "PAGINATION",
+          "regex": "/properties/"
+        }
+      ]
+    },
+    {
+      "name": "category_empty_results",
+      "page_kind": "OTHER",
+      "fields": {},
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?dubizzle\\.com\\.eg(?::(?:80|443))?/(?:en/)?properties/apartments-duplex-for-(?:sale|rent)/"
+        },
+        {
+          "type": "capture_range",
+          "from": "2023",
+          "to": "2026"
+        },
+        {
+          "type": "json_path",
+          "script": "state",
+          "path": "algolia.content.hits",
+          "value_type": "array",
+          "min": 0,
+          "max": 0
+        },
+        {
+          "type": "json_path",
+          "script": "state",
+          "path": "algolia.content.nbHits",
+          "equals": 0
+        },
+        {
+          "type": "text_regex",
+          "css": "p",
+          "pattern": "^No results found$"
+        },
+        {
+          "type": "dom_css",
+          "css": "li[aria-label=\"Listing\"]",
+          "min": 0,
+          "max": 0
+        }
+      ]
+    }
+  ],
+  "vocab": {
+    "listing_type": [
+      {
+        "pattern": "^apartments-duplex-for-rent$",
+        "value": "RENT"
+      },
+      {
+        "pattern": "^apartments-duplex-for-sale$",
+        "value": "SALE"
+      }
+    ],
+    "property_type": [
+      {
+        "pattern": "^OTHER$",
+        "value": "OTHER"
+      }
+    ]
+  }
+}

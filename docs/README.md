@@ -16,6 +16,7 @@ them into PostgreSQL, and exposes a filterable FastAPI API. The backend lives in
 | [Wayback crawler state machine](wayback-crawler-state-machine.md) | Implemented OLX archive crawler: rule graphs, learning loop, state diagrams, and restart behavior |
 | [Wayback performance assessment](wayback-performance-assessment.md) | Live database and raw-HTML audit: coverage, identity collisions, extraction losses, and prioritized improvement options |
 | [Historical sources plan](historical-sources-plan.md) | Proposal: archived olx.com.eg via Wayback, LLM-compiled rule graph |
+| [Dubizzle Egypt archive plan](dubizzle-eg-wayback-plan.md) | Capture investigation and implementation plan for a separate 2023-onward Dubizzle Wayback source |
 
 For a first change, read the architecture, locate the relevant module and tests,
 then follow the development checklist. For exact request schemas, run the API and

@@ -2,8 +2,8 @@
 
 Nothing here knows about any particular site. Collection drains the crawl
 frontier (which the navigation graph has already routed); parsing walks the
-extraction graph. Both graphs start empty and are grown by rule induction, so a
-new archived portal is a subclass naming a domain and a year range.
+extraction graph. Graphs can be installed explicitly from reviewed seeds or grown
+by rule induction; an archived portal is a subclass naming a domain and year range.
 
 The pipeline invariants hold:
 
@@ -18,11 +18,19 @@ The pipeline invariants hold:
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import AsyncIterator, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
+from urllib.parse import urlsplit
 
-from realestate.domain.archive import ArchivedDocument, ArchiveScope, DiscoveredLink
+from realestate.domain.archive import (
+    ArchivedDocument,
+    ArchiveScope,
+    DiscoveredLink,
+    parse_timestamp,
+    surt_key,
+)
 from realestate.domain.enums import PageKind, RawDocumentKind, RuleDomain
 from realestate.domain.exceptions import FetchError, UnrecognisedDocumentError
 from realestate.domain.models import FetchContext, ListingDraft, ParseReport, RawPayload
@@ -48,6 +56,8 @@ class WaybackDataSource(ArchiveDataSource):
     default_from_year: ClassVar[int] = 2005
     default_to_year: ClassVar[int] = 2025
     default_max_fetches: ClassVar[int] = 200
+    #: Older portals can explicitly allow the requested in-domain city host.
+    allow_requested_subdomains: ClassVar[bool] = False
 
     def __init__(
         self,
@@ -70,7 +80,9 @@ class WaybackDataSource(ArchiveDataSource):
         )
         self._graph: RuleGraph | None = None
         #: parse() and discover_links() see the same payload back to back.
-        self._last: tuple[int, ExtractionOutcome | None] | None = None
+        # Retain the object itself: id(payload) can be reused as soon as the
+        # caller releases it, making a different page look like a cache hit.
+        self._last: tuple[RawPayload, ExtractionOutcome | None] | None = None
         self._attempts: dict[int, int] = {}
         self._stats: dict[str, Any] = {}
 
@@ -87,15 +99,15 @@ class WaybackDataSource(ArchiveDataSource):
         Failed attempts spend budget too: archive time is the scarce resource,
         whether or not a request produced a document.
         """
-        budget = (
-            ctx.max_items
-            or ctx.page_limit
-            or int(self._params.get("max_fetches_per_run", self.default_max_fetches))
-        )
+        budget = ctx.max_items if ctx.max_items is not None else ctx.page_limit
+        if budget is None:
+            budget = int(self._params.get("max_fetches_per_run", self.default_max_fetches))
         per_quarter = self._params.get("max_fetches_per_quarter")
         attempts = fetched = failures = 0
         started = datetime.now(UTC)
         self._stats = {}
+        scope = self.archive_scope()
+        domain = scope.domain.lower().removeprefix("www.")
         try:
             while attempts < budget:
                 batch = await self._frontier.claim_queued(
@@ -108,13 +120,36 @@ class WaybackDataSource(ArchiveDataSource):
                     return
                 for entry in batch:
                     attempts += 1
+                    ctx.progress.attempts += 1
                     self._attempts[entry.id] = entry.attempts
                     try:
+                        hosts = {domain, f"www.{domain}"}
+                        if self.allow_requested_subdomains:
+                            try:
+                                requested_host = urlsplit(entry.original_url).hostname or ""
+                            except ValueError as exc:
+                                raise FetchError(
+                                    f"invalid capture URL: {entry.original_url}", retryable=False
+                                ) from exc
+                            if requested_host.endswith(f".{domain}"):
+                                hosts.add(requested_host)
                         archived = await self._client.fetch_capture(
-                            entry.timestamp, entry.original_url
+                            entry.timestamp,
+                            entry.original_url,
+                            allowed_hosts=hosts,
                         )
+                        if not scope.from_year <= archived.captured_at.year <= scope.to_year:
+                            raise FetchError(
+                                "served capture outside selected years "
+                                f"{scope.from_year}-{scope.to_year}: "
+                                f"requested {entry.timestamp} {entry.original_url}; "
+                                f"served {archived.timestamp} {archived.original_url}; "
+                                f"replay {archived.replay_url} (held for review)",
+                                retryable=False,
+                            )
                     except FetchError as exc:
                         failures += 1
+                        ctx.progress.failures += 1
                         await self._fail(entry.id, str(exc), retryable=exc.retryable)
                         await self._log.warning(
                             "capture fetch failed",
@@ -123,12 +158,20 @@ class WaybackDataSource(ArchiveDataSource):
                             retryable=exc.retryable,
                         )
                         continue
+                    drift_seconds = (
+                        archived.captured_at - parse_timestamp(entry.timestamp)
+                    ).total_seconds()
                     fetched += 1
                     await self._log.info(
                         "capture fetched",
                         progress=f"{attempts}/{budget}",
                         url=entry.original_url,
                         captured=archived.timestamp,
+                        served_url=archived.original_url,
+                        requested=entry.timestamp,
+                        capture_drift_seconds=drift_seconds,
+                        timestamp_source=archived.timestamp_source,
+                        redirects=len(archived.redirect_chain) - 1,
                         bytes=len(archived.content),
                         kind=entry.page_kind.value if entry.page_kind else "?",
                         rule=entry.route_node,
@@ -138,16 +181,28 @@ class WaybackDataSource(ArchiveDataSource):
                         content=archived.content,
                         kind=RawDocumentKind.HTML,
                         content_type=archived.content_type,
-                        source_url=entry.original_url,
+                        source_url=archived.original_url,
                         meta={
                             "frontier_id": entry.id,
                             "url_key": entry.url_key,
                             "timestamp": archived.timestamp,
                             "captured_at": archived.captured_at.isoformat(),
-                            "requested_timestamp": entry.timestamp,
-                            "original_url": entry.original_url,
+                            "original_url": archived.original_url,
                             "replay_url": archived.replay_url,
+                            "requested_timestamp": archived.requested_timestamp,
+                            "requested_original_url": archived.requested_original_url,
+                            "requested_replay_url": archived.requested_replay_url,
+                            "served_timestamp": archived.timestamp,
+                            "served_original_url": archived.original_url,
+                            "served_url_key": surt_key(archived.original_url),
+                            "timestamp_source": archived.timestamp_source,
+                            "replay_timestamp": archived.replay_timestamp,
+                            "capture_drift_seconds": drift_seconds,
+                            "redirect_chain": list(archived.redirect_chain),
+                            # Both digest keys describe the requested CDX row, not a
+                            # different capture selected by a nearest-capture redirect.
                             "digest": entry.digest,
+                            "cdx_digest": entry.digest,
                             "page_kind_hint": entry.page_kind.value if entry.page_kind else None,
                             "route_node": entry.route_node,
                         },
@@ -186,10 +241,35 @@ class WaybackDataSource(ArchiveDataSource):
         graph = await self._extraction_graph()
         outcome = self._extract(payload, graph)
         if outcome is None:
-            fingerprint = self._engine.fingerprint(_document(payload))
+            document = _document(payload)
+            fingerprint = self._engine.fingerprint(document)
+            problems = self._engine.explain_miss(graph, document, country_code=self.country_code)
+            await self._log.warning(
+                "archive extraction gap",
+                url=document.url,
+                captured_at=payload.meta.get("timestamp"),
+                graph_version=graph.version,
+                fingerprint=fingerprint,
+                problems=problems,
+            )
+            detail = f"; {'; '.join(problems[:3])}" if problems else ""
             raise UnrecognisedDocumentError(
                 f"no extraction rule matched (graph v{graph.version}, fingerprint {fingerprint})"
+                f"{detail}"
             )
+        await self._log.info(
+            "archive extraction",
+            url=payload.source_url,
+            captured_at=payload.meta.get("timestamp"),
+            graph_version=graph.version,
+            template=outcome.template_key,
+            items_total=outcome.items_total,
+            items_valid=outcome.items_valid,
+            problems_count=len(outcome.problems),
+            problems=outcome.problems[:20],
+            empty_fields=outcome.empty_fields,
+            diagnostics=dict(Counter(outcome.diagnostics)),
+        )
         return outcome.drafts
 
     async def parse_report(self, payload: RawPayload) -> ParseReport:
@@ -199,9 +279,11 @@ class WaybackDataSource(ArchiveDataSource):
         routed_as_adverts = hint in (PageKind.LIST.value, PageKind.DETAIL.value)
         if outcome is None:
             return ParseReport(graph_version=graph.version, hint_mismatch=routed_as_adverts)
-        origin = graph.node(outcome.template_key).origin if graph.has_node(
-            outcome.template_key
-        ) else None
+        origin = (
+            graph.node(outcome.template_key).origin
+            if graph.has_node(outcome.template_key)
+            else None
+        )
         return ParseReport(
             graph_version=graph.version,
             template_key=outcome.template_key,
@@ -230,7 +312,7 @@ class WaybackDataSource(ArchiveDataSource):
         return self._graph
 
     def _extract(self, payload: RawPayload, graph: RuleGraph) -> ExtractionOutcome | None:
-        if self._last is not None and self._last[0] == id(payload):
+        if self._last is not None and self._last[0] is payload:
             return self._last[1]
         outcome = self._engine.extract(
             graph,
@@ -238,7 +320,7 @@ class WaybackDataSource(ArchiveDataSource):
             country_code=self.country_code,
             identity=self.identity_policy(),
         )
-        self._last = (id(payload), outcome)
+        self._last = (payload, outcome)
         return outcome
 
 

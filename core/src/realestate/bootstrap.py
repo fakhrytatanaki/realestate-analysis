@@ -26,6 +26,7 @@ from realestate.application.services.archive_crawl_service import (
 from realestate.application.services.auth_service import AuthService, AuthSettings
 from realestate.application.services.frontier_link_sink import FrontierLinkSink
 from realestate.application.services.ingestion_service import IngestionService
+from realestate.application.services.initial_rule_seed_service import InitialRuleSeedService
 from realestate.application.services.listing_query_service import ListingQueryService
 from realestate.application.services.market_service import MarketTrendService
 from realestate.application.services.rule_induction_service import (
@@ -84,6 +85,7 @@ from realestate.infrastructure.db.repositories.user import (
     TortoiseUserRepository,
 )
 from realestate.infrastructure.extraction.engine import HtmlRuleEngine
+from realestate.infrastructure.extraction.seeds import PackagedRuleSeedProvider
 from realestate.infrastructure.gold.file_gold_set import FileGoldSet
 from realestate.infrastructure.llm.ollama import OllamaLlm, OllamaSettings
 from realestate.infrastructure.logging.factory import LogProviderFactory
@@ -215,6 +217,10 @@ class Container:
         return WaybackCdxIndex(self.wayback)
 
     # -- application ------------------------------------------------------
+
+    @cached_property
+    def rule_seeds(self) -> InitialRuleSeedService:
+        return InitialRuleSeedService(graphs=self.rule_graphs, seeds=PackagedRuleSeedProvider())
 
     @cached_property
     def ingestion(self) -> IngestionService:

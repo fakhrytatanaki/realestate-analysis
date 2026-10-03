@@ -64,6 +64,9 @@ class OlxEgWaybackDataSource(WaybackDataSource):
     default_domain: ClassVar[str] = "olx.com.eg"
     default_from_year: ClassVar[int] = 2010
     default_to_year: ClassVar[int] = 2023
+    # City hosts are a confirmed part of the older OLX layouts. Permit only
+    # this capture's requested subdomain plus apex/www, not arbitrary redirects.
+    allow_requested_subdomains: ClassVar[bool] = True
 
     def identity_policy(self) -> IdentityPolicy:
         return OLX_EG_IDENTITY

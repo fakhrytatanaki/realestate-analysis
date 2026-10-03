@@ -15,6 +15,7 @@ Archive sources (rule graphs + LLM induction):
     python -m realestate.cli archive route --source olx_eg_wayback
     python -m realestate.cli archive status --source olx_eg_wayback
     python -m realestate.cli rules induce --source olx_eg_wayback --domain navigation --max-calls 3
+    python -m realestate.cli rules seed --source dubizzle_eg_wayback
     python -m realestate.cli rules show --source olx_eg_wayback --domain extraction
     python -m realestate.cli rules gaps --source olx_eg_wayback
     python -m realestate.cli parse --source olx_eg_wayback --unrecognised
@@ -54,7 +55,9 @@ from realestate.bootstrap import Container
 from realestate.config.paths import VAR_DIR, resolve
 from realestate.config.settings import Settings, load_settings
 from realestate.domain.enums import GapStatus, ListingType, RuleDomain, RunTrigger
+from realestate.domain.exceptions import ConfigurationError
 from realestate.domain.models import FetchContext
+from realestate.domain.ports.data_source import ArchiveDataSource
 from realestate.domain.query import ListingQuery
 
 
@@ -121,7 +124,17 @@ def build_parser() -> argparse.ArgumentParser:
     crawl.add_argument(
         "--rounds", type=int, default=3, help="rounds to run; 0 = until a budget or idle"
     )
-    crawl.add_argument("--max-fetches", type=int, default=60, help="captures fetched, all rounds")
+    crawl.add_argument(
+        "--max-fetches",
+        type=int,
+        default=60,
+        help="capture attempts including failures, all rounds",
+    )
+    crawl.add_argument(
+        "--require-complete-enumeration",
+        action="store_true",
+        help="hold the crawl until all configured source years have finished CDX enumeration",
+    )
     crawl.add_argument(
         "--fetches-per-round",
         type=int,
@@ -350,6 +363,7 @@ async def run(args: argparse.Namespace) -> int:
                     fetches_per_round=args.fetches_per_round,
                     max_enumeration_pages=args.max_enumeration_pages,
                     max_link_lookups=args.max_link_lookups,
+                    require_complete_enumeration=args.require_complete_enumeration,
                 )
                 if report.enumeration:
                     print(
@@ -365,6 +379,7 @@ async def run(args: argparse.Namespace) -> int:
                         f"deferred {round_.routed.deferred}, unrouted {round_.routed.unrouted}); "
                         f"nav rules +{round_.navigation.accepted}; "
                         f"fetched {run.documents_fetched if run else 0}, "
+                        f"attempted {round_.fetch_attempts}, failed {round_.fetch_failures}; "
                         f"created {created}; "
                         f"templates +{round_.extraction.accepted}; "
                         f"linked pages found {round_.links.found}/{round_.links.looked_up}; "
@@ -374,6 +389,9 @@ async def run(args: argparse.Namespace) -> int:
                         print(f"  note: {note}")
                 print(f"stopped: {report.stopped}")
                 await _print_status(container, args.source)
+                if report.incomplete_years:
+                    print(f"incomplete enumeration years: {report.incomplete_years}")
+                    return 2
 
             case "archive":
                 match args.archive_command:
@@ -495,6 +513,29 @@ async def run(args: argparse.Namespace) -> int:
                     case "show":
                         await _print_graph(container, args)
                     case "seed":
+                        source = container.registry.create(args.source)
+                        try:
+                            initial = (
+                                isinstance(source, ArchiveDataSource)
+                                and source.extraction_seed() is None
+                            )
+                        finally:
+                            await source.aclose()
+                        if initial:
+                            if args.retire or args.out:
+                                raise ConfigurationError(
+                                    "initial graph seeding retains active graphs; "
+                                    "--retire and --out require curated extraction templates"
+                                )
+                            seeded = await container.rule_seeds.seed(
+                                args.source, dry_run=args.dry_run
+                            )
+                            seed_label = "would install" if args.dry_run else "installed"
+                            print(
+                                f"{seed_label}: {', '.join(seeded.installed) or 'none'}; "
+                                f"retained active graphs: {', '.join(seeded.retained) or 'none'}"
+                            )
+                            return 0
                         plan = await container.seeder.plan(args.source, retire=args.retire)
                         print(
                             f"extraction graph v{plan.current.version} -> "
@@ -604,6 +645,8 @@ def _domain(name: str | None) -> RuleDomain | None:
 
 
 async def _print_status(container: Container, source_key: str) -> None:
+    missing = await container.crawler.incomplete_years(source_key)
+    print(f"enumeration: incomplete years {missing}" if missing else "enumeration: complete")
     counts = await container.frontier.counts(source_key)
     print(
         "frontier: " + ", ".join(f"{status.value.lower()} {n}" for status, n in counts.items() if n)

@@ -66,8 +66,17 @@ class ParsedDocument:
         return LexborHTMLParser(self.html)
 
     @cached_property
+    def _script_data(self) -> tuple[dict[str, Any], list[str]]:
+        problems: list[str] = []
+        return script_json(self.tree, problems=problems), problems
+
+    @property
     def scripts(self) -> dict[str, Any]:
-        return script_json(self.tree)
+        return self._script_data[0]
+
+    @property
+    def script_problems(self) -> list[str]:
+        return self._script_data[1]
 
     @cached_property
     def title(self) -> str:

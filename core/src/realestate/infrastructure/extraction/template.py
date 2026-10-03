@@ -27,6 +27,20 @@ field spec may use ``css`` (relative to the item, or the page with
 an attribute), ``json`` (inside a JSON item), ``script`` + ``json`` (page-level
 embedded JSON), ``template`` (``"/ad/{slug}-ID{externalID}.html"`` filled from a
 JSON item), ``regex`` (group 1 if present) and ``const``.
+
+JSON items may declare ``filters: [{"path": ..., "pattern": ...}]``; every
+pattern must full-match its resolved value. ``required_fields`` rejects items
+missing mapped values before identity fallback. ``strict_classification`` uses
+only the mapped classification fields. ``default_rental_price_type="UNKNOWN"``
+and ``allow_title_price=false`` opt into conservative archive price handling;
+omitting these options preserves existing template behavior.
+
+Fields/filters may use ``select: {"path": "location", "field": "level", "equals": 1}``
+to select exactly one array member before resolving their JSON path. ``document_url``
+reads the original page URL. ``identity_url_pattern`` full-matches advert URLs
+and requires its sole capture group to agree with ``external_id`` (also with the
+page URL for DETAIL). ``latitude``/``longitude`` map a validated WGS-84 pair;
+``price_period`` reads explicit period text without interpreting its numbers.
 """
 
 from __future__ import annotations
@@ -35,7 +49,7 @@ import hashlib
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from functools import partial
 from typing import Any
 
@@ -43,17 +57,23 @@ from selectolax.lexbor import LexborNode
 
 from realestate.domain.archive import DiscoveredLink, IdentityPolicy, is_site_root, surt_key
 from realestate.domain.enums import LinkRel, ListingType, PageKind, PriceType, PropertyType
-from realestate.domain.models import ListingDraft, Location, Price
+from realestate.domain.models import GeoPoint, ListingDraft, Location, Price
 from realestate.infrastructure.extraction.conditions import compiled
 from realestate.infrastructure.extraction.document import ParsedDocument, select
 from realestate.infrastructure.extraction.geo import foreign_signal, is_country_name, resolve_city
-from realestate.infrastructure.extraction.jsondata import decode_attribute, first_scalar, resolve
+from realestate.infrastructure.extraction.jsondata import (
+    decode_attribute,
+    first_scalar,
+    resolve,
+    select_values,
+)
 from realestate.infrastructure.extraction.normalisers import (
     detect_currency,
     parse_area,
     parse_date,
     parse_int,
     parse_price,
+    parse_rental_period,
 )
 from realestate.infrastructure.extraction.text import absolute_url, clean_text
 
@@ -77,6 +97,9 @@ KNOWN_FIELDS = frozenset(
         "area",
         "description",
         "image",
+        "latitude",
+        "longitude",
+        "price_period",
     }
 )
 _PLACEHOLDER = re.compile(r"\{([^{}]+)\}")
@@ -112,6 +135,7 @@ class TemplateResult:
     #: Recipe faults that did not cost the item (a ``url`` recipe pointing at
     #: the home page, rescued by the page URL); induction rejects on them.
     warnings: list[str] = field(default_factory=list)
+    diagnostics: list[str] = field(default_factory=list)
 
 
 def run_template(
@@ -144,16 +168,51 @@ def run_template(
     fields = _normalise_fields(spec.get("fields") or {})
     merged_vocab = _merge_vocab(vocab, spec.get("vocab") or {})
     items = _items(spec.get("items"), document, page_kind)
+    result.diagnostics.append(
+        "embedded_json" if (spec.get("items") or {}).get("script") else "html"
+    )
     result.items_total = len(items)
     seen_ids: set[str] = set()
     filled: set[str] = set()
 
     for index, item in enumerate(items):
+        filters = (spec.get("items") or {}).get("filters", [])
+        if not all(
+            compiled(str(rule["pattern"])).fullmatch(
+                first_scalar(
+                    [
+                        value
+                        for selected in select_values(item.data, rule.get("select"))
+                        for value in resolve(selected, rule["path"])
+                    ]
+                )
+                or ""
+            )
+            for rule in filters
+        ):
+            result.problems.append(f"item {index}: item filter rejected")
+            continue
         values = {
             name: _field_value(alternatives, item, document)
             for name, alternatives in fields.items()
         }
         filled.update(name for name, value in values.items() if value)
+        missing = [name for name in spec.get("required_fields", []) if not values.get(name)]
+        if missing:
+            result.problems.append(f"item {index}: missing required fields {missing}")
+            continue
+        identity_pattern = spec.get("identity_url_pattern")
+        if identity_pattern:
+            urls = [absolute_url(values.get("url"), document.url) or ""]
+            if page_kind is PageKind.DETAIL:
+                urls.append(document.url)
+            if not all(
+                (match := compiled(str(identity_pattern)).fullmatch(url)) is not None
+                and match.group(1) == values.get("external_id")
+                for url in urls
+            ):
+                result.problems.append(f"item {index}: URL identity mismatch")
+                continue
         draft, problem, miss = _build_draft(
             values,
             full_price=partial(_price_fulltext, fields.get("price") or (), item, document),
@@ -163,6 +222,9 @@ def run_template(
             document=document,
             vocab=merged_vocab,
             default_currency=spec.get("default_currency"),
+            strict_classification=bool(spec.get("strict_classification", False)),
+            allow_title_price=bool(spec.get("allow_title_price", True)),
+            default_rental_price_type=PriceType(spec.get("default_rental_price_type", "PER_MONTH")),
             template_key=template_key,
             graph_version=graph_version,
             country_code=country_code,
@@ -173,9 +235,19 @@ def run_template(
             result.problems.append(f"item {index}: {problem}")
             continue
         if draft.external_id in seen_ids:
+            result.diagnostics.append("duplicate_identity")
             continue
         seen_ids.add(draft.external_id)
         result.drafts.append(draft)
+        if draft.listing_type is ListingType.RENT and draft.price.price_type is PriceType.UNKNOWN:
+            result.diagnostics.append("unknown_rental_basis")
+        purpose = values.get("extra.purpose")
+        if (purpose == "for-sale" and draft.listing_type is ListingType.RENT) or (
+            purpose == "for-rent" and draft.listing_type is ListingType.SALE
+        ):
+            result.diagnostics.append("category_purpose_conflict")
+        if (values.get("latitude") or values.get("longitude")) and draft.location.point is None:
+            result.diagnostics.append("invalid_coordinates")
         if draft.url and page_kind is PageKind.LIST:
             result.links.append(DiscoveredLink(url=draft.url, rel=LinkRel.DETAIL))
 
@@ -256,6 +328,8 @@ def _one_value(
         spec = {key: value for key, value in spec.items() if key != "regex"}
     if spec.get("const") is not None:
         return str(spec["const"])
+    if spec.get("document_url"):
+        return _apply_regex(spec, document.url)
     scope_page = spec.get("scope") == "page"
     raw: str | None
 
@@ -264,9 +338,9 @@ def _one_value(
         raw = _fill(str(spec["template"]), source) if source is not None else None
     elif spec.get("script"):
         data = document.scripts.get(str(spec["script"]))
-        raw = first_scalar(resolve(data, spec.get("json"))) if data is not None else None
+        raw = _json_value(data, spec) if data is not None else None
     elif item.data is not None and not scope_page and not spec.get("css"):
-        raw = first_scalar(resolve(item.data, spec.get("json")))
+        raw = _json_value(item.data, spec)
     else:
         scope: Any = document.tree if (scope_page or item.element is None) else item.element
         if spec.get("css"):
@@ -287,6 +361,16 @@ def _one_value(
         return None
 
     return _apply_regex(spec, raw)
+
+
+def _json_value(data: Any, spec: Mapping[str, Any]) -> str | None:
+    return first_scalar(
+        [
+            value
+            for selected in select_values(data, spec.get("select"))
+            for value in resolve(selected, spec.get("json"))
+        ]
+    )
 
 
 def _node_value(spec: Mapping[str, Any], node: LexborNode) -> str | None:
@@ -434,9 +518,7 @@ def _identify(
         url = None
     page_url = absolute_url(document.url, document.url) if item.whole_page else None
     template_id = clean_text(values.get("external_id"))[:_MAX_EXTERNAL_ID] or None
-    if url is not None and (
-        is_site_root(url) or (identity is not None and identity.rejects(url))
-    ):
+    if url is not None and (is_site_root(url) or (identity is not None and identity.rejects(url))):
         warnings.append("url field is not an advert url (site home or a category page)")
 
     if identity is None:
@@ -480,6 +562,9 @@ def _build_draft(
     document: ParsedDocument,
     vocab: Mapping[str, Sequence[Mapping[str, Any]]],
     default_currency: Any,
+    strict_classification: bool,
+    allow_title_price: bool,
+    default_rental_price_type: PriceType,
     template_key: str,
     graph_version: int,
     country_code: str | None,
@@ -517,6 +602,10 @@ def _build_draft(
         document.url,
         document.title,
     ]
+    if strict_classification:
+        # A reviewed per-item field must not fall through to a misleading
+        # title, generic purpose, or the surrounding page's category.
+        context = [values.get("listing_type")]
     # Unambiguous first: "Shops for Rent - Sale" names both, so the next text
     # (the title) decides rather than whichever vocabulary entry is listed
     # first -- which remains the fallback when no text is decisive.
@@ -537,7 +626,9 @@ def _build_draft(
     # property_type field) says nothing and is skipped.
     property_value = _vocab_lookup(
         vocab.get("property_type", []),
-        [values.get("property_type"), title, category, document.url],
+        [values.get("property_type")]
+        if strict_classification
+        else [values.get("property_type"), title, category, document.url],
         unambiguous=True,
     )
     try:
@@ -547,25 +638,41 @@ def _build_draft(
 
     currency_default = str(default_currency).upper() if default_currency else None
     raw_price = values.get("price")
-    parsed = parse_price(raw_price, listing_type=listing_type, default_currency=currency_default)
+    parsed = parse_price(
+        raw_price,
+        listing_type=listing_type,
+        default_currency=currency_default,
+        default_rental_price_type=default_rental_price_type,
+    )
     price_source = "field" if parsed.amount is not None else None
     if parsed.amount is None and parsed.price_type is not PriceType.ON_REQUEST:
         whole = full_price()
         if whole and whole != raw_price:
             from_text = parse_price(
-                whole, listing_type=listing_type, default_currency=currency_default
+                whole,
+                listing_type=listing_type,
+                default_currency=currency_default,
+                default_rental_price_type=default_rental_price_type,
             )
             if from_text.amount is not None or from_text.price_type is PriceType.ON_REQUEST:
                 parsed, raw_price = from_text, whole
                 price_source = "field_fulltext" if from_text.amount is not None else None
     price_from_title = False
-    if parsed.amount is None and parsed.price_type is not PriceType.ON_REQUEST:
+    if (
+        allow_title_price
+        and parsed.amount is None
+        and parsed.price_type is not PriceType.ON_REQUEST
+    ):
         # Some adverts state the price only in the title ("2b, Red Sea -
         # 39600 GBP"); trusted only with an explicit currency marker, so
         # "3 bedrooms" never becomes a price.
         title_currency, _ = detect_currency(title)
         if title_currency:
-            from_title = parse_price(title, listing_type=listing_type)
+            from_title = parse_price(
+                title,
+                listing_type=listing_type,
+                default_rental_price_type=default_rental_price_type,
+            )
             if from_title.amount is not None:
                 parsed, price_from_title, price_source = from_title, True, "title"
     currency = parsed.currency
@@ -605,7 +712,9 @@ def _build_draft(
         "page_url": document.url,
     }
     attributes["_raw"] = {
-        key: values[key] for key in ("listed_at", "category", "location", "area") if values.get(key)
+        key: values[key]
+        for key in ("listed_at", "category", "location", "city", "district", "area")
+        if values.get(key)
     }
     if raw_price:
         attributes["_raw"]["price"] = raw_price
@@ -613,17 +722,27 @@ def _build_draft(
         attributes["_raw"]["price_source"] = price_source
 
     area: Decimal | None = parse_area(values.get("area"))
+    price_type = parsed.price_type
+    if (
+        listing_type is ListingType.RENT
+        and values.get("price_period")
+        and parsed.price_type not in {PriceType.ON_REQUEST, PriceType.INSTALLMENT}
+        and parse_rental_period(values.get("price")) is None
+    ):
+        price_type = parse_rental_period(values["price_period"]) or price_type
     draft = ListingDraft(
         external_id=external_id,
         title=title,
         listing_type=listing_type,
         property_type=property_type,
         location=Location(
-            name=location_name, country_code=country_code, city=city, district=district
+            name=location_name,
+            country_code=country_code,
+            city=city,
+            district=district,
+            point=_point(values.get("latitude"), values.get("longitude")),
         ),
-        price=Price(
-            amount=parsed.amount, currency=(currency or "XXX")[:3], price_type=parsed.price_type
-        ),
+        price=Price(amount=parsed.amount, currency=(currency or "XXX")[:3], price_type=price_type),
         url=url,
         description=clean_text(values.get("description"), max_length=8000) or None,
         area_sqm=area,
@@ -636,3 +755,15 @@ def _build_draft(
         observed_at=document.captured_at,
     )
     return draft, None, None
+
+
+def _point(latitude: str | None, longitude: str | None) -> GeoPoint | None:
+    if latitude is None or longitude is None:
+        return None
+    try:
+        lat, lon = Decimal(latitude), Decimal(longitude)
+        if lat.is_finite() and lon.is_finite() and -90 <= lat <= 90 and -180 <= lon <= 180:
+            return GeoPoint(latitude=lat, longitude=lon)
+    except InvalidOperation:
+        pass
+    return None

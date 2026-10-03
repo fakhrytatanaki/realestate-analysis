@@ -77,12 +77,27 @@ class BlobRef:
     content_type: str
 
 
+@dataclass(slots=True)
+class FetchProgress:
+    """Collection counters shared with the caller for one fetch pass.
+
+    Sources that handle individual collection failures increment ``failures``
+    as well as ``attempts``. One archive attempt selects one frontier capture;
+    HTTP redirects and bounded retries belong to that attempt.
+    """
+
+    attempts: int = 0
+    failures: int = 0
+
+
 @dataclass(frozen=True, slots=True)
 class FetchContext:
     """Knobs handed to a data source for one collection pass.
 
     ``params`` carries source-specific settings straight from
     ``etc/settings.toml`` so the generic pipeline never needs to know about them.
+    ``progress`` is mutable collection accounting even though the context's
+    options are frozen; sources report handled failures there.
     """
 
     max_items: int | None = None
@@ -90,6 +105,7 @@ class FetchContext:
     since: datetime | None = None
     cursor: str | None = None
     params: dict[str, Any] = field(default_factory=dict)
+    progress: FetchProgress = field(default_factory=FetchProgress)
 
 
 @dataclass(frozen=True, slots=True)

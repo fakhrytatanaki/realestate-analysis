@@ -12,10 +12,12 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock
 from uuid import UUID
 
 import pytest
 
+from realestate import cli
 from realestate.application.services.archive_audit_service import (
     ArchiveAuditService,
     completeness,
@@ -25,6 +27,8 @@ from realestate.application.services.archive_audit_service import (
 from realestate.application.services.archive_crawl_service import cursor_key, select_captures
 from realestate.application.services.rule_induction_service import _Sample, _SourceContext
 from realestate.application.services.rule_seed_service import RuleSeedService
+from realestate.bootstrap import Container
+from realestate.config.settings import Settings
 from realestate.domain.archive import ArchivedDocument, Capture, FrontierEntry, surt_key
 from realestate.domain.enums import (
     CrawlStatus,
@@ -99,6 +103,29 @@ def audit_service(harness: Harness, *, gold: Any = None) -> ArchiveAuditService:
 
 def seeder(harness: Harness) -> RuleSeedService:
     return RuleSeedService(registry=harness.registry, graphs=harness.graphs, log=NullLogProvider())
+
+
+async def test_curated_seed_cli_keeps_its_audited_dry_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    harness = Harness(tmp_path, ScriptedLlm(), [])
+    container = Container(Settings())
+    container.__dict__.update(
+        registry=harness.registry,
+        log=NullLogProvider(),
+        seeder=seeder(harness),
+        audit=audit_service(harness),
+    )
+    monkeypatch.setattr(cli, "Container", lambda _: container)
+    monkeypatch.setattr(container, "init_db", AsyncMock())
+    monkeypatch.setattr(container, "aclose", AsyncMock())
+    args = cli.build_parser().parse_args(["rules", "seed", "--source", SOURCE, "--dry-run"])
+    assert await cli.run(args) == 0
+    output = capsys.readouterr().out
+    assert "extraction graph v0 -> v1" in output and "seed-candidate" in output
+    assert harness.graphs.saved == []
+    assert "rule_seeds" not in container.__dict__
+    assert harness.served == [] and harness.llm.calls == []
 
 
 # -- curated seeds -------------------------------------------------------------------

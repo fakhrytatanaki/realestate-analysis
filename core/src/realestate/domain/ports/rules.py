@@ -40,6 +40,14 @@ class RuleGraphRepository(ABC):
         """Every version, newest first."""
 
 
+class RuleSeedProvider(ABC):
+    """Load and validate reviewed initial graphs without performing persistence."""
+
+    @abstractmethod
+    def load(self, source_key: str) -> Sequence[RuleGraph]:
+        """Both decision domains, or raise ValueError for unsupported/invalid seeds."""
+
+
 class RuleGapRepository(ABC):
     """Clusters of unhandled inputs awaiting induction."""
 
@@ -145,6 +153,12 @@ class RuleEngine(ABC):
 
         ``identity``, when given, derives external ids from advert URLs.
         """
+
+    def explain_miss(
+        self, graph: RuleGraph, document: ArchivedDocument, *, country_code: str | None
+    ) -> list[str]:
+        """Bounded non-contact diagnostics for a miss; engines may provide none."""
+        return []
 
     @abstractmethod
     def evaluate_candidate(

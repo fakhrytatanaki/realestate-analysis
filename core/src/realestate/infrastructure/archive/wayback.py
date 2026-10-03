@@ -11,12 +11,14 @@ non-profit archive would be both rude and pointless.
 from __future__ import annotations
 
 import asyncio
+import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Collection
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -58,6 +60,12 @@ class ArchivedResponse:
     timestamp: str
     original_url: str
     replay_url: str
+    requested_timestamp: str
+    requested_original_url: str
+    requested_replay_url: str
+    redirect_chain: tuple[str, ...]
+    timestamp_source: str
+    replay_timestamp: str | None
 
 
 class WaybackClient:
@@ -89,13 +97,19 @@ class WaybackClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
                 timeout=self._settings.timeout_seconds,
-                follow_redirects=True,
+                follow_redirects=False,
                 headers={"User-Agent": self._settings.user_agent, "Accept-Encoding": "gzip"},
                 transport=self._transport,
             )
         return self._client
 
-    async def get(self, url: str, *, params: dict[str, Any] | None = None) -> httpx.Response:
+    async def get(
+        self,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        validate_redirect: Callable[[httpx.URL], None] | None = None,
+    ) -> httpx.Response:
         """One polite GET. 404 raises immediately; 429/5xx/network errors retry.
 
         Raises:
@@ -103,26 +117,12 @@ class WaybackClient:
         """
         last_error = "no attempt made"
         for attempt in range(1, self._settings.max_retries + 1):
-            async with self._lock:  # single flight within this client
-                if self._gate is not None:
-                    # The delay is shared with every other client and process.
-                    wait = await self._gate.reserve(
-                        ARCHIVE_GATE, interval=self._settings.min_delay_seconds
-                    )
-                else:
-                    wait = self._settings.min_delay_seconds - (
-                        time.monotonic() - self._last_request_at
-                    )
-                if wait > 0:
-                    await asyncio.sleep(wait)
-                started = time.monotonic()
-                try:
-                    response = await self.client.get(url, params=params)
-                except httpx.HTTPError as exc:
-                    response = None
-                    last_error = f"{type(exc).__name__}: {exc}"
-                finally:
-                    self._last_request_at = time.monotonic()
+            started = time.monotonic()
+            try:
+                response = await self._get_redirects(url, params, validate_redirect)
+            except httpx.HTTPError as exc:
+                response = None
+                last_error = f"{type(exc).__name__}: {exc}"
             await self._log.debug(
                 "archive request",
                 url=str(response.url) if response is not None else url,
@@ -161,22 +161,88 @@ class WaybackClient:
                 await asyncio.sleep(backoff)
         raise FetchError(f"{url} failed after {self._settings.max_retries} attempts: {last_error}")
 
-    async def fetch_capture(self, timestamp: str, original_url: str) -> ArchivedResponse:
+    async def _get_redirects(
+        self,
+        url: str,
+        params: dict[str, Any] | None,
+        validate_redirect: Callable[[httpx.URL], None] | None,
+    ) -> httpx.Response:
+        request = self.client.build_request("GET", url, params=params)
+        history: list[httpx.Response] = []
+        while True:
+            _validate_archive_url(request.url)
+            if validate_redirect is not None:
+                validate_redirect(request.url)
+            async with self._lock:  # every hop participates in single-flight throttling
+                if self._gate is not None:
+                    wait = await self._gate.reserve(
+                        ARCHIVE_GATE, interval=self._settings.min_delay_seconds
+                    )
+                else:
+                    wait = self._settings.min_delay_seconds - (
+                        time.monotonic() - self._last_request_at
+                    )
+                if wait > 0:
+                    await asyncio.sleep(wait)
+                try:
+                    response = await self.client.send(request, follow_redirects=False)
+                finally:
+                    self._last_request_at = time.monotonic()
+            response.history = list(history)
+            if response.next_request is None:
+                return response
+            if len(history) >= self.client.max_redirects:
+                raise FetchError(f"too many archive redirects for {url}", retryable=False)
+            history.append(response)
+            request = response.next_request
+
+    async def fetch_capture(
+        self,
+        timestamp: str,
+        original_url: str,
+        *,
+        allowed_hosts: Collection[str] | None = None,
+    ) -> ArchivedResponse:
         """The original bytes of one capture (``id_`` replay: no toolbar, no rewriting).
 
-        The archive may redirect to the nearest capture; the timestamp actually
-        served is read back from ``Memento-Datetime`` or the final URL.
+        Every redirect is checked before I/O. The aware ``Memento-Datetime``
+        takes precedence over a complete final replay timestamp; a short prefix
+        alone is not proof. Preserve both URLs/times and the proof source.
         """
+        try:
+            host = urlsplit(original_url).hostname or ""
+        except ValueError as exc:
+            raise FetchError(
+                f"invalid original capture URL: {original_url}", retryable=False
+            ) from exc
+        domain = host.removeprefix("www.")
+        hosts = set(allowed_hosts) if allowed_hosts is not None else {domain, f"www.{domain}"}
+
+        def validate(url: httpx.URL) -> None:
+            _replay_location(url, hosts)
+
         replay_url = f"{REPLAY_PREFIX}/{timestamp}id_/{original_url}"
-        response = await self.get(replay_url)
-        served = _served_timestamp(response) or timestamp
+        response = await self.get(replay_url, validate_redirect=validate)
+        replay_timestamp, served_url = _replay_location(response.url, hosts)
+        proof = _served_timestamp(response)
+        if proof is None:
+            raise FetchError(
+                f"no trustworthy served capture timestamp for {response.url}", retryable=False
+            )
+        served, timestamp_source = proof
         return ArchivedResponse(
             content=response.content,
             content_type=response.headers.get("content-type", "text/html"),
             captured_at=parse_timestamp(served),
             timestamp=served,
-            original_url=original_url,
+            original_url=served_url,
             replay_url=str(response.url),
+            requested_timestamp=timestamp,
+            requested_original_url=original_url,
+            requested_replay_url=replay_url,
+            redirect_chain=tuple(str(item.url) for item in [*response.history, response]),
+            timestamp_source=timestamp_source,
+            replay_timestamp=replay_timestamp if len(replay_timestamp) == 14 else None,
         )
 
     async def aclose(self) -> None:
@@ -199,19 +265,59 @@ def _retry_after(response: httpx.Response) -> float | None:
         return max((moment - datetime.now(moment.tzinfo)).total_seconds(), 1.0)
 
 
-def _served_timestamp(response: httpx.Response) -> str | None:
+def _validate_archive_url(url: httpx.URL) -> None:
+    if (
+        url.scheme not in {"http", "https"}
+        or url.host != "web.archive.org"
+        or url.port not in {None, 80, 443}
+        or url.userinfo
+    ):
+        raise FetchError(f"redirect/request escaped Wayback: {url}", retryable=False)
+
+
+_REPLAY_PATH = re.compile(r"^/web/([0-9]{1,14})id_/(https?://.+)$")
+
+
+def _replay_location(url: httpx.URL, allowed_hosts: Collection[str]) -> tuple[str, str]:
+    """Validate the embedded original before requesting any replay redirect."""
+    parts = urlsplit(str(url))
+    match = _REPLAY_PATH.fullmatch(parts.path + (f"?{parts.query}" if parts.query else ""))
+    if match is None:
+        raise FetchError(f"not an original-byte Wayback replay URL: {url}", retryable=False)
+    timestamp, original = match.groups()
+    try:
+        parse_timestamp(timestamp)
+        location = urlsplit(original)
+        valid = (
+            location.hostname in allowed_hosts
+            and location.port in {None, 80, 443}
+            and location.username is None
+            and location.password is None
+        )
+    except ValueError as exc:
+        raise FetchError(f"invalid replay provenance: {url}", retryable=False) from exc
+    if not valid:
+        raise FetchError(f"unexpected original host in Wayback replay: {original}", retryable=False)
+    return timestamp, original
+
+
+def _served_timestamp(response: httpx.Response) -> tuple[str, str] | None:
     memento = response.headers.get("memento-datetime")
     if memento:
         try:
-            return parsedate_to_datetime(memento).strftime("%Y%m%d%H%M%S")
-        except (TypeError, ValueError):
+            moment = parsedate_to_datetime(memento)
+            if moment.tzinfo is not None:
+                moment = moment.astimezone(UTC)
+                return f"{moment.year:04d}{moment:%m%d%H%M%S}", "memento-datetime"
+        except (TypeError, ValueError, OverflowError):
             pass
-    path = response.url.path
-    marker = "/web/"
-    if marker in path:
-        candidate = path.split(marker, 1)[1].split("/", 1)[0].removesuffix("id_")
-        if candidate.isdigit() and len(candidate) == 14:
-            return candidate
+    match = _REPLAY_PATH.match(response.url.path)
+    if match is not None and len(match[1]) == 14:
+        try:
+            parse_timestamp(match[1])
+        except ValueError:
+            return None
+        return match[1], "replay-url"
     return None
 
 
@@ -258,7 +364,6 @@ class WaybackCdxIndex(ArchiveIndex):
                 return
             resume_key = next_key
 
-
     async def lookup(
         self,
         url: str,
@@ -286,9 +391,7 @@ class WaybackCdxIndex(ArchiveIndex):
             params["closest"] = centre.strftime("%Y%m%d%H%M%S")
         response = await self._client.get(CDX_ENDPOINT, params=params)
         captures, _ = parse_cdx_json(response.json() if response.content.strip() else [])
-        await self._client.log.debug(
-            "cdx lookup", url=url, around=around, captures=len(captures)
-        )
+        await self._client.log.debug("cdx lookup", url=url, around=around, captures=len(captures))
         return captures[:limit]
 
 

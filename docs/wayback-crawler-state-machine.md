@@ -45,7 +45,9 @@ progress between rounds and process restarts.
 flowchart TD
     Start[Start crawl] --> Release[Release FETCHING claims left by a dead run]
     Release --> CDX[Enumerate every year whose CDX cursor is not done, page-capped]
-    CDX --> Pending[Parse previously archived PENDING documents]
+    CDX --> Gate{Completion gate enabled and any configured year unfinished?}
+    Gate -->|Yes| Hold[Report incomplete years and stop]
+    Gate -->|No| Pending[Parse previously archived PENDING documents]
     Pending --> Route[Route DISCOVERED and retried UNROUTED captures]
     Route --> Nav[If URL misses and LLM budget remains: learn navigation rules]
     Nav --> Reroute[If new navigation version: route again]
@@ -381,10 +383,18 @@ adopted once). Every `crawl` continues any year in the source's range that is no
 fully enumerated, up to `enumeration_pages_per_crawl` index pages (or
 `--max-enumeration-pages`), whether or not the frontier already has rows.
 
-Replay fetches use `/web/{timestamp}id_/{original_url}`. The client follows
-redirects and records the timestamp actually served, using `Memento-Datetime` or
-the final replay URL when available. Payload metadata includes that capture time,
-the replay URL, frontier ID, digest, and route node.
+Replay fetches use `/web/{timestamp}id_/{original_url}`. The client validates each
+redirect before following it: requests stay on Wayback, retain original-byte
+mode and point to the configured original domain or its `www` variant. OLX also
+permits the requested in-domain city subdomain for its older layouts. Every hop
+is throttled. An aware `Memento-Datetime` normalized to UTC supplies served time;
+otherwise the final replay URL must contain a valid full timestamp. A requested
+prefix alone cannot supply time proof. Metadata preserves requested and served
+URLs/times, timestamp source, drift and the full redirect chain. Frontier ID,
+URL key and CDX digest identify the requested capture; offline parsing uses the
+served URL/time. A served year outside the configured source range is held as a
+failed frontier entry for review, without emitting an observation. See the
+[source metadata contract](sources.md#archive-sources-rule-graphs).
 
 An extraction graph is loaded once per source instance, so parsing and link
 discovery share one version. New rules take effect through a new instance on
@@ -401,9 +411,20 @@ order. A new extraction version reparses `UNRECOGNISED` documents **and**
 `PARSED` documents parsed by an older version (`parse --stale`).
 
 `--rounds` bounds iterations; zero means continue until idle or the fetch budget
-is spent. `--max-fetches` counts fetch attempts, failed ones included (archive
-time is the scarce resource); HTTP-level retries inside one attempt are not
-counted separately. `--fetches-per-round` controls batch size.
+is spent. `--max-fetches` counts selected capture attempts, including failed
+fetches and rejected replay provenance, across all rounds. Redirects and retries
+are part of an attempt, so it does not count individual HTTP requests.
+`--fetches-per-round` controls the attempt budget for each batch. Handled fetch
+failures increment the scrape run's errors and produce `PARTIAL` status; output
+and logs distinguish attempts, failures and archived payloads. Provenance rejections and permanent failures stay failed; transient failures
+return to the queue with backoff. Unattempted rows remain queued.
+
+`--require-complete-enumeration` optionally holds the crawl before parsing,
+routing, induction or capture fetches if any configured source year lacks a
+completed CDX cursor. The CLI reports the unfinished years and exits with status
+2. `archive status` reports completion for the same configured scope. The crawler
+resumes incomplete enumeration up to its page budget, even for a nonempty
+frontier. Explicit `archive enumerate` can finish it before the next crawl.
 `--max-llm-calls` is shared by navigation and extraction, with navigation first.
 Exhausting that budget still permits fetching and parsing with existing rules.
 

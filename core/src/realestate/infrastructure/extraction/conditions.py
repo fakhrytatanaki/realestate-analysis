@@ -174,14 +174,25 @@ def _text_regex(condition: Mapping[str, Any], ctx: EvalContext) -> bool:
 
 
 def _json_path(condition: Mapping[str, Any], ctx: EvalContext) -> bool:
+    value_type = condition.get("value_type")
+    if value_type not in (None, "array", "object"):
+        raise ValueError("json_path value_type must be array or object")
     if ctx.document is None:
         return False
     data = ctx.document.scripts.get(str(condition["script"]))
     if data is None:
         return False
-    values = [
-        value for value in resolve(data, condition.get("path")) if value not in (None, "", [], {})
-    ]
+    resolved = resolve(data, condition.get("path"))
+    if "equals" in condition:
+        expected = condition["equals"]
+        return any(type(value) is type(expected) and value == expected for value in resolved)
+    if value_type is not None:
+        expected_type = list if value_type == "array" else dict
+        values = [value for value in resolved if isinstance(value, expected_type)]
+        if not values:
+            return False  # min=0 must not turn a missing path into an empty array
+    else:
+        values = [value for value in resolved if value not in (None, "", [], {})]
     count = len(values[0]) if len(values) == 1 and isinstance(values[0], list) else len(values)
     return _count_ok(count, condition)
 

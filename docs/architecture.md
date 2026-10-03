@@ -46,9 +46,14 @@ flowchart LR
    drafts, and upserts listings. Parsers must be deterministic and use no network.
 4. Successful documents become `PARSED`; document failures become `FAILED` with
    an error summary and incremented failure attempts. Tracebacks go to logs.
-5. The run ends as `SUCCESS`, `PARTIAL` for handled archive/parse errors, or
+5. The run ends as `SUCCESS`, `PARTIAL` for handled fetch/archive/parse errors, or
    `FAILED` for an escaping exception. Item-level skips inside parsers are logged
    but do not increment the run's error counter.
+
+Wayback sources record selected capture attempts and handled fetch failures in
+`FetchContext.progress`. The crawler budgets attempts across rounds, including
+failures; ingestion adds those failures to run errors while `documents_fetched`
+continues to count archived payloads. These counters require no schema change.
 
 `parse_pending()` handles only `PENDING`. `reparse()` handles `PARSED` and, by
 default, `FAILED`. `reparse_stale()` handles archive documents parsed by an older
