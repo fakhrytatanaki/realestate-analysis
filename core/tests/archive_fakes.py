@@ -74,6 +74,9 @@ def fixture_meta(name: str) -> dict[str, str]:
     return dict(_INDEX[name])
 
 
+_ROUTED = (CrawlStatus.QUEUED, CrawlStatus.SKIPPED, CrawlStatus.DEFERRED)
+
+
 class InMemoryFrontier(CrawlFrontierRepository):
     def __init__(self) -> None:
         self.rows: dict[int, FrontierEntry] = {}
@@ -223,6 +226,35 @@ class InMemoryFrontier(CrawlFrontierRepository):
                 )
                 reopened += 1
         return reopened
+
+    async def routed_nodes(self, source_key: str) -> set[str]:
+        return {
+            e.route_node
+            for e in self.rows.values()
+            if e.source_key == source_key and e.status in _ROUTED and e.route_node
+        }
+
+    async def reopen_routed_by(self, source_key: str, route_nodes: Sequence[str]) -> int:
+        reopened = 0
+        for entry_id, entry in list(self.rows.items()):
+            if (
+                entry.source_key == source_key
+                and entry.status in _ROUTED
+                and entry.route_node in route_nodes
+            ):
+                self.rows[entry_id] = replace(
+                    entry,
+                    status=CrawlStatus.DISCOVERED,
+                    route_node=None,
+                    priority=0,
+                    page_kind=None,
+                )
+                reopened += 1
+        return reopened
+
+    async def url_keys_page(self, source_key: str, *, after: str | None, limit: int) -> list[str]:
+        keys = sorted({e.url_key for e in self.rows.values() if e.source_key == source_key})
+        return [key for key in keys if after is None or key > after][:limit]
 
     async def status_by_quarter(self, source_key: str) -> dict[tuple[str, CrawlStatus], int]:
         counts: dict[tuple[str, CrawlStatus], int] = {}

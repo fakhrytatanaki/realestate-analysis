@@ -7,7 +7,11 @@
         "value": "RENT"
       },
       {
-        "pattern": "for[- ]sale|للبيع|بيع",
+        "pattern": "\\bsale\\b|للبيع|بيع",
+        "value": "SALE"
+      },
+      {
+        "pattern": "\\bfor development\\b",
         "value": "SALE"
       }
     ],
@@ -25,7 +29,7 @@
         "value": "APARTMENT"
       },
       {
-        "pattern": "\\bland\\b|ارض|أرض",
+        "pattern": "\\blands?\\b|ارض|أرض|اراضي|أراضي",
         "value": "LAND"
       },
       {
@@ -35,6 +39,18 @@
       {
         "pattern": "shop|store|محل|تجاري",
         "value": "SHOP"
+      },
+      {
+        "pattern": "\\bstudios?\\b|استوديو|ستوديو",
+        "value": "STUDIO"
+      },
+      {
+        "pattern": "\\bhouses?\\b|منزل|منازل",
+        "value": "HOUSE"
+      },
+      {
+        "pattern": "\\bwarehouses?\\b|\\bstorage\\b|مخزن|مخازن",
+        "value": "WAREHOUSE"
       }
     ]
   },
@@ -207,13 +223,13 @@
   "a2_2013_gallery": {
     "condition": {
       "type": "dom_css",
-      "css": "#the-gallery td .c-2 h3 a",
+      "css": "#the-gallery td .c-2 h3 a, #itemListContent .the-gallery td .c-2 h3 a",
       "min": 1
     },
     "template": {
       "page_kind": "LIST",
       "items": {
-        "css": "#the-gallery td:has(.c-2)"
+        "css": "#the-gallery td:has(.c-2), #itemListContent .the-gallery td:has(.c-2)"
       },
       "fields": {
         "title": [
@@ -449,6 +465,33 @@
     "template": {
       "page_kind": "OTHER",
       "name": "no results or removed advert"
+    }
+  },
+  "a2_2013_sitemap_calendar": {
+    "condition": {
+      "type": "all",
+      "conditions": [
+        {"type": "dom_css", "css": "#sitemap-calendar"},
+        {"type": "not", "condition": {"type": "dom_css", "css": "a[href*='-iid-']"}}
+      ]
+    },
+    "template": {
+      "page_kind": "OTHER",
+      "name": "sitemap date picker"
+    }
+  },
+  "a2_2013_mobile_menu": {
+    "condition": {
+      "type": "all",
+      "conditions": [
+        {"type": "url_regex", "pattern": "^https?://m\\.olx\\.com\\.eg(?::\\d+)?/category/\\d+/"},
+        {"type": "dom_css", "css": "a[href^='/item/'][href$='/page/1']", "min": 3},
+        {"type": "not", "condition": {"type": "dom_css", "css": "a[href*='/item/show/']"}}
+      ]
+    },
+    "template": {
+      "page_kind": "OTHER",
+      "name": "mobile category menu"
     }
   },
   "b_2015_list": {

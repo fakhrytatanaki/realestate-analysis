@@ -26,6 +26,9 @@ Data quality (offline, nothing written unless stated):
     python -m realestate.cli archive audit --source olx_eg_wayback
     python -m realestate.cli rules seed --source olx_eg_wayback --dry-run
     python -m realestate.cli rules seed --source olx_eg_wayback --retire tpl.v4.x
+    python -m realestate.cli rules seed --source olx_eg_wayback --retire-vocab 'listing_type=sale'
+    python -m realestate.cli rules compact --source olx_eg_wayback --dry-run   # routing diff
+    python -m realestate.cli archive route --source olx_eg_wayback --reopen-removed
     python -m realestate.cli archive rebuild --source olx_eg_wayback --dry-run
     python -m realestate.cli archive rebuild --source olx_eg_wayback --yes   # rewrites rows
     python -m realestate.cli archive explore --source olx_eg_wayback --per-year 3
@@ -49,8 +52,10 @@ import json
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from realestate.application.services.archive_audit_service import AuditReport
+from realestate.application.services.archive_crawl_service import RouteReport
 from realestate.bootstrap import Container
 from realestate.config.paths import VAR_DIR, resolve
 from realestate.config.settings import Settings, load_settings
@@ -59,6 +64,7 @@ from realestate.domain.exceptions import ConfigurationError
 from realestate.domain.models import FetchContext
 from realestate.domain.ports.data_source import ArchiveDataSource
 from realestate.domain.query import ListingQuery
+from realestate.domain.rules import is_curated_vocab
 
 
 def _logging_options(*, suppress: bool) -> argparse.ArgumentParser:
@@ -171,6 +177,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="first re-route captures skipped by the per-URL capture cap",
     )
+    route.add_argument(
+        "--reopen-removed",
+        action="store_true",
+        help="first re-route captures whose rule the active navigation graph no longer has",
+    )
     coverage = archive_commands.add_parser(
         "coverage", parents=[common], help="per year and quarter: enumeration and capture states"
     )
@@ -235,8 +246,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     seed.add_argument("--source", required=True)
     seed.add_argument("--retire", nargs="*", default=[], help="induced template keys to remove")
+    seed.add_argument(
+        "--retire-vocab",
+        nargs="*",
+        default=[],
+        metavar="KIND=PATTERN",
+        help="induced vocabulary entries to remove, e.g. 'listing_type=sale|بيع'",
+    )
     seed.add_argument("--dry-run", action="store_true", help="audit the candidate graph only")
     seed.add_argument("--out", default=None, help="audit report path (default var/audit/...)")
+    compact = rules_commands.add_parser(
+        "compact",
+        parents=[common],
+        help="drop navigation rules that are never the first match, then re-route",
+    )
+    compact.add_argument("--source", required=True)
+    compact.add_argument(
+        "--remove", nargs="*", default=[], help="navigation rules to remove as well (by key)"
+    )
+    compact.add_argument("--dry-run", action="store_true", help="report the routing diff only")
+    compact.add_argument("--out", default=None, help="diff report path (default var/audit/...)")
     gaps = rules_commands.add_parser("gaps", parents=[common], help="list open and failed gaps")
     gaps.add_argument("--source", required=True)
     gaps.add_argument("--domain", choices=["navigation", "extraction"], default=None)
@@ -409,13 +438,11 @@ async def run(args: argparse.Namespace) -> int:
                         )
                     case "route":
                         routed = await container.crawler.route(
-                            args.source, reopen_capped=args.reopen_capped
+                            args.source,
+                            reopen_capped=args.reopen_capped,
+                            reopen_removed=args.reopen_removed,
                         )
-                        print(
-                            f"routed {routed.url_keys} urls: queued {routed.queued}, "
-                            f"skipped {routed.skipped}, deferred {routed.deferred}, "
-                            f"unrouted {routed.unrouted}"
-                        )
+                        _print_routed(routed)
                     case "status":
                         await _print_status(container, args.source)
                     case "coverage":
@@ -537,7 +564,11 @@ async def run(args: argparse.Namespace) -> int:
                                 f"retained active graphs: {', '.join(seeded.retained) or 'none'}"
                             )
                             return 0
-                        plan = await container.seeder.plan(args.source, retire=args.retire)
+                        plan = await container.seeder.plan(
+                            args.source,
+                            retire=args.retire,
+                            retire_vocab=[_vocab_key(text) for text in args.retire_vocab],
+                        )
                         print(
                             f"extraction graph v{plan.current.version} -> "
                             f"v{plan.candidate.version}: added {plan.added or 'none'}, "
@@ -545,17 +576,61 @@ async def run(args: argparse.Namespace) -> int:
                             f"retired {plan.retired or 'none'}, "
                             f"unchanged {len(plan.unchanged)}"
                         )
+                        for entry in plan.vocab_added:
+                            print(f"  vocabulary +{entry}")
+                        for entry in plan.vocab_retired:
+                            print(f"  vocabulary -{entry}")
                         if not plan.changes:
                             print("nothing to install")
                             return 0
                         audited = await container.audit.audit(args.source, graph=plan.candidate)
                         _print_report(audited, args.out, label="seed-candidate")
+                        diff = await container.audit.compare(
+                            args.source, baseline=plan.current, candidate=plan.candidate
+                        )
+                        _write_report(
+                            diff.summary_lines(),
+                            diff.as_dict(),
+                            None,
+                            name=f"{args.source}-seed-diff-v{plan.candidate.version}",
+                        )
                         if args.dry_run:
                             return 0
-                        saved = await container.seeder.apply(plan)
+                        saved = await container.seeder.apply(plan, evidence=diff.summary())
                         print(
                             f"saved extraction graph v{saved.version}; run "
                             "`parse --source ... --stale` (or `archive rebuild`) to apply it"
+                        )
+                    case "compact":
+                        compaction = await container.compactor.plan(args.source, remove=args.remove)
+                        print(
+                            f"navigation graph v{compaction.current.version} -> "
+                            f"v{compaction.candidate.version} over {compaction.url_keys} url keys:"
+                            f" remove {compaction.removed or 'none'} and "
+                            f"{len(compaction.dead)} induced rules never the first match; "
+                            f"{compaction.live_routes} routes left"
+                        )
+                        _write_report(
+                            [
+                                *(
+                                    f"  {change}: {count}"
+                                    for change, count in compaction.changes.most_common(15)
+                                ),
+                                f"url keys changing route although no removed rule decided "
+                                f"them: {compaction.unexpected}",
+                            ],
+                            compaction.as_dict(),
+                            args.out,
+                            name=f"{args.source}-nav-compact-v{compaction.candidate.version}",
+                        )
+                        if args.dry_run or not compaction.changed:
+                            if not compaction.changed:
+                                print("nothing to remove")
+                            return 0
+                        saved = await container.compactor.apply(compaction)
+                        print(f"saved navigation graph v{saved.version}")
+                        _print_routed(
+                            await container.crawler.route(args.source, reopen_removed=True)
                         )
                     case "gaps":
                         if args.reopen_failed:
@@ -630,19 +705,40 @@ async def _print_coverage(container: Container, source_key: str) -> None:
 
 
 def _print_report(report: AuditReport, out: str | None, *, label: str) -> None:
-    for line in report.summary_lines():
+    _write_report(
+        report.summary_lines(),
+        report.as_dict(),
+        out,
+        name=f"{report.source_key}-{label}-v{report.graph_version}",
+    )
+
+
+def _write_report(lines: list[str], data: dict[str, Any], out: str | None, *, name: str) -> None:
+    """Print ``lines`` and write ``data`` as JSON to ``out`` or a stamped var/audit file."""
+    for line in lines:
         print(line)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S")
-    path = (
-        resolve(out)
-        if out
-        else VAR_DIR / "audit" / f"{report.source_key}-{label}-v{report.graph_version}-{stamp}.json"
-    )
+    path = resolve(out) if out else VAR_DIR / "audit" / f"{name}-{stamp}.json"
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(
-        json.dumps(report.as_dict(), ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
     print(f"report: {path}")
+
+
+def _print_routed(routed: RouteReport) -> None:
+    reopened = f"reopened {routed.reopened} captures of removed rules; " if routed.reopened else ""
+    print(
+        f"{reopened}routed {routed.url_keys} urls: queued {routed.queued}, "
+        f"skipped {routed.skipped}, deferred {routed.deferred}, unrouted {routed.unrouted}"
+    )
+
+
+def _vocab_key(text: str) -> tuple[str, str]:
+    kind, separator, pattern = text.partition("=")
+    if not separator or not kind or not pattern:
+        raise ConfigurationError(f"expected KIND=PATTERN, got {text!r}")
+    return kind.strip(), pattern
 
 
 def _domain(name: str | None) -> RuleDomain | None:
@@ -738,6 +834,9 @@ async def _print_graph(container: Container, args: argparse.Namespace) -> None:
     print(
         f"{graph.source_key} {graph.domain} v{graph.version} ({graph.status}) {graph.notes or ''}"
     )
+    for kind, entries in graph.vocab.items():
+        curated = sum(1 for entry in entries if is_curated_vocab(entry))
+        print(f"  vocabulary {kind}: {curated} curated, {len(entries) - curated} induced")
     for edge in graph.outgoing("root"):
         node = graph.node(edge.to_key) if graph.has_node(edge.to_key) else None
         if node is None:

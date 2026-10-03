@@ -11,6 +11,7 @@ from tortoise import Tortoise
 from tortoise.expressions import Q
 
 from realestate.domain.archive import (
+    CAPTURE_CAP,
     Capture,
     FrontierEntry,
     LinkRequest,
@@ -31,6 +32,8 @@ from realestate.infrastructure.db.models import (
 
 #: Statuses evidence may pull back into routing; queued/fetched work is left alone.
 _REROUTABLE = (CrawlStatus.UNROUTED, CrawlStatus.DEFERRED, CrawlStatus.SKIPPED)
+#: Statuses a routing decision put captures in that a new graph may still change.
+_ROUTED = (CrawlStatus.QUEUED, CrawlStatus.SKIPPED, CrawlStatus.DEFERRED)
 
 
 def url_key_hash(url_key: str) -> str:
@@ -206,8 +209,34 @@ class TortoiseCrawlFrontierRepository(CrawlFrontierRepository):
         return await CrawlFrontierModel.filter(
             source_key=source_key,
             status=CrawlStatus.SKIPPED,
-            route_node__endswith="#capture-cap",
+            route_node__endswith=CAPTURE_CAP,
         ).update(status=CrawlStatus.DISCOVERED, route_node=None)
+
+    async def routed_nodes(self, source_key: str) -> set[str]:
+        rows = (
+            await CrawlFrontierModel.filter(
+                source_key=source_key, status__in=list(_ROUTED), route_node__isnull=False
+            )
+            .distinct()
+            .values_list("route_node", flat=True)
+        )
+        return {str(node) for node in rows}
+
+    async def reopen_routed_by(self, source_key: str, route_nodes: Sequence[str]) -> int:
+        if not route_nodes:
+            return 0
+        return await CrawlFrontierModel.filter(
+            source_key=source_key, status__in=list(_ROUTED), route_node__in=list(route_nodes)
+        ).update(status=CrawlStatus.DISCOVERED, route_node=None, priority=0, page_kind=None)
+
+    async def url_keys_page(self, source_key: str, *, after: str | None, limit: int) -> list[str]:
+        # Ordered by the hash the (source_key, url_key_hash) index covers.
+        rows = await Tortoise.get_connection("default").execute_query_dict(
+            'SELECT DISTINCT ON ("url_key_hash") "url_key_hash", "url_key" FROM "crawl_frontier" '
+            'WHERE "source_key" = $1 AND "url_key_hash" > $2 ORDER BY "url_key_hash" LIMIT $3',
+            [source_key, url_key_hash(after) if after is not None else "", limit],
+        )
+        return [str(row["url_key"]) for row in rows]
 
     async def status_by_quarter(self, source_key: str) -> dict[tuple[str, CrawlStatus], int]:
         counts: Counter[tuple[str, CrawlStatus]] = Counter()

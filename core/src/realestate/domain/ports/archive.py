@@ -134,6 +134,22 @@ class CrawlFrontierRepository(ABC):
         """Send captures skipped by the per-URL capture cap back to routing."""
 
     @abstractmethod
+    async def routed_nodes(self, source_key: str) -> set[str]:
+        """Distinct ``route_node`` values of queued, skipped and deferred captures."""
+
+    @abstractmethod
+    async def reopen_routed_by(self, source_key: str, route_nodes: Sequence[str]) -> int:
+        """Send queued, skipped and deferred captures routed by these nodes back to routing."""
+
+    @abstractmethod
+    async def url_keys_page(self, source_key: str, *, after: str | None, limit: int) -> list[str]:
+        """Up to ``limit`` distinct URL keys following ``after``, in a stable order.
+
+        Pages through every URL key of the frontier, whatever its status, for
+        whole-frontier replays; pass the last key of a page as ``after``.
+        """
+
+    @abstractmethod
     async def status_by_quarter(self, source_key: str) -> dict[tuple[str, CrawlStatus], int]:
         """Capture counts per ``(capture quarter, status)``, for coverage reports."""
 

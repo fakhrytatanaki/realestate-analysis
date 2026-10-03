@@ -12,9 +12,11 @@ configured database between 13:00 and 13:15 UTC. A crawl was writing to the
 database the whole time, so frontier counts moved between queries. Each figure
 gives its own denominator. This review changed no code, rules or data.
 
-Status: **Phase 0 implemented** on branch `rule-induction-phase0` (see
-[Phase 0 status](#phase-0-status)). Phases 1–6 are not started. The stored graphs
-described below are unchanged.
+Status: **Phases 0 and 1 implemented** on branch `rule-induction-phase0` (see
+[Phase 0 status](#phase-0-status) and [Phase 1 status](#phase-1-status)); Phases 2–6
+are not started. The findings describe the graphs as reviewed (navigation v111,
+extraction v9). Phase 1 replaced them with navigation v116 and extraction v10 in
+the dev database.
 
 ## Verdict
 
@@ -422,6 +424,113 @@ Operational follow-ups:
    pattern match `\bsale\b`, so "Rent - Sale" categories are ambiguous without help.
    Keep or retire each induced entry based on the audit diff. Acceptance: with curated
    vocabulary alone, the 295 shop adverts stay SALE; the diff is stored with the version.
+
+#### Phase 1 status
+
+Implemented and applied to the dev database on 2026-10-03, 14:44–14:51 UTC, with no
+crawl running. A restore point came first:
+`var/audit/olx_eg_wayback-phase1-restore-20261003T144447.json.gz` holds the routing
+state of all 283,155 unfetched captures and the ids of the graphs then active.
+Tests are in [`test_graph_repair.py`](../core/tests/test_graph_repair.py).
+
+New tools:
+
+- `rules compact --source S [--remove KEY …] [--dry-run]` removes the named rules,
+  then every induced route that is never the first match in what is left. It routes
+  every URL key through the candidate as well, and refuses to save if any key changes
+  route without a removed rule having decided it. `archive route --reopen-removed`
+  (which `rules compact` runs) sends queued, skipped and deferred captures of rules
+  the active graph no longer has back to routing.
+- `rules seed` puts the curated vocabulary first, tagged `"origin": "HUMAN"`, so the
+  next seed replaces it rather than leaving old patterns behind. Induced entries
+  follow until retired with `--retire-vocab KIND=PATTERN`. Every seed replays the
+  corpus through the candidate *and* the active graph (`ArchiveAuditService.compare`).
+  It prints what changes per document and advert, writes the diff to `var/audit/`, and
+  stores its summary in the new version's notes.
+- Graph versions index their nodes and edges once. Routing on the live 1,385-route
+  graph dropped from 4.5–7.8 ms to 0.6–0.7 ms per URL, with identical outcomes on
+  1,500 live URLs. Before, a URL no rule matched cost a scan of every node for every edge.
+
+**1.1 Navigation.** By then the frontier held 218,745 URL keys and the graph was v115
+with 1,385 routes. Removing `nav.v42.11`, then the 1,209 induced rules that were
+never the first match without it, left **175 routes** (v116). Rules shadowed only by
+the catch-all, such as `/cars/` ones, became live and stayed. The routing diff
+changed 40,111 URL keys, every one decided by `nav.v42.11`, and **0 others**:
+
+| Where the catch-all's URL keys went | URL keys |
+|---|---:|
+| Existing `SKIP` rules (mostly `/vehicles/`) | 25,440 |
+| Existing `DEFER` rules (search pages) | 3,819 |
+| `UNROUTED`, now navigation gaps (city landings, other categories) | 10,852 |
+
+66,160 captures were reopened and rerouted.
+
+**1.2 The gallery `tpl.v5` hid.** The gallery pages (seven by now) are the `-ig`
+variant, whose gallery is `table.the-gallery` inside `#itemListContent` rather than
+`#the-gallery`. Instead of a new template, the curated `olx.a2_2013_gallery` selectors
+now cover both, as `a2_2013_list` already does for its list. `tpl.v5` held seven
+other pages:
+
+- four sitemap date pickers, now the curated `OTHER` template `a2_2013_sitemap_calendar`;
+- two mobile category menus, now the curated `OTHER` template `a2_2013_mobile_menu`
+  (both new templates refuse a page that links to an advert);
+- one single-advert alexandriacity gallery whose advert names neither sale nor rent,
+  which is now `UNRECOGNISED`.
+
+The seven gallery pages yield 112 adverts, 29 of them new listings.
+
+**1.3 Vocabulary.** The curated SALE pattern is now `\bsale\b|للبيع|بيع`. Each induced
+entry was judged by replaying the corpus with and without it:
+
+| Induced entry | Removing it changes | Decision |
+|---|---|---|
+| `rent\|rental\|للايجار\|للإيجار` | 5 "for Sale or Rent" adverts, RENT → SALE (a tie-break) | retired |
+| `sale\|بيع`, and property `villa\|فيلا`, `apartment\|شقة`, `apartment\|شقة\|flat`, `shop\|محل` | nothing | retired |
+| `sale\|بيع\|Development` | 47 adverts on 16 pages, mostly "Land for Development …", lose their type | retired; curated `\bfor development\b` → SALE |
+| `studio\|استوديو` | 5 studios lose their type | retired; curated `\bstudios?\b\|استوديو\|ستوديو` |
+| `house\|منزل` | 343 untyped "Houses - Apartments" adverts become APARTMENT; 89 houses become APARTMENT | retired; curated `\bhouses?\b\|منزل\|منازل` |
+| `office\|commercial\|مكتب\|تجاري` | 112 "Commercial …" adverts in the Shops category, OFFICE → SHOP | retired: the category decides |
+| `warehouse\|storage\|مخزن` | 5 warehouses become OFFICE (4) or untyped | retired; curated `\bwarehouses?\b\|\bstorage\b\|مخزن\|مخازن` |
+| `land\|ارض` | it matched "dreamland" and "Bo Island" | retired; curated LAND widened to plurals |
+
+The curated HOUSE entry keeps "Houses - Apartments" ambiguous, as the template code
+intends: a text naming several types says nothing. It no longer matches "penthouse",
+"warehouse" or "townhouse". The v9 → v10 diff, stored in v10's notes, changed 57 of
+500 documents:
+
+- outcomes: `tpl.v5` pages moved as described in 1.2;
+- adverts: +112 −2;
+- property types:
+  - OFFICE → SHOP 106;
+  - HOUSE → none 12 (penthouses);
+  - none → VILLA 4, none → STUDIO 2, none → APARTMENT 1;
+  - SHOP → APARTMENT 2 (one "Commercial Duplex");
+  - LAND → none 1 (the island chalet);
+- listing types: RENT → SALE 6 and SALE → RENT 2, all adverts that name both.
+
+The shop adverts in "Shops for Rent - Sale" keep their type. `parse --stale` then
+changed 14 documents' outcome, created 29 listings and updated 99. Afterwards
+`archive audit` shows no listing- or property-type difference between replay and
+stored rows.
+
+Follow-ups, not done because they write to the shared database:
+
+- v116's notes say "1385 routes left": the summary was computed before the plan held
+  its candidate. The code is fixed and tested; the stored note still needs correcting.
+- The previous curated LAND pattern `\bland\b|ارض|أرض` survives in v10 as an untagged
+  entry, because the curated pattern was widened after the measurements. Retiring it
+  changes 0 of 500 documents (dry-run): `rules seed --source olx_eg_wayback
+  --retire-vocab 'property_type=\bland\b|ارض|أرض'`, then `parse --stale`.
+- The 2 lost adverts (a Hurghada suite filed under Land, 100 acres in Canada) remain as
+  stored rows until `archive rebuild`.
+
+Still open:
+
+- An advert whose texts all name both sale and rent takes the first entry, RENT. One
+  gallery advert, a ground floor at 15.4M EGP, is stored as monthly rent. Phase 5.1
+  makes this source policy.
+- Version notes carry only the diff summary; the full JSON stays in `var/audit/`.
+  Phase 2.3 makes the report part of the version.
 
 ### Phase 2: staged promotion through the audit
 

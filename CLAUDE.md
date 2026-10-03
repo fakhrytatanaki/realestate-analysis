@@ -12,7 +12,7 @@ read it before changing the pipeline or the layering.
 All from `core/`. There is no poetry/uv; the venv is `core/venv`.
 
 ```bash
-./venv/bin/pytest                 # 487 tests, no database needed
+./venv/bin/pytest                 # 501 tests, no database needed
 ./venv/bin/ruff check src tests   # must be clean
 ./venv/bin/mypy                   # config sets packages/mypy_path
 
@@ -29,6 +29,7 @@ python -m realestate.cli crawl --source olx_eg_wayback --rounds 0 --max-fetches 
 python -m realestate.cli archive audit --source olx_eg_wayback      # offline replay + quality report
 python -m realestate.cli archive coverage --source olx_eg_wayback   # per year/quarter
 python -m realestate.cli rules seed --source olx_eg_wayback --dry-run  # curated templates
+python -m realestate.cli rules compact --source olx_eg_wayback --dry-run  # dead navigation rules
 python -m realestate.cli parse --source olx_eg_wayback --stale      # apply a new graph version
 python -m realestate.cli archive rebuild --source olx_eg_wayback --dry-run  # --yes rewrites rows
 python -m realestate.cli archive explore --source olx_eg_wayback --per-year 3  # routing false negatives
@@ -42,7 +43,7 @@ Integration tests need a separate database and are skipped without it:
 
 ```bash
 REALESTATE_TEST_DB_URL=postgres://realestate:realestate@127.0.0.1:5432/realestate_test \
-  ./venv/bin/pytest          # 523 tests
+  ./venv/bin/pytest          # 538 tests
 ```
 
 `main_frontend/` is the signed-in SvelteKit app (auth + price trends); it talks

@@ -74,9 +74,11 @@ Two things a subclass can fix in code instead of leaving to induction:
   it. OLX ids stay bare numbers (`535715253`) across list and detail pages.
 - `extraction_seed()` returns curated templates (OLX ships
   [`templates.json`](../core/src/realestate/infrastructure/sources/olx_eg_wayback/templates.json),
-  one per known page design). `rules seed` installs them as `HUMAN` states ahead of
-  every induced one, optionally retiring faulty induced states; a curated template
-  that works always wins.
+  one per known page design, plus `OTHER` templates for known non-listing pages
+  that refuse any page linking to an advert). `rules seed` installs them as `HUMAN`
+  states ahead of every induced one, optionally retiring faulty induced states; a
+  curated template that works always wins. The file's vocabulary is installed ahead
+  of induced entries and replaces what the previous seed installed.
 
 Dubizzle also ships reviewed source-specific graphs, installed explicitly with
 `rules seed` without replacing either domain's active graph.

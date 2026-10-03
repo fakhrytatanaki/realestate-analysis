@@ -33,7 +33,15 @@ from realestate.application.services.rule_induction_service import (
     InductionReport,
     RuleInductionService,
 )
-from realestate.domain.archive import EXPLORE_NODE, ArchiveScope, FrontierEntry, capture_year
+from realestate.domain.archive import (
+    CAPTURE_CAP,
+    EXPLORE_NODE,
+    ArchiveScope,
+    FrontierEntry,
+    capture_year,
+    link_evidence,
+    routing_node,
+)
 from realestate.domain.enums import (
     CrawlStatus,
     LinkRequestStatus,
@@ -92,6 +100,8 @@ class RouteReport:
     skipped: int = 0
     deferred: int = 0
     unrouted: int = 0
+    #: Captures sent back to routing because their rule was removed.
+    reopened: int = 0
 
     def add(self, other: RouteReport) -> None:
         self.url_keys += other.url_keys
@@ -359,17 +369,28 @@ class ArchiveCrawlService:
         return graph
 
     async def route(
-        self, source_key: str, *, retry_unrouted: bool = True, reopen_capped: bool = False
+        self,
+        source_key: str,
+        *,
+        retry_unrouted: bool = True,
+        reopen_capped: bool = False,
+        reopen_removed: bool = False,
     ) -> RouteReport:
         """Decide what to do with every discovered capture.
 
         ``reopen_capped`` first sends captures skipped by the per-URL capture
         cap back to routing, e.g. after the cap policy changed.
+        ``reopen_removed`` first sends queued, skipped and deferred captures
+        whose rule the active graph no longer has back to routing, e.g. after
+        ``rules compact`` removed a rule; the report counts them as ``reopened``.
         """
         graph = await self.navigation_graph(source_key)
+        reopened_removed = 0
         if reopen_capped:
             reopened = await self._frontier.reopen_capped(source_key)
             await self._log.info("capture-capped captures reopened", count=reopened)
+        if reopen_removed:
+            reopened_removed = await self.reopen_removed(source_key, graph)
         if retry_unrouted:
             await self._frontier.reset_status(
                 source_key, from_status=CrawlStatus.UNROUTED, to_status=CrawlStatus.DISCOVERED
@@ -397,6 +418,7 @@ class ArchiveCrawlService:
             if batch.url_keys == 0:  # nothing changed state: never spin
                 break
             report.add(batch)
+        report.reopened = reopened_removed
         await self._log.info(
             "routing complete",
             graph_version=graph.version,
@@ -407,6 +429,29 @@ class ArchiveCrawlService:
             unrouted=report.unrouted,
         )
         return report
+
+    async def reopen_removed(self, source_key: str, graph: RuleGraph) -> int:
+        """Send captures routed by rules ``graph`` no longer has back to routing.
+
+        Covers queued, skipped (capture-capped included) and deferred captures;
+        fetched ones keep their history, and exploration samples are not rules.
+        """
+        present = {node.key for node in graph.nodes}
+        removed = sorted(
+            node
+            for node in await self._frontier.routed_nodes(source_key)
+            if node != EXPLORE_NODE and routing_node(node) not in present
+        )
+        reopened = await self._frontier.reopen_routed_by(source_key, removed)
+        if reopened:
+            await self._log.info(
+                "captures of removed rules reopened",
+                source_key=source_key,
+                graph_version=graph.version,
+                rules=len({routing_node(node) for node in removed}),
+                count=reopened,
+            )
+        return reopened
 
     def _route_url(
         self,
@@ -419,13 +464,7 @@ class ArchiveCrawlService:
         if not pending:
             return
         report.url_keys += 1
-        evidence: dict[str, list[str]] = {}
-        for entry in captures:
-            for rel in entry.evidence.get("linked_as") or []:
-                evidence.setdefault("linked_as", [])
-                if rel not in evidence["linked_as"]:
-                    evidence["linked_as"].append(rel)
-        outcome = self._engine.route(graph, captures[-1].original_url, evidence)
+        outcome = self._engine.route(graph, captures[-1].original_url, link_evidence(captures))
         ids = [entry.id for entry in pending]
         if outcome is None:
             updates[(CrawlStatus.UNROUTED, None, 0, None)] += ids
@@ -448,7 +487,7 @@ class ArchiveCrawlService:
             updates[key] += queue
             report.queued += 1
         if rest:
-            updates[(CrawlStatus.SKIPPED, f"{outcome.node_key}#capture-cap", 0, None)] += rest
+            updates[(CrawlStatus.SKIPPED, f"{outcome.node_key}{CAPTURE_CAP}", 0, None)] += rest
 
     def _cap(self, page_kind: PageKind | None) -> int:
         if page_kind is PageKind.LIST:

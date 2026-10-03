@@ -87,7 +87,11 @@ A [`RuleGraph`](../core/src/realestate/domain/rules.py) contains:
 - **Edges:** a source node, destination node, JSON condition, and evaluation
   priority. Lower edge priority is evaluated first; insertion order breaks ties.
 - **Versioned vocabulary:** regex mappings such as Arabic/English phrases to
-  `SALE`, `RENT`, or property types.
+  `SALE`, `RENT`, or property types. A source's curated entries come first and
+  carry `"origin": "HUMAN"`; induced entries follow. A text matching entries of
+  different values is skipped for the next one ("Shops for Rent - Sale" says
+  nothing, so the title decides), and list order decides only when no text is
+  decisive.
 
 The graph walker supports branches, walks depth first, and guards against cycles.
 The current induction code appends new terminal nodes directly to `root`, so the
@@ -248,7 +252,16 @@ on saved samples from that design, with the source's identity policy and
 country, exactly as production parsing does. A new version copies the previous graph and appends
 rules; induction does not rewrite existing nodes in place. `rules seed
 --retire KEY` creates a version **without** named states, which is how a
-faulty induced template is superseded.
+faulty induced template is superseded; `--retire-vocab KIND=PATTERN` does the same
+for induced vocabulary. Each seed stores, in the new version's notes, a summary of
+the replay diff against the version it replaces.
+
+Navigation is first-match and induced rules are appended, so a rule written for
+URLs an earlier rule already routes never decides anything. `rules compact`
+removes such rules (and any named with `--remove`). It is judged on every URL key
+of the frontier, and refuses to save a version whose routing diff changes any URL
+not decided by a removed rule. It then reroutes the removed rules' captures
+(`archive route --reopen-removed`).
 
 Extraction gaps come from `UNRECOGNISED` documents **and** from `PARSED` ones
 whose stored parse report shows the winning template malfunctioning (identity
@@ -302,8 +315,9 @@ stateDiagram-v2
     DISCOVERED --> SKIPPED: SKIP or capture redundant / cap exceeded
     DISCOVERED --> DEFERRED: DEFER
     UNROUTED --> DISCOVERED: New link relation added
-    SKIPPED --> DISCOVERED: New link relation added, or route --reopen-capped
-    DEFERRED --> DISCOVERED: New link relation added
+    SKIPPED --> DISCOVERED: New link relation added, route --reopen-capped, or its rule removed
+    DEFERRED --> DISCOVERED: New link relation added, or its rule removed
+    QUEUED --> DISCOVERED: Its rule removed (route --reopen-removed)
     QUEUED --> FETCHING: Claimed by a fetch
     FETCHING --> FETCHED: Payload archived and acknowledged
     FETCHING --> QUEUED: Retryable failure (after backoff), or stale claim released
@@ -494,6 +508,10 @@ Run from `core/`. Nothing here writes listings unless stated.
 # Install curated templates (audits the candidate first; --dry-run stops there).
 ./venv/bin/python -m realestate.cli rules seed --source olx_eg_wayback --dry-run
 ./venv/bin/python -m realestate.cli rules seed --source olx_eg_wayback --retire tpl.v4.example
+# Retire an induced vocabulary entry (the seed diff shows what it changes).
+./venv/bin/python -m realestate.cli rules seed --source olx_eg_wayback --retire-vocab 'listing_type=sale|بيع'
+# Drop navigation rules that never decide a URL, then reroute (--dry-run: diff only).
+./venv/bin/python -m realestate.cli rules compact --source olx_eg_wayback --dry-run
 # Apply a new graph to already-parsed documents, or rebuild a source entirely
 # (deletes its listings and re-parses every archived payload in capture order).
 ./venv/bin/python -m realestate.cli parse --source olx_eg_wayback --stale

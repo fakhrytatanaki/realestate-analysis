@@ -213,7 +213,12 @@ linked pages the enumeration missed (default `link_lookups_per_round` per round)
 **Repairing an archive source.** Rule changes are measured offline before they
 are applied: `rules seed --dry-run` (or `archive audit --graph-version N`) replays
 every archived page and reports identity, completeness and a diff against stored
-rows, writing JSON to `var/audit/`. `parse --stale` re-reads every document
+rows, writing JSON to `var/audit/`. A seed also replays the corpus through the
+active graph and reports what changes per document and advert (`…-seed-diff-…`);
+the summary is stored in the new version's notes. `rules compact --dry-run` reports
+the routing diff of dropping navigation rules that never decide a URL; without
+`--dry-run` it saves the version and reroutes the removed rules' captures
+(`archive route --reopen-removed`). `parse --stale` re-reads every document
 parsed by an older graph than the active one. Merged identities and false histories need
 `archive rebuild --source ... --yes`: it deletes the source's listings and
 observations and re-parses every archived payload in capture order. The archived

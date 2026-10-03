@@ -142,6 +142,26 @@ class ArchivedDocument:
 #: decisions, to measure how often SKIP/DEFER/miss turned adverts away.
 EXPLORE_NODE = "explore"
 
+#: Appended to a route node's key on captures its decision would fetch but the
+#: per-URL capture cap skipped.
+CAPTURE_CAP = "#capture-cap"
+
+
+def routing_node(route_node: str) -> str:
+    """The rule a capture's ``route_node`` names, without the capture-cap marker."""
+    return route_node.removesuffix(CAPTURE_CAP)
+
+
+def link_evidence(captures: Sequence[FrontierEntry]) -> dict[str, list[str]]:
+    """How recognised pages linked to any capture of one URL, merged for routing."""
+    evidence: dict[str, list[str]] = {}
+    for entry in captures:
+        for rel in entry.evidence.get("linked_as") or []:
+            rels = evidence.setdefault("linked_as", [])
+            if rel not in rels:
+                rels.append(rel)
+    return evidence
+
 
 def capture_year(timestamp: str) -> int:
     return int(timestamp[:4])

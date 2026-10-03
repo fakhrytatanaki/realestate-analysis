@@ -291,6 +291,46 @@ async def test_frontier_spread_urls_cover_the_whole_frontier() -> None:
     assert await frontier.spread_urls("nothing-here", limit=10) == []
 
 
+async def test_frontier_pages_every_url_key_and_reopens_removed_rules() -> None:
+    frontier = TortoiseCrawlFrontierRepository()
+    await frontier.add_captures(
+        "pages",
+        [
+            Capture(f"eg,com,olx)/p{i}", f"2013010{j + 1}000000", f"http://olx.com.eg/p{i}", "D")
+            for i in range(7)
+            for j in range(2)
+        ],
+    )
+    seen: list[str] = []
+    after: str | None = None
+    while page := await frontier.url_keys_page("pages", after=after, limit=3):
+        seen.extend(page)
+        after = page[-1]
+    assert sorted(seen) == sorted(f"eg,com,olx)/p{i}" for i in range(7)) and len(seen) == 7
+    assert await frontier.url_keys_page("nothing-here", after=None, limit=3) == []
+
+    keys = ["eg,com,olx)/p0", "eg,com,olx)/p1"]
+    ids = [row.id for row in await frontier.captures_for("pages", keys)]
+    await frontier.set_route(ids[:1], status=CrawlStatus.DEFERRED, route_node="gone")
+    await frontier.set_route(ids[1:2], status=CrawlStatus.SKIPPED, route_node="gone#capture-cap")
+    await frontier.set_route(ids[2:3], status=CrawlStatus.FETCHED, route_node="gone")
+    await frontier.set_route(
+        ids[3:4], status=CrawlStatus.QUEUED, route_node="kept", priority=70, page_kind=PageKind.LIST
+    )
+    assert await frontier.routed_nodes("pages") == {"gone", "gone#capture-cap", "kept"}
+
+    assert await frontier.reopen_routed_by("pages", ["gone", "gone#capture-cap"]) == 2
+    after_reopen = {row.id: row for row in await frontier.captures_for("pages", keys)}
+    assert [after_reopen[i].status for i in ids] == [
+        CrawlStatus.DISCOVERED,
+        CrawlStatus.DISCOVERED,
+        CrawlStatus.FETCHED,
+        CrawlStatus.QUEUED,
+    ]
+    assert after_reopen[ids[0]].route_node is None and after_reopen[ids[3]].route_node == "kept"
+    assert await frontier.reopen_routed_by("pages", []) == 0
+
+
 async def test_upsert_keeps_the_latest_observation_whatever_the_order() -> None:
     repo = TortoiseListingRepository()
     newer = make_draft(
