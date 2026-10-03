@@ -163,6 +163,11 @@ def run_template(
         raise TemplateError(f"unknown page_kind {spec.get('page_kind')!r}") from exc
     result = TemplateResult(page_kind=page_kind)
     if page_kind is PageKind.OTHER:
+        # Recognised portals can offer property-category links without
+        # treating their mixed recent adverts as property listings.
+        result.links = _unique_links(
+            _links(spec.get("links") or [], document), exclude=document.url
+        )
         return result
 
     fields = _normalise_fields(spec.get("fields") or {})

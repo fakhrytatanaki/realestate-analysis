@@ -1,0 +1,68 @@
+{
+  "2008_portal": {
+    "kind": "sanitized_capture",
+    "url": "http://eg.opensooq.com:80/view/",
+    "served_timestamp": "20080326171937",
+    "requested_timestamp": "20080326171937",
+    "content_type": "text/html",
+    "charset": "windows-1256",
+    "original_bytes": 23900,
+    "sanitized_bytes": 17193,
+    "fixture_sha256": "17d1da566b535538107ae548f036417602b7a59aab2757be5dd348059efc87ab"
+  },
+  "2008_sale": {
+    "kind": "sanitized_capture",
+    "url": "http://eg.opensooq.com/search/?sc2id=1",
+    "served_timestamp": "20080327153723",
+    "requested_timestamp": "20080326171937",
+    "content_type": "text/html",
+    "charset": "windows-1256",
+    "original_bytes": 22711,
+    "sanitized_bytes": 16667,
+    "fixture_sha256": "53857b06db4d5a2aa0e71ace22a3b57106d4cfb3dc38cde38b185947af29968c"
+  },
+  "2008_rent": {
+    "kind": "sanitized_capture",
+    "url": "http://eg.opensooq.com/search/?sc2id=14",
+    "served_timestamp": "20080327153744",
+    "requested_timestamp": "20080327153723",
+    "content_type": "text/html",
+    "charset": "windows-1256",
+    "original_bytes": 12448,
+    "sanitized_bytes": 8298,
+    "fixture_sha256": "659e126a0f2c15af5c211c7eb3987a649dc17880dc1f817a89d1c0be76f434bf"
+  },
+  "2016_portal": {
+    "kind": "sanitized_capture",
+    "url": "https://eg.opensooq.com/ar",
+    "served_timestamp": "20160115172713",
+    "requested_timestamp": "20160115172713",
+    "content_type": "text/html",
+    "charset": "utf-8",
+    "original_bytes": 66143,
+    "sanitized_bytes": 15593,
+    "fixture_sha256": "4787afc002d5924a8d0652dd4aa4a7e573c2676c89815111e562591cb02e4db7"
+  },
+  "2025_sale": {
+    "kind": "sanitized_capture",
+    "url": "https://eg.opensooq.com/ar/%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA/%D8%B4%D9%82%D9%82-%D9%84%D9%84%D8%A8%D9%8A%D8%B9",
+    "served_timestamp": "20250714182331",
+    "requested_timestamp": "20160115172713",
+    "content_type": "text/html",
+    "charset": "utf-8",
+    "original_bytes": 937521,
+    "sanitized_bytes": 62375,
+    "fixture_sha256": "930507b2759e430fc6e7abf903ca786765360979b66b8fe865dd8465cdbc0e64"
+  },
+  "2025_rent": {
+    "kind": "sanitized_capture",
+    "url": "https://eg.opensooq.com/ar/%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA/%D8%B4%D9%82%D9%82-%D9%84%D9%84%D8%A7%D9%8A%D8%AC%D8%A7%D8%B1",
+    "served_timestamp": "20250716074915",
+    "requested_timestamp": "20250714182331",
+    "content_type": "text/html",
+    "charset": "utf-8",
+    "original_bytes": 917077,
+    "sanitized_bytes": 61563,
+    "fixture_sha256": "133aefa77c9e6a3aaf66bbcab5bba4d5595100d13646e1b061c1f3b8571895ef"
+  }
+}

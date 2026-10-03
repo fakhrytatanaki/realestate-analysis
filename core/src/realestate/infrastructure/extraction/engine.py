@@ -181,7 +181,7 @@ def _execute(
         template_key=node.key,
         page_kind=result.page_kind,
         drafts=result.drafts,
-        links=result.links if result.page_kind is not PageKind.OTHER else [],
+        links=result.links,
         items_total=result.items_total,
         items_valid=len(result.drafts),
         problems=result.problems,

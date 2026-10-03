@@ -14,6 +14,7 @@ from realestate.infrastructure.sources.dubizzle_eg.source import DubizzleEgDataS
 from realestate.infrastructure.sources.dubizzle_eg_wayback.source import DubizzleEgWaybackDataSource
 from realestate.infrastructure.sources.fixture.source import FixtureDataSource
 from realestate.infrastructure.sources.olx_eg_wayback.source import OlxEgWaybackDataSource
+from realestate.infrastructure.sources.opensooq_eg_wayback.source import OpensooqEgWaybackDataSource
 from realestate.infrastructure.sources.registry import DataSourceRegistry, SourceContext
 from realestate.infrastructure.sources.zillow.source import ZillowDataSource
 
@@ -59,6 +60,20 @@ def register_default_sources(registry: DataSourceRegistry) -> DataSourceRegistry
             frontier=TortoiseCrawlFrontierRepository(),
             graphs=TortoiseRuleGraphRepository(),
             engine=HtmlRuleEngine(),
+        ),
+        implemented=True,
+    )
+    registry.register(
+        key=OpensooqEgWaybackDataSource.key,
+        display_name=OpensooqEgWaybackDataSource.display_name,
+        country_code=OpensooqEgWaybackDataSource.country_code,
+        factory=lambda ctx: OpensooqEgWaybackDataSource(
+            log=ctx.log,
+            params=ctx.params,
+            frontier=TortoiseCrawlFrontierRepository(),
+            graphs=TortoiseRuleGraphRepository(),
+            engine=HtmlRuleEngine(),
+            gate=PostgresRateGate(),
         ),
         implemented=True,
     )

@@ -76,7 +76,7 @@ def compile_seed_bundle(data: dict[str, Any], *, source_key: str) -> tuple[RuleG
         version=1,
         nodes=(*navigation.nodes, *nav_nodes),
         edges=(*navigation.edges, *nav_edges),
-        notes="reviewed Dubizzle archive navigation plus generic link evidence",
+        notes=f"reviewed {source_key} navigation plus generic link evidence",
     )
     nodes: list[RuleNode] = []
     edges: list[RuleEdge] = []
@@ -110,16 +110,14 @@ def compile_seed_bundle(data: dict[str, Any], *, source_key: str) -> tuple[RuleG
         vocab={
             key: [entry.model_dump() for entry in entries] for key, entries in bundle.vocab.items()
         },
-        notes="reviewed JSON lists, 2023 detail and sales HTML fallback; unknowns are gaps",
+        notes=f"reviewed {source_key} extraction; unsupported designs remain gaps",
     )
     return navigation, extraction
 
 
 class PackagedRuleSeedProvider(RuleSeedProvider):
     def load(self, source_key: str) -> tuple[RuleGraph, ...]:
-        if source_key != "dubizzle_eg_wayback":
+        if source_key not in {"dubizzle_eg_wayback", "opensooq_eg_wayback"}:
             raise ValueError(f"no reviewed rule seeds are packaged for source {source_key!r}")
-        resource = files("realestate.infrastructure.sources.dubizzle_eg_wayback").joinpath(
-            "rules.json"
-        )
+        resource = files(f"realestate.infrastructure.sources.{source_key}").joinpath("rules.json")
         return compile_seed_bundle(json.loads(resource.read_text()), source_key=source_key)
