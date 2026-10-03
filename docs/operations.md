@@ -53,6 +53,9 @@ settings file/environment overrides. It can be called from any working directory
 The database must already be running and migrated; no API or worker is required.
 
 ```bash
+# With no arguments, crawl/scrape every enabled, implemented source.
+./scripts/ingest.sh
+
 # Choose one or several sources; repeated keys run only once.
 ./scripts/ingest.sh --source fixture --source dubizzle_eg --max-items 2
 
@@ -72,9 +75,10 @@ Prepare reviewed archive rules as described below before starting a new archive
 source; this helper does not seed them. Use `--require-complete-enumeration` to
 hold archive processing until all configured years have been enumerated.
 
-An explicit `--source` allows a disabled implementation for a manual run.
-`--all-enabled` selects only enabled implementations; `--scheduled` also requires
-every explicitly selected source to be enabled and marks live runs `SCHEDULED`.
+Omitting source selection defaults to `--all-enabled`, which selects only enabled
+implementations. An explicit `--source` allows a disabled implementation for a
+manual run. `--scheduled` also requires every explicitly selected source to be
+enabled and marks live runs `SCHEDULED`.
 The script ignores source schedules because cron supplies the schedule.
 
 For example, create the log directory once, then add this entry with `crontab -e`

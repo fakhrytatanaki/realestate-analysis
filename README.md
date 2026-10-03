@@ -93,6 +93,7 @@ run them inside the API process instead.
 For a one-shot batch or an external cron job:
 
 ```bash
+./scripts/ingest.sh  # crawl/scrape all enabled implementations by default
 ./scripts/ingest.sh --source fixture --source dubizzle_eg --max-items 2
 ./scripts/ingest.sh --all-enabled --dry-run
 ```

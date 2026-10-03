@@ -34,9 +34,11 @@ def _positive(value: str) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    selection = parser.add_mutually_exclusive_group(required=True)
+    selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--source", action="append", help="source key; repeat for a batch")
-    selection.add_argument("--all-enabled", action="store_true", help="all enabled implementations")
+    selection.add_argument(
+        "--all-enabled", action="store_true", help="all enabled implementations (default)"
+    )
     parser.add_argument("--scheduled", action="store_true", help="require enabled sources (cron)")
     parser.add_argument(
         "--dry-run", action="store_true", help="show the plan without DB/network I/O"
@@ -103,10 +105,13 @@ def _print_run(run: ScrapeRun) -> bool:
 async def run(args: argparse.Namespace) -> int:
     container = Container()
     try:
-        keys = container.registry.enabled_keys() if args.all_enabled else args.source
+        keys = args.source if args.source is not None else container.registry.enabled_keys()
         keys = list(dict.fromkeys(keys))
         if not keys:
-            raise ConfigurationError("no enabled, implemented sources selected")
+            raise ConfigurationError(
+                "no enabled, implemented sources selected; "
+                "enable a source in etc/settings.toml or pass --source KEY"
+            )
         # Validate the entire selection before writing anything.
         for key in keys:
             if not container.registry.has(key):

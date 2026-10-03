@@ -164,10 +164,63 @@ async def test_invalid_scheduled_batch_fails_before_any_work(
     container.aclose.assert_awaited_once()
 
 
-async def test_empty_enabled_selection_is_configuration_error(container: MagicMock) -> None:
+@pytest.mark.parametrize("options", [[], ["--all-enabled"]])
+async def test_empty_enabled_selection_is_configuration_error(
+    container: MagicMock,
+    options: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     container.registry = DataSourceRegistry(Settings(sources={}), NullLogProvider())
-    assert await ingest.run(ingest.build_parser().parse_args(["--all-enabled"])) == 2
+    assert await ingest.run(ingest.build_parser().parse_args(options)) == 2
+    assert "enable a source in etc/settings.toml or pass --source KEY" in capsys.readouterr().err
     container.init_db.assert_not_awaited()
+
+
+@pytest.mark.parametrize("options", [[], ["--dry-run"], ["--scheduled", "--max-items", "2"]])
+async def test_omitted_selection_runs_enabled_sources(
+    container: MagicMock,
+    options: list[str],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args = ingest.build_parser().parse_args(options)
+
+    assert await ingest.run(args) == 0
+
+    output = capsys.readouterr().out
+    assert "archive: crawl" in output
+    assert "live: scrape" in output
+    assert "disabled:" not in output
+    assert "stub:" not in output
+    if args.dry_run:
+        container.init_db.assert_not_awaited()
+        container.crawler.crawl.assert_not_awaited()
+        container.ingestion.ingest.assert_not_awaited()
+    else:
+        container.crawler.crawl.assert_awaited_once()
+        container.ingestion.ingest.assert_awaited_once()
+    container.aclose.assert_awaited_once()
+
+
+def test_main_with_no_arguments_runs_enabled_batch(
+    container: MagicMock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("sys.argv", ["ingest"])
+    monkeypatch.setattr(ingest, "VAR_DIR", tmp_path)
+
+    with pytest.raises(SystemExit) as caught:
+        ingest.main()
+
+    assert caught.value.code == 0
+    container.crawler.crawl.assert_awaited_once()
+    container.ingestion.ingest.assert_awaited_once()
+
+
+def test_explicit_source_and_all_enabled_remain_mutually_exclusive() -> None:
+    with pytest.raises(SystemExit) as caught:
+        ingest.build_parser().parse_args(["--source", "live", "--all-enabled"])
+    assert caught.value.code == 2
 
 
 @pytest.mark.parametrize("failure", ["partial", "failed", "exception"])
