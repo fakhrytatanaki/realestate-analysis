@@ -1,0 +1,54 @@
+/* Design tokens shared with landing/ (ivory and forest green). */
+@font-face {
+  font-family: 'DM Sans';
+  src: url('/fonts/dm-sans.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Serif Display';
+  src: url('/fonts/dm-serif.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'DM Serif Display';
+  src: url('/fonts/dm-serif-italic.woff2') format('woff2');
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  --ink: #233b30;
+  --ink-strong: #203d32;
+  --green: #6d8654;
+  --green-accent: #7c9062;
+  --lime: #d7eab4;
+  --muted: #798174;
+  --muted-soft: #8e9a80;
+  --paper: #f7f8f2;
+  --card: #fbfcf8;
+  --border: #e3e7dc;
+  --border-strong: #d9e2cb;
+  --field-border: #dbe3ce;
+  --danger: #ad4e36;
+  --focus: #6b8b52;
+  --font-sans: 'DM Sans', sans-serif;
+  --font-serif: 'DM Serif Display', Georgia, serif;
+
+  /* Series colours: the landing's hues re-stepped to pass the CVD checks. */
+  --series-1: #3e7b45;
+  --series-2: #5b8fd6;
+  --series-3: #c0782b;
+  --series-4: #6a3d85;
+
+  /* LayerChart reads these for axes, tooltips and highlights. */
+  --color-surface-content: var(--ink);
+  --color-surface-100: #ffffff;
+  --color-surface-200: #f0f3e9;
+  --color-surface-300: var(--border);
+  --color-primary: var(--series-1);
+}

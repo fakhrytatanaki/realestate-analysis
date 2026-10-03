@@ -11,6 +11,8 @@ FastAPI · Tortoise ORM · PostgreSQL · APScheduler · Python 3.12+
 ```
 realestatepy/
 ├── docker-compose.yml        # local PostgreSQL
+├── landing/                  # marketing site (SvelteKit, standalone)
+├── main_frontend/            # the signed-in app: auth + price trends (SvelteKit)
 └── core/                     # the backend service
     ├── etc/                  # configuration
     ├── var/                  # mutable data: blob/, log/, fixtures/
@@ -49,6 +51,15 @@ curl "localhost:8000/api/v1/listings?lat=30.0444&lon=31.2357&radius_km=10&sort=d
 
 # What sources exist, and how each last run went
 curl "localhost:8000/api/v1/sources"
+
+# Accounts: register/login return a session token for Authorization: Bearer
+curl -X POST -H "content-type: application/json" \
+  -d '{"email":"ada@example.com","password":"at-least-10-chars"}' \
+  "localhost:8000/api/v1/auth/register"
+
+# Median sale price per quarter in a district (needs the bearer token)
+curl -H "Authorization: Bearer $TOKEN" \
+  "localhost:8000/api/v1/markets/trends?city=Cairo&district=New%20Cairo&interval=quarter"
 
 # Trigger a run (202 + run id; poll /runs/{id})
 curl -X POST -H "X-Admin-Key: dev-admin-key" \

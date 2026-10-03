@@ -12,7 +12,7 @@ read it before changing the pipeline or the layering.
 All from `core/`. There is no poetry/uv; the venv is `core/venv`.
 
 ```bash
-./venv/bin/pytest                 # 198 tests, no database needed
+./venv/bin/pytest                 # 239 tests, no database needed
 ./venv/bin/ruff check src tests   # must be clean
 ./venv/bin/mypy                   # config sets packages/mypy_path
 
@@ -34,7 +34,15 @@ Integration tests need a separate database and are skipped without it:
 
 ```bash
 REALESTATE_TEST_DB_URL=postgres://realestate:realestate@127.0.0.1:5432/realestate_test \
-  ./venv/bin/pytest          # 220 tests
+  ./venv/bin/pytest          # 267 tests
+```
+
+`main_frontend/` is the signed-in SvelteKit app (auth + price trends); it talks
+to the API only from its server (see `main_frontend/README.md`):
+
+```bash
+cd main_frontend && npm install && npm run check && npm run build
+API_BASE_URL=http://127.0.0.1:8000 npm run dev
 ```
 
 Docker needs `sudo` here — the user is not in the `docker` group.
@@ -105,6 +113,11 @@ answers become new graph versions after validation. Keep it that way.
   unsupported there). The
   adapter forces a tool call and falls back to the first JSON object in the
   reply; validation in the induction service is what actually guarantees shape.
+- **Market trends must use UTC end to end.** Buckets are cut with
+  `date_trunc(..., 'UTC')`, and the chart uses d3's `scaleUtc`. With
+  `scaleTime`, ticks sit at local midnight and, east of UTC, read a year early.
+- **Never store raw session tokens.** `AuthService` keeps only their sha256;
+  the raw token lives in the SvelteKit httpOnly cookie and nowhere else.
 - **Blob keys must be canonical and root-relative.** Every provider calls
   `validate_blob_key`, which rejects `..`, absolute paths and `a//b`, since
   external ids reach these keys. The S3 backend needs the `s3` extra
@@ -145,4 +158,5 @@ are allowed; unimplemented stubs return HTTP 501 regardless.
 
 No cross-source deduplication; no currency normalisation (`price_max` compares
 raw numbers across EGP and USD); location denormalised onto the listing row;
-auth covers only the ingestion trigger endpoint.
+user sessions guard `/auth/me` and `/markets/*` only (`/listings` stays open),
+with no login rate limiting or email verification yet.

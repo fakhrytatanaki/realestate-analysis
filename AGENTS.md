@@ -6,6 +6,7 @@
 - `core/tests/` contains tests and archived-page fixtures; `core/var/fixtures/` supplies sample listings.
 - `core/etc/`, `core/scripts/`, and `core/migrations/` hold settings templates, development scripts, and Aerich migrations.
 - `landing/` is an independent SvelteKit/TypeScript site; components live in `src/lib/components/`, routes in `src/routes/`, and assets in `static/`.
+- `main_frontend/` is the signed-in SvelteKit app (accounts, price trends). It calls the core API only from its server via `src/lib/server/api.ts`; see its README.
 - Read `docs/development.md` and `docs/architecture.md` before backend changes.
 
 ## Build, Test, and Development Commands
