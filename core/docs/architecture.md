@@ -161,6 +161,46 @@ longitude)` index, and a radius search runs in two steps:
 Both steps live behind `ListingRepository.search`. Moving to PostGIS later means
 rewriting that one class.
 
+## Accounts and sessions
+
+The app (`main_frontend/`) signs users in with email and password.
+
+- Passwords are hashed with argon2id behind the `PasswordHasher` port. Login
+  rehashes them transparently when the parameters rise.
+- Sessions are **opaque random tokens**, not JWTs, so logout really ends one.
+- Only the token's sha256 is stored (`user_session.token_hash`), so a leaked
+  row cannot be replayed.
+- `AuthService.authenticate` refreshes `last_used_at` at most once a minute,
+  which keeps request-time reads from turning into writes.
+- Unknown emails still pay for a hash verification, and every failure returns
+  the same message.
+
+The SvelteKit server is the only client. It keeps the token in an httpOnly
+cookie and calls the API server-to-server, which is why the API has no CORS
+configuration. `X-Admin-Key` remains separate and guards ingestion only.
+`[auth] allow_signup = false` closes registration.
+
+## Market trends
+
+`GET /markets/trends` aggregates `listing_observation`, the per-capture price
+history, rather than the `listing` row, so archived captures count at their
+capture date. `TortoiseMarketStatsRepository` runs one SQL statement per series
+(PostgreSQL only):
+
+1. It cuts buckets with `date_trunc(interval, observed_at, 'UTC')`, so they do
+   not depend on the session timezone.
+2. It uses `DISTINCT ON (listing_id, bucket)` to keep each listing's latest
+   observation per bucket. An advert archived ten times in a month counts once.
+3. It computes `percentile_cont` for the median and the interquartile range.
+   Buckets below `min_samples` return null figures, so the client draws gaps
+   instead of medians of two adverts.
+
+Only one price reading per listing type is comparable: `SALE` uses `TOTAL` and
+`RENT` uses `PER_MONTH` (`COMPARABLE_PRICE_TYPE`). Instalment, per-night and
+unknown prices are excluded. Price per m² divides by `listing.area_sqm`, because
+area is not stored per observation. This is an approximation that holds while
+adverts rarely change size.
+
 ## Known limitations
 
 - **No cross-source deduplication.** The same flat on two portals is two rows.
@@ -172,4 +212,11 @@ rewriting that one class.
   port is the natural fix.
 - **Denormalised location.** Good for the hot search path; a `Location` table
   with geocoding would be better for hierarchical queries.
-- **Auth** covers only the admin trigger endpoint. Read endpoints are open.
+- **Auth** protects the admin trigger endpoint (`X-Admin-Key`), and user
+  sessions protect `/auth/me` and `/markets/*`. `/listings` and `/sources` are
+  still open. There is no login rate limiting, email verification or password
+  reset yet.
+- **Trend quality follows extraction quality.** Medians are robust, but a
+  mis-parsed archived price (a monthly rent read as a sale, a per-m² figure read
+  as a total) still lands in a bucket. Thin historical periods are visibly
+  noisy.

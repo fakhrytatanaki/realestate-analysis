@@ -35,6 +35,15 @@ class AppSettings(BaseModel):
     admin_api_key: str | None = None
 
 
+class AuthSettings(BaseModel):
+    """User accounts for the app (not the admin key, which stays separate)."""
+
+    session_ttl_days: float = Field(default=30, gt=0)
+    #: Switch off to close self-service registration.
+    allow_signup: bool = True
+    min_password_length: int = Field(default=10, ge=8)
+
+
 class DbSettings(BaseModel):
     url: str = "postgres://realestate:realestate@127.0.0.1:5432/realestate"
     #: Generate schemas directly instead of running migrations (tests only).
@@ -150,6 +159,7 @@ class Settings(BaseSettings):
     )
 
     app: AppSettings = Field(default_factory=AppSettings)
+    auth: AuthSettings = Field(default_factory=AuthSettings)
     db: DbSettings = Field(default_factory=DbSettings)
     blob: BlobSettings = Field(default_factory=BlobSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)

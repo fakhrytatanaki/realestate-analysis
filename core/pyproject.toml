@@ -19,6 +19,7 @@ dependencies = [
     "apscheduler>=3.11,<4",
     "aiofiles>=25.1",
     "selectolax>=0.4",
+    "argon2-cffi>=25.1",
 ]
 
 [project.optional-dependencies]

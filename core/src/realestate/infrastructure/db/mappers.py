@@ -15,8 +15,16 @@ from realestate.domain.models import (
     Price,
     RawDocument,
     ScrapeRun,
+    Session,
+    User,
 )
-from realestate.infrastructure.db.models import ListingModel, RawDocumentModel, ScrapeRunModel
+from realestate.infrastructure.db.models import (
+    ListingModel,
+    RawDocumentModel,
+    ScrapeRunModel,
+    SessionModel,
+    UserModel,
+)
 
 
 def to_location(row: ListingModel) -> Location:
@@ -110,4 +118,27 @@ def to_scrape_run(row: ScrapeRunModel) -> ScrapeRun:
         listings_updated=row.listings_updated,
         errors=row.errors,
         error_message=row.error_message,
+    )
+
+
+def to_user(row: UserModel) -> User:
+    return User(
+        id=row.id,
+        email=row.email,
+        display_name=row.display_name,
+        password_hash=row.password_hash,
+        is_active=row.is_active,
+        created_at=row.created_at,
+    )
+
+
+def to_session(row: SessionModel) -> Session:
+    return Session(
+        id=row.id,
+        user_id=row.user_id,  # type: ignore[attr-defined]
+        token_hash=row.token_hash,
+        created_at=row.created_at,
+        expires_at=row.expires_at,
+        last_used_at=row.last_used_at,
+        user_agent=row.user_agent,
     )

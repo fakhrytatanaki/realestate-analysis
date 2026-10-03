@@ -80,6 +80,14 @@ class AuthorizationError(RealEstateError):
     """A privileged operation was attempted without valid credentials."""
 
 
+class ForbiddenError(RealEstateError):
+    """The operation is understood but switched off or not permitted."""
+
+
+class ConflictError(RealEstateError):
+    """The write would violate a uniqueness rule, e.g. an email already in use."""
+
+
 class UnrecognisedDocumentError(ParseError):
     """No extraction rule recognised the document yet.
 

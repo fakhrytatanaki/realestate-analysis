@@ -11,7 +11,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from realestate.domain.enums import RawDocumentStatus, RunStatus, RunTrigger
+from realestate.domain.enums import ListingType, RawDocumentStatus, RunStatus, RunTrigger
+from realestate.domain.market import RegionSummary, TrendPoint, TrendQuery
 from realestate.domain.models import (
     BlobRef,
     Listing,
@@ -20,7 +21,9 @@ from realestate.domain.models import (
     RawDocument,
     RawPayload,
     ScrapeRun,
+    Session,
     UpsertResult,
+    User,
 )
 from realestate.domain.query import ListingQuery
 
@@ -150,3 +153,69 @@ class ScrapeRunRepository(ABC):
     @abstractmethod
     async def latest_per_source(self) -> dict[str, ScrapeRun]:
         """Most recent run for each source, keyed by source key."""
+
+
+class UserRepository(ABC):
+    """Accounts."""
+
+    @abstractmethod
+    async def add(self, user: User) -> User:
+        """Persist a new user.
+
+        Raises:
+            ConflictError: if the email is already registered.
+        """
+
+    @abstractmethod
+    async def get(self, user_id: UUID) -> User | None:
+        """Fetch one user by primary key."""
+
+    @abstractmethod
+    async def get_by_email(self, email: str) -> User | None:
+        """Fetch one user by their normalised email."""
+
+    @abstractmethod
+    async def update_password_hash(self, user_id: UUID, password_hash: str) -> None:
+        """Replace the stored hash, e.g. after upgrading the hashing parameters."""
+
+
+class SessionRepository(ABC):
+    """Signed-in sessions, looked up by the hash of their bearer token."""
+
+    @abstractmethod
+    async def add(self, session: Session) -> Session:
+        """Persist a new session."""
+
+    @abstractmethod
+    async def get_by_token_hash(self, token_hash: str) -> Session | None:
+        """Fetch the session a token belongs to, expired or not."""
+
+    @abstractmethod
+    async def touch(self, session_id: UUID, *, at: datetime) -> None:
+        """Record that the session was just used."""
+
+    @abstractmethod
+    async def delete(self, session_id: UUID) -> None:
+        """End one session. Deleting a missing session is not an error."""
+
+    @abstractmethod
+    async def delete_for_user(self, user_id: UUID) -> int:
+        """End every session of a user; returns how many were removed."""
+
+
+class MarketStatsRepository(ABC):
+    """Aggregates over the price history (``listing_observation``)."""
+
+    @abstractmethod
+    async def price_trend(self, query: TrendQuery) -> list[TrendPoint]:
+        """One point per interval bucket that has any observation, oldest first.
+
+        Each listing counts at most once per bucket (its latest observation in
+        that bucket), so an advert captured many times cannot outweigh others.
+        """
+
+    @abstractmethod
+    async def regions(
+        self, *, country_code: str | None, listing_type: ListingType | None
+    ) -> list[RegionSummary]:
+        """Every ``(country, city, district)`` with price history, busiest first."""

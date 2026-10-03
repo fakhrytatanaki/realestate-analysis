@@ -244,3 +244,35 @@ class SourceDescriptor:
     implemented: bool
     interval_minutes: float | None = None
     crontab: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class User:
+    """An account that may sign in to the app.
+
+    ``email`` is stored normalised (stripped, lower-cased) so lookups are exact.
+    """
+
+    id: UUID
+    email: str
+    display_name: str
+    password_hash: str
+    is_active: bool
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class Session:
+    """A signed-in browser session.
+
+    Only the sha256 of the bearer token is kept: a leaked row cannot be replayed,
+    and the raw token exists solely in the client's cookie.
+    """
+
+    id: UUID
+    user_id: UUID
+    token_hash: str
+    created_at: datetime
+    expires_at: datetime
+    last_used_at: datetime
+    user_agent: str | None = None

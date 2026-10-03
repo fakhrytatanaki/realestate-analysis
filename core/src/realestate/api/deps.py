@@ -12,11 +12,14 @@ from typing import Annotated
 
 from fastapi import Depends, Header, Request
 
+from realestate.application.services.auth_service import AuthService
 from realestate.application.services.ingestion_service import IngestionService
 from realestate.application.services.listing_query_service import ListingQueryService
+from realestate.application.services.market_service import MarketTrendService
 from realestate.bootstrap import Container
 from realestate.config.settings import Settings
 from realestate.domain.exceptions import AuthorizationError
+from realestate.domain.models import User
 from realestate.domain.ports.job_scheduler import JobScheduler
 from realestate.domain.ports.log_provider import LogProvider
 from realestate.domain.ports.repositories import ScrapeRunRepository
@@ -37,6 +40,14 @@ def get_settings(container: ContainerDep) -> Settings:
 
 def get_queries(container: ContainerDep) -> ListingQueryService:
     return container.queries
+
+
+def get_auth(container: ContainerDep) -> AuthService:
+    return container.auth
+
+
+def get_markets(container: ContainerDep) -> MarketTrendService:
+    return container.markets
 
 
 def get_ingestion(container: ContainerDep) -> IngestionService:
@@ -61,6 +72,8 @@ def get_log(container: ContainerDep) -> LogProvider:
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 QueryServiceDep = Annotated[ListingQueryService, Depends(get_queries)]
+AuthServiceDep = Annotated[AuthService, Depends(get_auth)]
+MarketServiceDep = Annotated[MarketTrendService, Depends(get_markets)]
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion)]
 RegistryDep = Annotated[DataSourceRegistry, Depends(get_registry)]
 RunRepositoryDep = Annotated[ScrapeRunRepository, Depends(get_runs)]
@@ -87,3 +100,24 @@ def require_admin(
 
 
 AdminDep = Annotated[None, Depends(require_admin)]
+
+
+def bearer_token(
+    authorization: Annotated[str | None, Header()] = None,
+) -> str:
+    """The token from ``Authorization: Bearer <token>``."""
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        raise AuthorizationError("a valid Authorization: Bearer token is required")
+    return token.strip()
+
+
+BearerTokenDep = Annotated[str, Depends(bearer_token)]
+
+
+async def get_current_user(auth: AuthServiceDep, token: BearerTokenDep) -> User:
+    """The signed-in user, or 401."""
+    return await auth.authenticate(token)
+
+
+CurrentUserDep = Annotated[User, Depends(get_current_user)]

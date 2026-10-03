@@ -7,6 +7,11 @@ env = "local"          # local | staging | production
 debug = true
 admin_api_key = "dev-admin-key"   # required by POST /api/v1/sources/{key}/runs
 
+[auth]                       # app user accounts (main_frontend sign-in)
+session_ttl_days = 30
+allow_signup = true          # false closes self-service registration
+min_password_length = 10
+
 [db]
 url = "postgres://realestate:realestate@127.0.0.1:5432/realestate"
 

@@ -11,6 +11,7 @@ process that only needs the CLI never opens a scheduler.
 from __future__ import annotations
 
 import os
+from datetime import timedelta
 from functools import cached_property
 
 from tortoise import Tortoise
@@ -21,9 +22,11 @@ from realestate.application.services.archive_crawl_service import (
     ArchiveCrawlService,
     CrawlSettings,
 )
+from realestate.application.services.auth_service import AuthService, AuthSettings
 from realestate.application.services.frontier_link_sink import FrontierLinkSink
 from realestate.application.services.ingestion_service import IngestionService
 from realestate.application.services.listing_query_service import ListingQueryService
+from realestate.application.services.market_service import MarketTrendService
 from realestate.application.services.rule_induction_service import (
     InductionSettings,
     RuleInductionService,
@@ -41,8 +44,11 @@ from realestate.domain.ports.llm import StructuredLlm
 from realestate.domain.ports.log_provider import LogProvider
 from realestate.domain.ports.repositories import (
     ListingRepository,
+    MarketStatsRepository,
     RawDocumentRepository,
     ScrapeRunRepository,
+    SessionRepository,
+    UserRepository,
 )
 from realestate.domain.ports.rules import (
     LlmDecisionRepository,
@@ -50,6 +56,7 @@ from realestate.domain.ports.rules import (
     RuleGapRepository,
     RuleGraphRepository,
 )
+from realestate.domain.ports.security import PasswordHasher
 from realestate.infrastructure.archive.wayback import WaybackCdxIndex, WaybackClient
 from realestate.infrastructure.blob.factory import BlobProviderFactory
 from realestate.infrastructure.db.repositories.crawl import (
@@ -57,6 +64,7 @@ from realestate.infrastructure.db.repositories.crawl import (
     TortoiseCrawlFrontierRepository,
 )
 from realestate.infrastructure.db.repositories.listing import TortoiseListingRepository
+from realestate.infrastructure.db.repositories.market import TortoiseMarketStatsRepository
 from realestate.infrastructure.db.repositories.raw_document import TortoiseRawDocumentRepository
 from realestate.infrastructure.db.repositories.rules import (
     TortoiseLlmDecisionRepository,
@@ -64,10 +72,15 @@ from realestate.infrastructure.db.repositories.rules import (
     TortoiseRuleGraphRepository,
 )
 from realestate.infrastructure.db.repositories.scrape_run import TortoiseScrapeRunRepository
+from realestate.infrastructure.db.repositories.user import (
+    TortoiseSessionRepository,
+    TortoiseUserRepository,
+)
 from realestate.infrastructure.extraction.engine import HtmlRuleEngine
 from realestate.infrastructure.llm.ollama import OllamaLlm, OllamaSettings
 from realestate.infrastructure.logging.factory import LogProviderFactory
 from realestate.infrastructure.scheduling.apscheduler_scheduler import ApSchedulerJobScheduler
+from realestate.infrastructure.security.argon2_hasher import Argon2PasswordHasher
 from realestate.infrastructure.sources.defaults import register_default_sources
 from realestate.infrastructure.sources.registry import DataSourceRegistry
 
@@ -103,6 +116,22 @@ class Container:
     @cached_property
     def runs(self) -> ScrapeRunRepository:
         return TortoiseScrapeRunRepository()
+
+    @cached_property
+    def users(self) -> UserRepository:
+        return TortoiseUserRepository()
+
+    @cached_property
+    def sessions(self) -> SessionRepository:
+        return TortoiseSessionRepository()
+
+    @cached_property
+    def password_hasher(self) -> PasswordHasher:
+        return Argon2PasswordHasher()
+
+    @cached_property
+    def market_stats(self) -> MarketStatsRepository:
+        return TortoiseMarketStatsRepository()
 
     @cached_property
     def registry(self) -> DataSourceRegistry:
@@ -232,6 +261,24 @@ class Container:
     @cached_property
     def queries(self) -> ListingQueryService:
         return ListingQueryService(listings=self.listings, documents=self.documents)
+
+    @cached_property
+    def auth(self) -> AuthService:
+        config = self.settings.auth
+        return AuthService(
+            users=self.users,
+            sessions=self.sessions,
+            hasher=self.password_hasher,
+            settings=AuthSettings(
+                session_ttl=timedelta(days=config.session_ttl_days),
+                allow_signup=config.allow_signup,
+                min_password_length=config.min_password_length,
+            ),
+        )
+
+    @cached_property
+    def markets(self) -> MarketTrendService:
+        return MarketTrendService(stats=self.market_stats)
 
     # -- lifecycle --------------------------------------------------------
 

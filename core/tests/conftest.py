@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncIterator, Sequence
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -17,6 +18,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from realestate.domain.enums import ListingType, PriceType, PropertyType, SortOrder
+from realestate.domain.exceptions import ConflictError
 from realestate.domain.models import (
     GeoPoint,
     Listing,
@@ -24,10 +26,17 @@ from realestate.domain.models import (
     Location,
     Page,
     Price,
+    Session,
     UpsertResult,
+    User,
 )
 from realestate.domain.ports.log_provider import LogProvider
-from realestate.domain.ports.repositories import ListingRepository
+from realestate.domain.ports.repositories import (
+    ListingRepository,
+    SessionRepository,
+    UserRepository,
+)
+from realestate.domain.ports.security import PasswordHasher
 from realestate.domain.query import ListingQuery
 from realestate.infrastructure.db.geo import haversine_km
 
@@ -250,6 +259,8 @@ async def initialised_db(integration_db_url: str) -> AsyncIterator[None]:
             RuleGapModel,
             RuleGraphModel,
             ScrapeRunModel,
+            SessionModel,
+            UserModel,
         )
 
         archive_models = (
@@ -264,6 +275,8 @@ async def initialised_db(integration_db_url: str) -> AsyncIterator[None]:
         await ListingModel.all().delete()
         await RawDocumentModel.all().delete()
         await ScrapeRunModel.all().delete()
+        await SessionModel.all().delete()
+        await UserModel.all().delete()
         await Tortoise.close_connections()
 
 
@@ -418,3 +431,70 @@ class InMemoryScrapeRunRepository:
         for run in sorted(self.runs.values(), key=lambda r: r.started_at, reverse=True):
             latest.setdefault(run.source_key, run)
         return latest
+
+
+class FakePasswordHasher(PasswordHasher):
+    """Reversible and instant, so auth tests do not pay for argon2.
+
+    ``version`` lets a test simulate stronger parameters: hashes made with an
+    older version report ``needs_rehash``.
+    """
+
+    def __init__(self, version: int = 1) -> None:
+        self.version = version
+
+    def hash(self, password: str) -> str:
+        return f"fake${self.version}${password}"
+
+    def verify(self, password_hash: str, password: str) -> bool:
+        return password_hash.split("$", 2)[-1] == password
+
+    def needs_rehash(self, password_hash: str) -> bool:
+        return not password_hash.startswith(f"fake${self.version}$")
+
+
+class InMemoryUserRepository(UserRepository):
+    def __init__(self) -> None:
+        self.users: dict[UUID, User] = {}
+
+    async def add(self, user: User) -> User:
+        if any(existing.email == user.email for existing in self.users.values()):
+            raise ConflictError("an account with this email already exists")
+        self.users[user.id] = user
+        return user
+
+    async def get(self, user_id: UUID) -> User | None:
+        return self.users.get(user_id)
+
+    async def get_by_email(self, email: str) -> User | None:
+        return next((user for user in self.users.values() if user.email == email), None)
+
+    async def update_password_hash(self, user_id: UUID, password_hash: str) -> None:
+        self.users[user_id] = replace(self.users[user_id], password_hash=password_hash)
+
+
+class InMemorySessionRepository(SessionRepository):
+    def __init__(self) -> None:
+        self.sessions: dict[UUID, Session] = {}
+
+    async def add(self, session: Session) -> Session:
+        self.sessions[session.id] = session
+        return session
+
+    async def get_by_token_hash(self, token_hash: str) -> Session | None:
+        return next(
+            (item for item in self.sessions.values() if item.token_hash == token_hash), None
+        )
+
+    async def touch(self, session_id: UUID, *, at: datetime) -> None:
+        if session_id in self.sessions:
+            self.sessions[session_id] = replace(self.sessions[session_id], last_used_at=at)
+
+    async def delete(self, session_id: UUID) -> None:
+        self.sessions.pop(session_id, None)
+
+    async def delete_for_user(self, user_id: UUID) -> int:
+        doomed = [key for key, item in self.sessions.items() if item.user_id == user_id]
+        for key in doomed:
+            del self.sessions[key]
+        return len(doomed)

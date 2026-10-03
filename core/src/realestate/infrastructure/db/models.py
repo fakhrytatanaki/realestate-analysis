@@ -328,3 +328,35 @@ class LlmDecisionModel(Model):
     class Meta:
         table = "llm_decision"
         indexes = (("task", "input_fp", "model", "prompt_version"),)
+
+
+class UserModel(Model):
+    """An account. ``user`` is reserved in PostgreSQL, hence ``app_user``."""
+
+    id = fields.UUIDField(primary_key=True)
+    #: Stored normalised (stripped, lower-cased), so a plain unique index suffices.
+    email = fields.CharField(max_length=254, unique=True)
+    display_name = fields.CharField(max_length=128)
+    password_hash = fields.CharField(max_length=255)
+    is_active = fields.BooleanField(default=True)
+    created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        table = "app_user"
+
+
+class SessionModel(Model):
+    """A signed-in session, keyed by the sha256 of its bearer token."""
+
+    id = fields.UUIDField(primary_key=True)
+    user: fields.ForeignKeyRelation[UserModel] = fields.ForeignKeyField(
+        "models.UserModel", related_name="sessions", on_delete=fields.CASCADE
+    )
+    token_hash = fields.CharField(max_length=64, unique=True)
+    expires_at = fields.DatetimeField(db_index=True)
+    last_used_at = fields.DatetimeField()
+    user_agent = fields.CharField(max_length=512, null=True)
+    created_at = fields.DatetimeField()
+
+    class Meta:
+        table = "user_session"
