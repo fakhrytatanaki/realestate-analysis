@@ -86,6 +86,18 @@ class InMemoryListingRepository(ListingRepository):
             return len(self.listings)
         return sum(1 for item in self.listings.values() if item.source_key == source_key)
 
+    async def list_for_source(self, source_key: str) -> list[Listing]:
+        return sorted(
+            (item for item in self.listings.values() if item.source_key == source_key),
+            key=lambda item: item.external_id,
+        )
+
+    async def delete_source(self, source_key: str) -> int:
+        doomed = [key for key, item in self.listings.items() if item.source_key == source_key]
+        for key in doomed:
+            del self.listings[key]
+        return len(doomed)
+
 
 def _matches(listing: Listing, query: ListingQuery) -> bool:
     if query.listing_type is not None and listing.listing_type is not query.listing_type:
@@ -299,7 +311,15 @@ class InMemoryRawDocumentRepository:
     async def get(self, document_id):  # type: ignore[no-untyped-def]
         return self.documents.get(document_id)
 
-    async def list_by_status(self, *, source_key=None, status=None, limit=100, fetched_after=None):  # type: ignore[no-untyped-def]
+    async def list_by_status(  # type: ignore[no-untyped-def]
+        self,
+        *,
+        source_key=None,
+        status=None,
+        limit=100,
+        fetched_after=None,
+        graph_version_below=None,
+    ):
         from realestate.domain.enums import RawDocumentStatus
 
         status = status or RawDocumentStatus.PENDING
@@ -308,16 +328,25 @@ class InMemoryRawDocumentRepository:
             for document in self.documents.values()
             if document.status is status
             and (source_key is None or document.source_key == source_key)
+            and (
+                graph_version_below is None
+                or document.graph_version is None
+                or document.graph_version < graph_version_below
+            )
         ][:limit]
 
-    async def mark_parsed(self, document_id):  # type: ignore[no-untyped-def]
+    async def mark_parsed(self, document_id, *, graph_version=None, report=None):  # type: ignore[no-untyped-def]
         from dataclasses import replace
 
         from realestate.domain.enums import RawDocumentStatus
 
         document = self.documents[document_id]
         self.documents[document_id] = replace(
-            document, status=RawDocumentStatus.PARSED, parsed_at=datetime.now(UTC)
+            document,
+            status=RawDocumentStatus.PARSED,
+            parsed_at=datetime.now(UTC),
+            graph_version=graph_version,
+            parse_report=dict(report) if report is not None else None,
         )
 
     async def mark_failed(self, document_id, error):  # type: ignore[no-untyped-def]
@@ -333,15 +362,33 @@ class InMemoryRawDocumentRepository:
             attempts=document.attempts + 1,
         )
 
-    async def mark_unrecognised(self, document_id, reason):  # type: ignore[no-untyped-def]
+    async def mark_unrecognised(self, document_id, reason, *, graph_version=None, report=None):  # type: ignore[no-untyped-def]
         from dataclasses import replace
 
         from realestate.domain.enums import RawDocumentStatus
 
         document = self.documents[document_id]
         self.documents[document_id] = replace(
-            document, status=RawDocumentStatus.UNRECOGNISED, parse_error=reason
+            document,
+            status=RawDocumentStatus.UNRECOGNISED,
+            parse_error=reason,
+            graph_version=graph_version,
+            parse_report=dict(report) if report is not None else None,
         )
+
+    async def reset_status(self, source_key, *, from_statuses, to_status=None):  # type: ignore[no-untyped-def]
+        from dataclasses import replace
+
+        from realestate.domain.enums import RawDocumentStatus
+
+        moved = 0
+        for document_id, document in list(self.documents.items()):
+            if document.source_key == source_key and document.status in from_statuses:
+                self.documents[document_id] = replace(
+                    document, status=to_status or RawDocumentStatus.PENDING, parse_error=None
+                )
+                moved += 1
+        return moved
 
     async def find_by_sha256(self, source_key, sha256):  # type: ignore[no-untyped-def]
         for document in self.documents.values():
@@ -380,6 +427,7 @@ class InMemoryScrapeRunRepository:
         listings_updated=0,
         errors=0,
         error_message=None,
+        stats=None,
     ):
         from dataclasses import replace
 
@@ -392,6 +440,7 @@ class InMemoryScrapeRunRepository:
             listings_updated=listings_updated,
             errors=errors,
             error_message=error_message,
+            stats=dict(stats or {}),
         )
         self.runs[run_id] = run
         return run

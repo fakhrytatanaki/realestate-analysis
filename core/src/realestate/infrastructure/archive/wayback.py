@@ -14,7 +14,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from typing import Any
 
@@ -24,7 +24,10 @@ from realestate.domain.archive import Capture, parse_timestamp
 from realestate.domain.exceptions import FetchError
 from realestate.domain.ports.archive import ArchiveIndex, CapturePage
 from realestate.domain.ports.log_provider import LogProvider
+from realestate.infrastructure.archive.rate_gate import RateGate
 
+#: Name of the shared rate gate every client of the archive draws slots from.
+ARCHIVE_GATE = "web.archive.org"
 CDX_ENDPOINT = "https://web.archive.org/cdx/search/cdx"
 REPLAY_PREFIX = "https://web.archive.org/web"
 #: Override per source with ``params.user_agent``, ideally adding a contact address.
@@ -66,7 +69,9 @@ class WaybackClient:
         *,
         log: LogProvider,
         transport: httpx.AsyncBaseTransport | None = None,
+        gate: RateGate | None = None,
     ) -> None:
+        self._gate = gate
         self._settings = settings or WaybackSettings()
         self._log = log
         self._transport = transport
@@ -98,8 +103,16 @@ class WaybackClient:
         """
         last_error = "no attempt made"
         for attempt in range(1, self._settings.max_retries + 1):
-            async with self._lock:  # single flight, and the delay is per client
-                wait = self._settings.min_delay_seconds - (time.monotonic() - self._last_request_at)
+            async with self._lock:  # single flight within this client
+                if self._gate is not None:
+                    # The delay is shared with every other client and process.
+                    wait = await self._gate.reserve(
+                        ARCHIVE_GATE, interval=self._settings.min_delay_seconds
+                    )
+                else:
+                    wait = self._settings.min_delay_seconds - (
+                        time.monotonic() - self._last_request_at
+                    )
                 if wait > 0:
                     await asyncio.sleep(wait)
                 started = time.monotonic()
@@ -124,7 +137,7 @@ class WaybackClient:
                     self._cooldown = self._settings.rate_limit_cooldown_seconds
                     return response
                 if response.status_code in (403, 404, 410):
-                    raise FetchError(f"{response.status_code} for {response.url}")
+                    raise FetchError(f"{response.status_code} for {response.url}", retryable=False)
                 last_error = f"HTTP {response.status_code}"
                 if response.status_code == 429:
                     pause = _retry_after(response) or self._cooldown
@@ -132,6 +145,8 @@ class WaybackClient:
                     await self._log.warning(
                         "archive rate limit, cooling down", url=url, seconds=round(pause)
                     )
+                    if self._gate is not None:
+                        await self._gate.hold(ARCHIVE_GATE, seconds=pause)
                     await asyncio.sleep(pause)
                     continue
             if attempt < self._settings.max_retries:
@@ -242,6 +257,39 @@ class WaybackCdxIndex(ArchiveIndex):
             if not next_key or not captures:
                 return
             resume_key = next_key
+
+
+    async def lookup(
+        self,
+        url: str,
+        *,
+        around: str | None = None,
+        window_days: int = 183,
+        limit: int = 5,
+    ) -> list[Capture]:
+        params: dict[str, Any] = {
+            "url": url,
+            "matchType": "exact",
+            "filter": ["statuscode:200", "mimetype:text/html"],
+            "fl": "urlkey,timestamp,original,digest",
+            "output": "json",
+            "limit": str(limit),
+            "collapse": "digest",
+        }
+        if around:
+            centre = parse_timestamp(around)
+            window = timedelta(days=window_days)
+            params["from"] = (centre - window).strftime("%Y%m%d")
+            params["to"] = (centre + window).strftime("%Y%m%d")
+            # Nearest captures first (supported for exact-URL queries).
+            params["sort"] = "closest"
+            params["closest"] = centre.strftime("%Y%m%d%H%M%S")
+        response = await self._client.get(CDX_ENDPOINT, params=params)
+        captures, _ = parse_cdx_json(response.json() if response.content.strip() else [])
+        await self._client.log.debug(
+            "cdx lookup", url=url, around=around, captures=len(captures)
+        )
+        return captures[:limit]
 
 
 def parse_cdx_json(rows: list[list[str]]) -> tuple[list[Capture], str | None]:

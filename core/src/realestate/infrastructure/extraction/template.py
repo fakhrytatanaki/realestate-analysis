@@ -33,18 +33,20 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
+from functools import partial
 from typing import Any
 
 from selectolax.lexbor import LexborNode
 
-from realestate.domain.archive import DiscoveredLink, surt_key
+from realestate.domain.archive import DiscoveredLink, IdentityPolicy, is_site_root, surt_key
 from realestate.domain.enums import LinkRel, ListingType, PageKind, PriceType, PropertyType
 from realestate.domain.models import ListingDraft, Location, Price
 from realestate.infrastructure.extraction.conditions import compiled
 from realestate.infrastructure.extraction.document import ParsedDocument, select
+from realestate.infrastructure.extraction.geo import foreign_signal, is_country_name, resolve_city
 from realestate.infrastructure.extraction.jsondata import decode_attribute, first_scalar, resolve
 from realestate.infrastructure.extraction.normalisers import (
     detect_currency,
@@ -107,6 +109,9 @@ class TemplateResult:
     vocab_misses: list[str] = field(default_factory=list)
     #: Declared fields that produced no value on any item.
     empty_fields: list[str] = field(default_factory=list)
+    #: Recipe faults that did not cost the item (a ``url`` recipe pointing at
+    #: the home page, rescued by the page URL); induction rejects on them.
+    warnings: list[str] = field(default_factory=list)
 
 
 def run_template(
@@ -117,8 +122,12 @@ def run_template(
     template_key: str,
     graph_version: int,
     country_code: str | None,
+    identity: IdentityPolicy | None = None,
 ) -> TemplateResult:
     """Apply ``spec`` to ``document``.
+
+    With an ``identity`` policy, external ids come from advert URLs through
+    that policy rather than from whatever the template's selectors found.
 
     Raises:
         TemplateError: when the spec itself is unusable.
@@ -147,6 +156,9 @@ def run_template(
         filled.update(name for name, value in values.items() if value)
         draft, problem, miss = _build_draft(
             values,
+            full_price=partial(_price_fulltext, fields.get("price") or (), item, document),
+            identity=identity,
+            warnings=result.warnings,
             item=item,
             document=document,
             vocab=merged_vocab,
@@ -169,6 +181,7 @@ def run_template(
 
     if items:
         result.empty_fields = [name for name in fields if name not in filled]
+    result.warnings = list(dict.fromkeys(result.warnings))
     result.links.extend(_links(spec.get("links") or [], document))
     result.links = _unique_links(result.links, exclude=document.url)
     return result
@@ -217,7 +230,30 @@ def _field_value(
     return None
 
 
-def _one_value(spec: Mapping[str, Any], item: _Item, document: ParsedDocument) -> str | None:
+def _price_fulltext(
+    alternatives: Sequence[Mapping[str, Any]], item: _Item, document: ParsedDocument
+) -> str | None:
+    """The whole text behind a price alternative that a regex narrowed.
+
+    A recipe such as ``([\\d,.]+)`` captures the dot of ``ج.م125,000`` rather
+    than the amount; the complete text, read by the price normaliser, is the
+    fallback -- trusted only with an explicit currency marker, so a title's
+    "3 bedrooms" or a year never becomes a price.
+    """
+    for spec in alternatives:
+        if not spec.get("regex"):
+            continue
+        text = _one_value(spec, item, document, ignore_regex=True)
+        if text and detect_currency(text)[0]:
+            return text
+    return None
+
+
+def _one_value(
+    spec: Mapping[str, Any], item: _Item, document: ParsedDocument, *, ignore_regex: bool = False
+) -> str | None:
+    if ignore_regex:
+        spec = {key: value for key, value in spec.items() if key != "regex"}
     if spec.get("const") is not None:
         return str(spec["const"])
     scope_page = spec.get("scope") == "page"
@@ -374,9 +410,72 @@ def _vocab_lookup(
     return None
 
 
+def _identify(
+    values: Mapping[str, str | None],
+    *,
+    item: _Item,
+    document: ParsedDocument,
+    identity: IdentityPolicy | None,
+    warnings: list[str],
+) -> tuple[str | None, str | None, str]:
+    """``(url, external_id, problem)``; ``external_id`` is ``None`` on failure.
+
+    Without a policy, the template's id wins and a URL hash is the fallback --
+    but never a hash of a bare site root, which would merge every advert whose
+    template mis-pointed at the logo link into one identity.
+
+    With a policy, an advert URL's id is authoritative; the template's own id
+    must agree with it, and is used alone only when no URL names the advert.
+    A whole-page item whose ``url`` field is not an advert (the home page)
+    falls back to the archived page URL itself.
+    """
+    url = absolute_url(values.get("url"), document.url)
+    if url and len(url) > _MAX_URL:
+        url = None
+    page_url = absolute_url(document.url, document.url) if item.whole_page else None
+    template_id = clean_text(values.get("external_id"))[:_MAX_EXTERNAL_ID] or None
+    if url is not None and (
+        is_site_root(url) or (identity is not None and identity.rejects(url))
+    ):
+        warnings.append("url field is not an advert url (site home or a category page)")
+
+    if identity is None:
+        if url is None or (item.whole_page and is_site_root(url)):
+            url = page_url or url
+        if template_id:
+            return url, template_id, ""
+        if url and not is_site_root(url):
+            return url, "u:" + hashlib.sha1(surt_key(url).encode()).hexdigest()[:20], ""
+        return url, None, "no external id and no url"
+
+    if url is not None and identity.rejects(url):
+        url = None
+    url_id = identity.canonical_id(url)
+    if url_id is None and page_url is not None:
+        page_id = identity.canonical_id(page_url)
+        if page_id is not None or url is None:
+            url, url_id = page_url, page_id
+    if url_id is not None:
+        if template_id and not _same_id(url_id, template_id):
+            return url, None, f"identity conflict: url says {url_id}, template says {template_id}"
+        return url, url_id[:_MAX_EXTERNAL_ID], ""
+    if template_id:
+        return url, template_id, ""
+    return url, None, "no advert identity"
+
+
+def _same_id(url_id: str, template_id: str) -> bool:
+    """``"iid-487590261"`` and ``"487590261"`` are one advert; ``"5123"`` and ``"12"`` are not."""
+    pattern = rf"(?<![0-9A-Za-z]){re.escape(url_id)}(?![0-9A-Za-z])"
+    return template_id == url_id or re.search(pattern, template_id) is not None
+
+
 def _build_draft(
     values: Mapping[str, str | None],
     *,
+    full_price: Callable[[], str | None] = lambda: None,
+    identity: IdentityPolicy | None = None,
+    warnings: list[str] | None = None,
     item: _Item,
     document: ParsedDocument,
     vocab: Mapping[str, Sequence[Mapping[str, Any]]],
@@ -390,18 +489,15 @@ def _build_draft(
     if not title:
         return None, "no title", None
 
-    url = absolute_url(values.get("url"), document.url)
-    if url is None and item.whole_page:
-        url = absolute_url(document.url, document.url)
-    if url and len(url) > _MAX_URL:
-        url = None
-
-    external_id = clean_text(values.get("external_id"))
-    if not external_id and url:
-        external_id = "u:" + hashlib.sha1(surt_key(url).encode()).hexdigest()[:20]
-    if not external_id:
-        return None, "no external id and no url", None
-    external_id = external_id[:_MAX_EXTERNAL_ID]
+    url, external_id, problem = _identify(
+        values,
+        item=item,
+        document=document,
+        identity=identity,
+        warnings=warnings if warnings is not None else [],
+    )
+    if external_id is None:
+        return None, problem, None
 
     category = clean_text(values.get("category"))
     # The item's own text before page-wide context: list rows often carry the
@@ -421,7 +517,13 @@ def _build_draft(
         document.url,
         document.title,
     ]
-    listing_value = _vocab_lookup(vocab.get("listing_type", []), context)
+    # Unambiguous first: "Shops for Rent - Sale" names both, so the next text
+    # (the title) decides rather than whichever vocabulary entry is listed
+    # first -- which remains the fallback when no text is decisive.
+    listing_entries = vocab.get("listing_type", [])
+    listing_value = _vocab_lookup(listing_entries, context, unambiguous=True) or _vocab_lookup(
+        listing_entries, context
+    )
     try:
         listing_type = ListingType(listing_value) if listing_value else None
     except ValueError:
@@ -443,11 +545,19 @@ def _build_draft(
     except ValueError:
         property_type = PropertyType.OTHER
 
-    parsed = parse_price(
-        values.get("price"),
-        listing_type=listing_type,
-        default_currency=str(default_currency).upper() if default_currency else None,
-    )
+    currency_default = str(default_currency).upper() if default_currency else None
+    raw_price = values.get("price")
+    parsed = parse_price(raw_price, listing_type=listing_type, default_currency=currency_default)
+    price_source = "field" if parsed.amount is not None else None
+    if parsed.amount is None and parsed.price_type is not PriceType.ON_REQUEST:
+        whole = full_price()
+        if whole and whole != raw_price:
+            from_text = parse_price(
+                whole, listing_type=listing_type, default_currency=currency_default
+            )
+            if from_text.amount is not None or from_text.price_type is PriceType.ON_REQUEST:
+                parsed, raw_price = from_text, whole
+                price_source = "field_fulltext" if from_text.amount is not None else None
     price_from_title = False
     if parsed.amount is None and parsed.price_type is not PriceType.ON_REQUEST:
         # Some adverts state the price only in the title ("2b, Red Sea -
@@ -457,7 +567,7 @@ def _build_draft(
         if title_currency:
             from_title = parse_price(title, listing_type=listing_type)
             if from_title.amount is not None:
-                parsed, price_from_title = from_title, True
+                parsed, price_from_title, price_source = from_title, True, "title"
     currency = parsed.currency
     explicit_currency = None if price_from_title else values.get("currency")
     if explicit_currency:
@@ -468,7 +578,15 @@ def _build_draft(
             currency = explicit_currency.strip().upper()
 
     location_name = clean_text(values.get("location"), max_length=512) or "unknown"
-    city = clean_text(values.get("city"), max_length=128) or None
+    # A curated place table, never hyphen-splitting: "al-Bah̨r-al-Ah̨mar" is
+    # one name. A template's city that names no known place is kept unless it
+    # is the country itself, which says nothing.
+    city_text = clean_text(values.get("city"), max_length=128) or None
+    city = resolve_city(city_text, country_code) or resolve_city(
+        values.get("location"), country_code
+    )
+    if city is None and city_text and not is_country_name(city_text, country_code):
+        city = city_text
     district = clean_text(values.get("district"), max_length=128) or None
 
     attributes: dict[str, Any] = {}
@@ -478,18 +596,21 @@ def _build_draft(
     for name, value in values.items():
         if name.startswith("extra.") and value:
             attributes[name.removeprefix("extra.")] = value
+    abroad = foreign_signal(title, country_code)
+    if abroad:
+        attributes["_flags"] = [f"foreign_location_signal:{abroad}"]
     attributes["_extraction"] = {
         "template": template_key,
         "graph_version": graph_version,
         "page_url": document.url,
     }
     attributes["_raw"] = {
-        key: values[key]
-        for key in ("price", "listed_at", "category", "location", "area")
-        if values.get(key)
+        key: values[key] for key in ("listed_at", "category", "location", "area") if values.get(key)
     }
-    if price_from_title:
-        attributes["_raw"]["price_source"] = "title"
+    if raw_price:
+        attributes["_raw"]["price"] = raw_price
+    if price_source:
+        attributes["_raw"]["price_source"] = price_source
 
     area: Decimal | None = parse_area(values.get("area"))
     draft = ListingDraft(

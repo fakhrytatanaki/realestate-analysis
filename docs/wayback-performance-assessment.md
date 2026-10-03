@@ -31,6 +31,58 @@ The most consequential findings are:
 These are measurements of this deployment and its stored rules, not an estimate
 of all OLX captures available from the Internet Archive.
 
+## Status after fixes
+
+Same day, same 340 archived documents. The rest of this page still describes the
+state that was assessed. The P0/P1 changes (identity policy, full-text price
+parsing, curated templates, induction correctness gates, parse provenance,
+version-aware replay, per-year capture caps, stratified fetch order, claimed and
+acknowledged fetches) were applied to this database. Curated templates were
+installed as extraction graph v9 with the faulty induced
+`tpl.v1/v3/v4` list and `tpl.v6/v8` detail templates retired, and the source was
+rebuilt from its blobs with `archive rebuild`. A JSON backup of the previous rows
+was kept under `var/audit/`.
+
+| Measure | Assessed (v8) | After rebuild (v9) |
+|---|---:|---:|
+| Listings | 1,182 | 1,200 |
+| Homepage-hash (`u:`) identities | 9 | 0 |
+| Detail adverts → distinct emitted ids | 149 → 9 | 149 → 149 |
+| Detail adverts also seen on list pages | — | 137 (134 expected) |
+| Largest observation history for one listing | 123 (merged identity) | 15 |
+| Listings with a numeric price | 293 | 700 |
+| Listings with area | 0 | 244 |
+| City set / city = `Egypt` | 967 / 142 | 946 / 0 |
+| Items dropped | 35 (listing type unknown) | 35 (same) |
+| Observations with a full per-capture snapshot | 0 | 1,978 of 1,978 |
+
+The replay diff against the old rows filled 390 stored null prices (the 382
+cases identified above, plus a few more on rows whose provenance changed) and
+241 null areas (238 identified above). It also produced 27 adverts the old rows
+lacked, and dropped exactly the 9 hashed identities.
+
+Still open:
+
+- **Only 2013 has been enumerated.** `crawl` now enumerates every missing year,
+  but the multi-year breadth pilot has not been run yet.
+- **35 land and gallery items** carry no sale/rent wording and are dropped rather
+  than guessed.
+- **Gold set.** The committed gold labels cover two fixture pages, scored 7/7.
+  Candidate labels for 12 real captures were written to `var/gold/` by
+  `archive gold-export` and still need checking by hand.
+- **Implemented later, not yet run against the archive:**
+  - exact-URL CDX lookup of linked pages missing from the frontier (replaying the
+    corpus queued **930** such URLs);
+  - exploration samples of rejected routing decisions, with per-quarter yield in
+    the audit;
+  - a request limiter shared across workers;
+  - reopening of failed gaps;
+  - source attribution in the LLM ledger (24 earlier calls backfilled from the
+    rules they produced; 33 rejected ones stay unattributed).
+- **Still deferred:** adaptive selection by expected yield beyond quarter
+  rotation, and a single transaction around `archive rebuild` (it is
+  re-runnable instead).
+
 ## Scope and method
 
 Read the configured PostgreSQL database `realestate` on `127.0.0.1:5432`, with

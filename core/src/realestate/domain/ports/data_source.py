@@ -14,10 +14,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Sequence
-from typing import ClassVar
+from typing import Any, ClassVar
 
-from realestate.domain.archive import ArchiveScope, DiscoveredLink
-from realestate.domain.models import FetchContext, ListingDraft, RawPayload
+from realestate.domain.archive import ArchiveScope, DiscoveredLink, IdentityPolicy
+from realestate.domain.models import FetchContext, ListingDraft, ParseReport, RawPayload
+from realestate.domain.rules import ExtractionSeed
 
 
 class DataSource(ABC):
@@ -61,6 +62,18 @@ class DataSource(ABC):
         """
         return ()
 
+    async def acknowledge(self, payload: RawPayload, *, error: str | None = None) -> None:  # noqa: B027
+        """Told once a fetched payload is archived (``error`` is ``None``) or could not be.
+
+        Sources that track work items (a crawl frontier) complete them here
+        rather than when yielding, so a payload lost between fetch and archive
+        is retried instead of being marked done. Most sources ignore it.
+        """
+
+    def fetch_stats(self) -> dict[str, Any]:
+        """Counters from the last :meth:`fetch` (attempts, failures), for run records."""
+        return {}
+
     async def healthcheck(self) -> bool:
         """Whether the source looks reachable. Override where it is cheap to check."""
         return True
@@ -79,3 +92,19 @@ class ArchiveDataSource(DataSource):
     @abstractmethod
     def archive_scope(self) -> ArchiveScope:
         """The archived domain and year range this source covers."""
+
+    def identity_policy(self) -> IdentityPolicy | None:
+        """How an advert URL becomes an external id; ``None`` trusts the templates.
+
+        Fixed code rather than an induced recipe: identity errors merge
+        unrelated adverts, and no amount of populated fields reveals them.
+        """
+        return None
+
+    def extraction_seed(self) -> ExtractionSeed | None:
+        """Curated extraction templates this source ships, installed by ``rules seed``."""
+        return None
+
+    async def parse_report(self, payload: RawPayload) -> ParseReport | None:
+        """What :meth:`parse` saw on ``payload`` (called right after it, same bytes)."""
+        return None

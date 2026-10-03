@@ -15,6 +15,8 @@ from tortoise.models import Model
 from realestate.domain.enums import (
     CrawlStatus,
     GapStatus,
+    LinkRel,
+    LinkRequestStatus,
     ListingType,
     NodeKind,
     PageKind,
@@ -46,6 +48,9 @@ class ScrapeRunModel(Model):
     listings_updated = fields.IntField(default=0)
     errors = fields.IntField(default=0)
     error_message = fields.TextField(null=True)
+    #: Quality counters beyond success/failure: documents recognised, OTHER,
+    #: unrecognised; items examined, valid, dropped; fetch attempts.
+    stats: fields.JSONField[dict[str, Any]] = fields.JSONField(default=dict)
 
     class Meta:
         table = "scrape_run"
@@ -77,6 +82,11 @@ class RawDocumentModel(Model):
     parsed_at = fields.DatetimeField(null=True)
     parse_error = fields.TextField(null=True)
     attempts = fields.IntField(default=0)
+    #: Extraction graph version that last parsed this document (archive
+    #: sources), so a rule upgrade knows which parsed documents are stale.
+    graph_version = fields.IntField(null=True)
+    #: What that parse saw: template, page kind, items, problems.
+    parse_report: fields.JSONField[dict[str, Any]] = fields.JSONField(null=True)
 
     scrape_run: fields.ForeignKeyNullableRelation[ScrapeRunModel] = fields.ForeignKeyField(
         "models.ScrapeRunModel",
@@ -175,6 +185,11 @@ class ListingObservationModel(Model):
     currency = fields.CharField(max_length=3)
     price_type = fields.CharEnumField(PriceType, max_length=16)
     content_hash = fields.CharField(max_length=64)
+    #: The complete normalised advert as this capture showed it, so history is
+    #: never "today's fields joined to an old price".
+    snapshot: fields.JSONField[dict[str, Any]] = fields.JSONField(null=True)
+    graph_version = fields.IntField(null=True)
+    template_key = fields.CharField(max_length=128, null=True)
     raw_document: fields.ForeignKeyNullableRelation[RawDocumentModel] = fields.ForeignKeyField(
         "models.RawDocumentModel",
         related_name="observations",
@@ -208,6 +223,10 @@ class CrawlFrontierModel(Model):
     evidence: fields.JSONField[dict[str, Any]] = fields.JSONField(default=dict)
     attempts = fields.SmallIntField(default=0)
     error = fields.TextField(null=True)
+    #: When a fetch claimed the row (status FETCHING); stale claims are released.
+    claimed_at = fields.DatetimeField(null=True)
+    #: A retryable failure waits in QUEUED until then.
+    next_retry_at = fields.DatetimeField(null=True)
     created_at = fields.DatetimeField(auto_now_add=True)
     updated_at = fields.DatetimeField(auto_now=True)
 
@@ -215,6 +234,46 @@ class CrawlFrontierModel(Model):
         table = "crawl_frontier"
         unique_together = (("source_key", "url_key_hash", "timestamp"),)
         indexes = (("source_key", "status", "priority"), ("source_key", "url_key_hash"))
+
+
+class CrawlLinkRequestModel(Model):
+    """A link from a recognised page to a URL no enumerated capture matched.
+
+    The domain-wide enumeration can miss URLs (another host, a year not yet
+    enumerated); these are looked up one by one near the linking capture's time.
+    """
+
+    id = fields.BigIntField(primary_key=True)
+    source_key = fields.CharField(max_length=64)
+    url_key = fields.TextField()
+    url_key_hash = fields.CharField(max_length=40)
+    url = fields.TextField()
+    rel = fields.CharEnumField(LinkRel, max_length=16)
+    #: Capture time of the first page seen linking here (lookup window centre).
+    parent_timestamp = fields.CharField(max_length=14, null=True)
+    status = fields.CharEnumField(
+        LinkRequestStatus, max_length=16, default=LinkRequestStatus.PENDING
+    )
+    captures_found = fields.IntField(default=0)
+    attempts = fields.SmallIntField(default=0)
+    error = fields.TextField(null=True)
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        table = "crawl_link_request"
+        unique_together = (("source_key", "url_key_hash"),)
+        indexes = (("source_key", "status"),)
+
+
+class ArchiveRateGateModel(Model):
+    """The next moment any worker may send a request to one archive host."""
+
+    name = fields.CharField(max_length=64, primary_key=True)
+    next_at = fields.DatetimeField()
+
+    class Meta:
+        table = "archive_rate_gate"
 
 
 class CrawlCursorModel(Model):
@@ -315,6 +374,8 @@ class LlmDecisionModel(Model):
     input_fp = fields.CharField(max_length=64)
     model = fields.CharField(max_length=128)
     prompt_version = fields.CharField(max_length=32)
+    #: Which source's induction asked (NULL for decisions recorded before this column).
+    source_key = fields.CharField(max_length=64, null=True, db_index=True)
     request: fields.JSONField[dict[str, Any]] = fields.JSONField(default=dict)
     response: fields.JSONField[dict[str, Any]] = fields.JSONField(null=True)
     raw_text = fields.TextField(default="")

@@ -218,6 +218,12 @@ class TortoiseRuleGapRepository(RuleGapRepository):
         await row.save()
         return _to_gap(row)
 
+    async def reopen_failed(self, source_key: str, domain: RuleDomain | None = None) -> int:
+        queryset = RuleGapModel.filter(source_key=source_key, status=GapStatus.FAILED)
+        if domain is not None:
+            queryset = queryset.filter(domain=domain)
+        return await queryset.update(status=GapStatus.OPEN, attempts=0)
+
 
 def _to_decision(row: LlmDecisionModel) -> LlmDecision:
     return LlmDecision(
@@ -234,6 +240,7 @@ def _to_decision(row: LlmDecisionModel) -> LlmDecision:
         tokens_out=row.tokens_out,
         latency_ms=row.latency_ms,
         created_at=row.created_at,
+        source_key=row.source_key,
     )
 
 
@@ -265,9 +272,11 @@ class TortoiseLlmDecisionRepository(LlmDecisionRepository):
         tokens_in: int = 0,
         tokens_out: int = 0,
         latency_ms: int = 0,
+        source_key: str | None = None,
     ) -> LlmDecision:
         row = await LlmDecisionModel.create(
             id=uuid4(),
+            source_key=source_key,
             task=task,
             input_fp=input_fp,
             model=model,
@@ -288,10 +297,14 @@ class TortoiseLlmDecisionRepository(LlmDecisionRepository):
             valid=valid, error=error[:4000] if error else None
         )
 
-    async def totals(self, task_prefix: str | None = None) -> dict[str, int]:
+    async def totals(
+        self, task_prefix: str | None = None, *, source_key: str | None = None
+    ) -> dict[str, int]:
         queryset = LlmDecisionModel.all()
         if task_prefix:
             queryset = queryset.filter(task__startswith=task_prefix)
+        if source_key:
+            queryset = queryset.filter(source_key=source_key)
         rows = await queryset.values_list("valid", "tokens_in", "tokens_out")
         return {
             "calls": len(rows),

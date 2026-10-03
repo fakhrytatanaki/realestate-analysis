@@ -36,7 +36,10 @@ core/var/blob/*
 !core/var/blob/.gitkeep
 core/var/log/*
 !core/var/log/.gitkeep
+# Audit reports and pre-rebuild backups hold exported listing data.
+core/var/audit/
 # core/var/fixtures/ IS committed: it is the sample data the fixture source reads.
+# core/var/gold/ labels point at blobs, not HTML; commit them once verified.
 
 # --- Editors / OS ---
 .idea/

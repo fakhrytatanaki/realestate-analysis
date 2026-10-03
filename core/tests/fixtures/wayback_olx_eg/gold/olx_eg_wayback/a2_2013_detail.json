@@ -1,0 +1,13 @@
+{
+  "verified": true,
+  "note": "Checked by hand: the advert id is in the share box and the archived URL; the title is #olx_item_title without its \" — Egypt\" region suffix; the page states no price.",
+  "document": {
+    "file": "../../a2_2013_detail.html.gz",
+    "content_type": "text/html",
+    "source_url": "http://www.olx.com.eg:80/desert-pearl-3-bedroom-apartment-iid-568736822",
+    "meta": {"timestamp": "20131127093611", "original_url": "http://www.olx.com.eg:80/desert-pearl-3-bedroom-apartment-iid-568736822"}
+  },
+  "items": [
+    {"external_id": "568736822", "title": "Desert Pearl - 3 bedroom apartment", "amount": null, "currency": null, "listing_type": "RENT"}
+  ]
+}

@@ -101,6 +101,9 @@ class TortoiseListingRepository(ListingRepository):
                 if historical:
                     gaps = _fill_gaps(row, _draft_columns(draft))
                     if gaps:
+                        gaps["attributes"] = _with_provenance(
+                            row.attributes, dict.fromkeys(gaps, _ref(raw_document_id))
+                        )
                         backfills.append((row.id, gaps))
                 if historical:
                     observations.append(
@@ -124,11 +127,17 @@ class TortoiseListingRepository(ListingRepository):
             if historical:
                 # Archived captures are partial: a capture parsed by a template
                 # without e.g. bedrooms must not erase what an earlier one found.
+                # Each carried value remembers which capture it came from.
+                previous = (row.attributes or {}).get("_provenance") or {}
+                carried: dict[str, str | None] = {}
                 for column in _CARRY_FORWARD:
-                    if columns[column] is None:
+                    if columns[column] is None and getattr(row, column) is not None:
                         columns[column] = getattr(row, column)
+                        carried[column] = previous.get(column) or _ref(row.raw_document_id)  # type: ignore[attr-defined]
                 if columns["location_name"] == _UNKNOWN_LOCATION:
                     columns["location_name"] = row.location_name
+                if carried:
+                    columns["attributes"] = _with_provenance(columns["attributes"], carried)
             for column, value in columns.items():
                 setattr(row, column, value)
             row.content_hash = content_hash
@@ -204,6 +213,14 @@ class TortoiseListingRepository(ListingRepository):
         if source_key is not None:
             queryset = queryset.filter(source_key=source_key)
         return await queryset.count()
+
+    async def list_for_source(self, source_key: str) -> list[Listing]:
+        rows = await ListingModel.filter(source_key=source_key).order_by("external_id")
+        return [to_listing(row) for row in rows]
+
+    async def delete_source(self, source_key: str) -> int:
+        # Observations go with their listing (ON DELETE CASCADE).
+        return await ListingModel.filter(source_key=source_key).delete()
 
     @staticmethod
     def _build_filters(query: ListingQuery) -> Q:
@@ -300,7 +317,36 @@ _CARRY_FORWARD = (
     "listed_at",
 )
 _UNKNOWN_LOCATION = "unknown"
-_OBSERVATION_STATE = ("price", "currency", "price_type", "content_hash", "raw_document_id")
+_OBSERVATION_STATE = (
+    "price",
+    "currency",
+    "price_type",
+    "content_hash",
+    "raw_document_id",
+    "snapshot",
+    "graph_version",
+    "template_key",
+)
+
+
+def _ref(document_id: UUID | None) -> str | None:
+    return str(document_id) if document_id is not None else None
+
+
+def _with_provenance(
+    attributes: dict[str, Any] | None, origins: dict[str, str | None]
+) -> dict[str, Any]:
+    """``attributes`` plus, per column, the raw document a merged-in value came from.
+
+    A listing row is a composite of captures; its ``raw_document_id`` names
+    only the latest, so values taken from other captures are recorded here.
+    """
+    merged = dict(attributes or {})
+    provenance = dict(merged.get("_provenance") or {})
+    provenance.update({column: ref for column, ref in origins.items() if ref})
+    if provenance:
+        merged["_provenance"] = provenance
+    return merged
 
 
 def _fill_gaps(row: ListingModel, columns: dict[str, Any]) -> dict[str, Any]:
@@ -352,6 +398,8 @@ def _observation(
     content_hash: str,
     raw_document_id: UUID | None,
 ) -> ListingObservationModel:
+    extraction = draft.attributes.get("_extraction") or {}
+    graph_version = extraction.get("graph_version")
     return ListingObservationModel(
         id=uuid4(),
         listing_id=listing_id,
@@ -361,7 +409,28 @@ def _observation(
         price_type=draft.price.price_type,
         content_hash=content_hash,
         raw_document_id=raw_document_id,
+        snapshot=_snapshot(draft),
+        graph_version=graph_version if isinstance(graph_version, int) else None,
+        template_key=str(extraction["template"])[:128] if extraction.get("template") else None,
     )
+
+
+def _snapshot(draft: ListingDraft) -> dict[str, Any]:
+    """The draft as this capture showed it, JSON-safe: never merged with other captures."""
+    columns = _draft_columns(draft)
+    columns.pop("attributes")
+    out: dict[str, Any] = {}
+    for key, value in columns.items():
+        if isinstance(value, Decimal):
+            out[key] = str(value)
+        elif isinstance(value, datetime):
+            out[key] = value.isoformat()
+        elif hasattr(value, "value"):
+            out[key] = value.value
+        else:
+            out[key] = value
+    out["raw"] = draft.attributes.get("_raw") or {}
+    return out
 
 
 def _quantize(value: Decimal) -> Decimal:

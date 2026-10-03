@@ -44,6 +44,7 @@ from tests.archive_fakes import (
     InMemoryFrontier,
     InMemoryGaps,
     InMemoryGraphs,
+    InMemoryLinkRequests,
     ScriptedLlm,
     fixture_bytes,
     fixture_meta,
@@ -140,10 +141,13 @@ def nav_answer(messages: Sequence[LlmMessage]) -> dict[str, Any]:
 
 
 def template_answer(messages: Sequence[LlmMessage]) -> dict[str, Any]:
-    return (
-        proposal("a2_2013_detail")
-        if "-iid-" in user_prompt(messages).split("\n")[0]
-        else proposal("a2_2013_list")
+    if "-iid-" in user_prompt(messages).split("\n")[0]:
+        return proposal("a2_2013_detail")
+    # The fixture pages show no bathrooms, and induction rejects a field that
+    # is empty on every advert of every sample.
+    fields = TEMPLATES["a2_2013_list"]["template"]["fields"]
+    return proposal(
+        "a2_2013_list", fields={k: v for k, v in fields.items() if k != "bathrooms"}
     )
 
 
@@ -171,9 +175,18 @@ def test_select_captures_prefers_distinct_content_spread_over_time() -> None:
 class Harness:
     """The real services wired to in-memory repositories and a scripted model."""
 
-    def __init__(self, tmp_path: Path, llm: ScriptedLlm, captures: Sequence[Capture]) -> None:
+    def __init__(
+        self,
+        tmp_path: Path,
+        llm: ScriptedLlm,
+        captures: Sequence[Capture],
+        *,
+        years: tuple[int, int] = (2013, 2013),
+        hidden: Sequence[Capture] = (),
+    ) -> None:
         log = NullLogProvider()
         self.frontier = InMemoryFrontier()
+        self.link_requests = InMemoryLinkRequests()
         self.graphs = InMemoryGraphs()
         self.gaps = InMemoryGaps()
         self.decisions = InMemoryDecisions()
@@ -206,7 +219,7 @@ class Harness:
             country_code="EG",
             factory=lambda ctx: OlxEgWaybackDataSource(
                 log=ctx.log,
-                params={"from_year": 2013, "to_year": 2013},
+                params={"from_year": years[0], "to_year": years[1]},
                 frontier=self.frontier,
                 graphs=self.graphs,
                 engine=self.engine,
@@ -224,7 +237,7 @@ class Harness:
             documents=self.documents,  # type: ignore[arg-type]
             runs=InMemoryScrapeRunRepository(),  # type: ignore[arg-type]
             log=log,
-            links=FrontierLinkSink(self.frontier),
+            links=FrontierLinkSink(self.frontier, self.link_requests),
         )
         self.induction = RuleInductionService(
             graphs=self.graphs,
@@ -236,12 +249,15 @@ class Harness:
             blob=self.blob,
             frontier=self.frontier,
             log=log,
+            registry=registry,
         )
-        self.index = FixtureIndex(captures)
+        self.registry = registry
+        self.index = FixtureIndex(captures, hidden)
+        self.cursors = InMemoryCursors()
         self.crawler = ArchiveCrawlService(
             registry=registry,
             frontier=self.frontier,
-            cursors=InMemoryCursors(),
+            cursors=self.cursors,
             index=self.index,
             graphs=self.graphs,
             engine=self.engine,
@@ -249,6 +265,7 @@ class Harness:
             induction=self.induction,
             log=log,
             settings=CrawlSettings(cdx_page_size=2),
+            links=self.link_requests,
         )
 
     async def archive(
@@ -266,7 +283,8 @@ class Harness:
             f"{SOURCE}/{name}.html", payload.content, content_type="text/html"
         )
         document = await self.documents.create(source_key=SOURCE, payload=payload, blob=blob)
-        await self.documents.mark_unrecognised(document.id, "test")
+        if status is RawDocumentStatus.UNRECOGNISED:
+            await self.documents.mark_unrecognised(document.id, "test")
 
 
 def captures() -> list[Capture]:

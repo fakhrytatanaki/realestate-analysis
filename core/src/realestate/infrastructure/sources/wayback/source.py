@@ -7,7 +7,10 @@ new archived portal is a subclass naming a domain and a year range.
 
 The pipeline invariants hold:
 
-* ``fetch`` produces bytes only -- the frontier says *what* to fetch.
+* ``fetch`` produces bytes only -- the frontier says *what* to fetch. A capture
+  is claimed (``FETCHING``) when fetched and completed only when the pipeline
+  acknowledges that its payload is archived, so nothing is marked done that
+  was never stored; transient failures go back to the queue with a backoff.
 * ``parse`` and ``discover_links`` read archived bytes and the extraction graph
   version pinned when the instance was first used; no network, no model. The
   same bytes and version give the same drafts on every replay.
@@ -16,21 +19,25 @@ The pipeline invariants hold:
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Mapping, Sequence
+from datetime import UTC, datetime, timedelta
 from typing import Any, ClassVar
 
 from realestate.domain.archive import ArchivedDocument, ArchiveScope, DiscoveredLink
-from realestate.domain.enums import RawDocumentKind, RuleDomain
+from realestate.domain.enums import PageKind, RawDocumentKind, RuleDomain
 from realestate.domain.exceptions import FetchError, UnrecognisedDocumentError
-from realestate.domain.models import FetchContext, ListingDraft, RawPayload
+from realestate.domain.models import FetchContext, ListingDraft, ParseReport, RawPayload
 from realestate.domain.ports.archive import CrawlFrontierRepository
 from realestate.domain.ports.data_source import ArchiveDataSource
 from realestate.domain.ports.log_provider import LogProvider
 from realestate.domain.ports.rules import RuleEngine, RuleGraphRepository
 from realestate.domain.rules import ExtractionOutcome, RuleGraph
+from realestate.infrastructure.archive.rate_gate import RateGate
 from realestate.infrastructure.archive.wayback import WaybackClient, WaybackSettings
 
-#: Frontier rows pulled per query while fetching.
+#: Frontier rows claimed per query while fetching.
 _FETCH_BATCH = 25
+#: First retry delay after a transient failure; doubles per attempt.
+_RETRY_BASE = timedelta(minutes=10)
 
 
 class WaybackDataSource(ArchiveDataSource):
@@ -51,6 +58,7 @@ class WaybackDataSource(ArchiveDataSource):
         graphs: RuleGraphRepository,
         engine: RuleEngine,
         client: WaybackClient | None = None,
+        gate: RateGate | None = None,
     ) -> None:
         self._log = log.bind(source_key=self.key)
         self._params = dict(params or {})
@@ -58,11 +66,13 @@ class WaybackDataSource(ArchiveDataSource):
         self._graphs = graphs
         self._engine = engine
         self._client = client or WaybackClient(
-            WaybackSettings.from_params(self._params), log=self._log
+            WaybackSettings.from_params(self._params), log=self._log, gate=gate
         )
         self._graph: RuleGraph | None = None
         #: parse() and discover_links() see the same payload back to back.
         self._last: tuple[int, ExtractionOutcome | None] | None = None
+        self._attempts: dict[int, int] = {}
+        self._stats: dict[str, Any] = {}
 
     def archive_scope(self) -> ArchiveScope:
         return ArchiveScope(
@@ -72,62 +82,105 @@ class WaybackDataSource(ArchiveDataSource):
         )
 
     async def fetch(self, ctx: FetchContext) -> AsyncIterator[RawPayload]:
+        """Claim queued captures and replay them; the budget counts attempts.
+
+        Failed attempts spend budget too: archive time is the scarce resource,
+        whether or not a request produced a document.
+        """
         budget = (
             ctx.max_items
             or ctx.page_limit
             or int(self._params.get("max_fetches_per_run", self.default_max_fetches))
         )
-        fetched = 0
-        attempted: set[int] = set()
-        while fetched < budget:
-            batch = [
-                entry
-                for entry in await self._frontier.next_queued(self.key, limit=_FETCH_BATCH)
-                if entry.id not in attempted
-            ]
-            if not batch:
-                return
-            for entry in batch:
-                if fetched >= budget:
+        per_quarter = self._params.get("max_fetches_per_quarter")
+        attempts = fetched = failures = 0
+        started = datetime.now(UTC)
+        self._stats = {}
+        try:
+            while attempts < budget:
+                batch = await self._frontier.claim_queued(
+                    self.key,
+                    limit=min(_FETCH_BATCH, budget - attempts),
+                    now=datetime.now(UTC),
+                    per_quarter=int(per_quarter) if per_quarter else None,
+                )
+                if not batch:
                     return
-                attempted.add(entry.id)
-                try:
-                    archived = await self._client.fetch_capture(entry.timestamp, entry.original_url)
-                except FetchError as exc:
-                    await self._frontier.mark_failed(entry.id, str(exc))
-                    await self._log.warning(
-                        "capture fetch failed", url=entry.original_url, error=str(exc)
+                for entry in batch:
+                    attempts += 1
+                    self._attempts[entry.id] = entry.attempts
+                    try:
+                        archived = await self._client.fetch_capture(
+                            entry.timestamp, entry.original_url
+                        )
+                    except FetchError as exc:
+                        failures += 1
+                        await self._fail(entry.id, str(exc), retryable=exc.retryable)
+                        await self._log.warning(
+                            "capture fetch failed",
+                            url=entry.original_url,
+                            error=str(exc),
+                            retryable=exc.retryable,
+                        )
+                        continue
+                    fetched += 1
+                    await self._log.info(
+                        "capture fetched",
+                        progress=f"{attempts}/{budget}",
+                        url=entry.original_url,
+                        captured=archived.timestamp,
+                        bytes=len(archived.content),
+                        kind=entry.page_kind.value if entry.page_kind else "?",
+                        rule=entry.route_node,
                     )
-                    continue
-                yield RawPayload(
-                    content=archived.content,
-                    kind=RawDocumentKind.HTML,
-                    content_type=archived.content_type,
-                    source_url=entry.original_url,
-                    meta={
-                        "frontier_id": entry.id,
-                        "url_key": entry.url_key,
-                        "timestamp": archived.timestamp,
-                        "captured_at": archived.captured_at.isoformat(),
-                        "original_url": entry.original_url,
-                        "replay_url": archived.replay_url,
-                        "digest": entry.digest,
-                        "page_kind_hint": entry.page_kind.value if entry.page_kind else None,
-                        "route_node": entry.route_node,
-                    },
-                )
-                # Resumed means the pipeline has archived the payload.
-                await self._frontier.mark_fetched(entry.id)
-                fetched += 1
-                await self._log.info(
-                    "capture fetched",
-                    progress=f"{fetched}/{budget}",
-                    url=entry.original_url,
-                    captured=archived.timestamp,
-                    bytes=len(archived.content),
-                    kind=entry.page_kind.value if entry.page_kind else "?",
-                    rule=entry.route_node,
-                )
+                    # Completed in acknowledge(), once the pipeline has archived it.
+                    yield RawPayload(
+                        content=archived.content,
+                        kind=RawDocumentKind.HTML,
+                        content_type=archived.content_type,
+                        source_url=entry.original_url,
+                        meta={
+                            "frontier_id": entry.id,
+                            "url_key": entry.url_key,
+                            "timestamp": archived.timestamp,
+                            "captured_at": archived.captured_at.isoformat(),
+                            "requested_timestamp": entry.timestamp,
+                            "original_url": entry.original_url,
+                            "replay_url": archived.replay_url,
+                            "digest": entry.digest,
+                            "page_kind_hint": entry.page_kind.value if entry.page_kind else None,
+                            "route_node": entry.route_node,
+                        },
+                    )
+        finally:
+            self._stats = {
+                "fetch_attempts": attempts,
+                "fetch_failures": failures,
+                "fetch_seconds": round((datetime.now(UTC) - started).total_seconds(), 1),
+            }
+
+    async def acknowledge(self, payload: RawPayload, *, error: str | None = None) -> None:
+        entry_id = payload.meta.get("frontier_id")
+        if not isinstance(entry_id, int):
+            return
+        if error is None:
+            await self._frontier.mark_fetched(entry_id)
+        else:
+            await self._fail(entry_id, error, retryable=True)
+
+    def fetch_stats(self) -> dict[str, Any]:
+        return dict(self._stats)
+
+    async def _fail(self, entry_id: int, error: str, *, retryable: bool) -> None:
+        """Back to the queue with an exponential delay, or FAILED when hopeless."""
+        attempt = self._attempts.get(entry_id, 0) + 1
+        limit = int(self._params.get("max_fetch_attempts", 3))
+        retry_at = (
+            datetime.now(UTC) + _RETRY_BASE * 2 ** (attempt - 1)
+            if retryable and attempt < limit
+            else None
+        )
+        await self._frontier.mark_failed(entry_id, error, retry_at=retry_at)
 
     async def parse(self, payload: RawPayload) -> Sequence[ListingDraft]:
         graph = await self._extraction_graph()
@@ -138,6 +191,28 @@ class WaybackDataSource(ArchiveDataSource):
                 f"no extraction rule matched (graph v{graph.version}, fingerprint {fingerprint})"
             )
         return outcome.drafts
+
+    async def parse_report(self, payload: RawPayload) -> ParseReport:
+        graph = await self._extraction_graph()
+        outcome = self._extract(payload, graph)
+        hint = str(payload.meta.get("page_kind_hint") or "").upper()
+        routed_as_adverts = hint in (PageKind.LIST.value, PageKind.DETAIL.value)
+        if outcome is None:
+            return ParseReport(graph_version=graph.version, hint_mismatch=routed_as_adverts)
+        origin = graph.node(outcome.template_key).origin if graph.has_node(
+            outcome.template_key
+        ) else None
+        return ParseReport(
+            graph_version=graph.version,
+            template_key=outcome.template_key,
+            template_origin=origin.value if origin else None,
+            page_kind=outcome.page_kind.value,
+            items_total=outcome.items_total,
+            items_valid=outcome.items_valid,
+            problems=tuple(outcome.problems),
+            empty_fields=tuple(outcome.empty_fields),
+            hint_mismatch=routed_as_adverts and outcome.page_kind.value != hint,
+        )
 
     async def discover_links(self, payload: RawPayload) -> Sequence[DiscoveredLink]:
         outcome = self._extract(payload, await self._extraction_graph())
@@ -157,7 +232,12 @@ class WaybackDataSource(ArchiveDataSource):
     def _extract(self, payload: RawPayload, graph: RuleGraph) -> ExtractionOutcome | None:
         if self._last is not None and self._last[0] == id(payload):
             return self._last[1]
-        outcome = self._engine.extract(graph, _document(payload), country_code=self.country_code)
+        outcome = self._engine.extract(
+            graph,
+            _document(payload),
+            country_code=self.country_code,
+            identity=self.identity_policy(),
+        )
         self._last = (id(payload), outcome)
         return outcome
 

@@ -6,6 +6,7 @@ portal means importing it here and adding a :meth:`register` call.
 
 from __future__ import annotations
 
+from realestate.infrastructure.archive.rate_gate import PostgresRateGate
 from realestate.infrastructure.db.repositories.crawl import TortoiseCrawlFrontierRepository
 from realestate.infrastructure.db.repositories.rules import TortoiseRuleGraphRepository
 from realestate.infrastructure.extraction.engine import HtmlRuleEngine
@@ -43,6 +44,7 @@ def register_default_sources(registry: DataSourceRegistry) -> DataSourceRegistry
             frontier=TortoiseCrawlFrontierRepository(),
             graphs=TortoiseRuleGraphRepository(),
             engine=HtmlRuleEngine(),
+            gate=PostgresRateGate(),
         ),
         implemented=True,
     )

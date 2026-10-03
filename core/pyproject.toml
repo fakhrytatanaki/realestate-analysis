@@ -43,6 +43,10 @@ realestate = "realestate.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+# Curated extraction templates shipped with archive sources.
+realestate = ["infrastructure/sources/*/templates.json"]
+
 [tool.aerich]
 tortoise_orm = "realestate.config.tortoise.TORTOISE_ORM"
 location = "./migrations"

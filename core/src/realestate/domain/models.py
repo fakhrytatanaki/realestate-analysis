@@ -13,6 +13,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from realestate.domain.archive import parse_timestamp
 from realestate.domain.enums import (
     ListingType,
     PriceType,
@@ -188,6 +189,66 @@ class RawDocument:
     parse_error: str | None = None
     attempts: int = 0
     scrape_run_id: UUID | None = None
+    #: Extraction graph version of the last parse (archive sources only).
+    graph_version: int | None = None
+    parse_report: dict[str, Any] | None = None
+
+    @property
+    def captured_at(self) -> datetime | None:
+        """Capture time for archived payloads (``meta``), else ``None``."""
+        meta = self.meta or {}
+        if meta.get("captured_at"):
+            try:
+                return datetime.fromisoformat(str(meta["captured_at"]))
+            except ValueError:
+                pass
+        if meta.get("timestamp"):
+            try:
+                return parse_timestamp(str(meta["timestamp"]))
+            except ValueError:
+                return None
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class ParseReport:
+    """What parsing one archived document saw, beyond its drafts.
+
+    Status ``PARSED`` only says a rule matched; this says how well: which
+    template, how many items it examined and kept, why it dropped the rest,
+    and whether a page routed as a list or detail page came out as ``OTHER``.
+    """
+
+    graph_version: int | None
+    template_key: str | None = None
+    #: Who wrote the winning template (``LLM``, ``HUMAN``, ``SEED``).
+    template_origin: str | None = None
+    page_kind: str | None = None
+    items_total: int = 0
+    items_valid: int = 0
+    problems: tuple[str, ...] = ()
+    empty_fields: tuple[str, ...] = ()
+    #: Routed as LIST/DETAIL but recognised as OTHER (or as the other kind).
+    hint_mismatch: bool = False
+
+    @property
+    def identity_problems(self) -> int:
+        return sum(1 for problem in self.problems if "identity" in problem)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "graph_version": self.graph_version,
+            "template_key": self.template_key,
+            "template_origin": self.template_origin,
+            "page_kind": self.page_kind,
+            "items_total": self.items_total,
+            "items_valid": self.items_valid,
+            "problems": list(self.problems[:20]),
+            "problem_count": len(self.problems),
+            "identity_problems": self.identity_problems,
+            "empty_fields": list(self.empty_fields),
+            "hint_mismatch": self.hint_mismatch,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +266,7 @@ class ScrapeRun:
     listings_updated: int = 0
     errors: int = 0
     error_message: str | None = None
+    stats: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)

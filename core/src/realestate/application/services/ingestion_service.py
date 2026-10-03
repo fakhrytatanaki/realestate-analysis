@@ -13,8 +13,11 @@ and replayed over months of stored payloads without touching the network again.
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from collections.abc import Sequence
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from realestate.domain.blob_keys import build_blob_key
@@ -27,6 +30,7 @@ from realestate.domain.exceptions import (
 )
 from realestate.domain.models import (
     FetchContext,
+    ParseReport,
     RawDocument,
     RawPayload,
     ScrapeRun,
@@ -34,7 +38,7 @@ from realestate.domain.models import (
 )
 from realestate.domain.ports.archive import LinkSink
 from realestate.domain.ports.blob_provider import BlobProvider
-from realestate.domain.ports.data_source import DataSource
+from realestate.domain.ports.data_source import ArchiveDataSource, DataSource
 from realestate.domain.ports.log_provider import LogProvider
 from realestate.domain.ports.repositories import (
     ListingRepository,
@@ -42,6 +46,50 @@ from realestate.domain.ports.repositories import (
     ScrapeRunRepository,
 )
 from realestate.domain.ports.source_registry import SourceRegistry
+
+
+@dataclass(slots=True)
+class ParseStats:
+    """Quality counters for one batch of parsed documents.
+
+    ``PARSED`` only says a rule matched; these say what came of it, so a run
+    that "succeeded" while recognising nothing useful is visible as such.
+    """
+
+    documents: int = 0
+    with_listings: int = 0
+    unrecognised: int = 0
+    failed: int = 0
+    page_kinds: Counter[str] = field(default_factory=Counter)
+    hint_mismatch: int = 0
+    items_total: int = 0
+    items_valid: int = 0
+    identity_problems: int = 0
+
+    def add(self, report: ParseReport | None, drafts: int) -> None:
+        self.documents += 1
+        self.with_listings += 1 if drafts else 0
+        if report is None:
+            return
+        self.page_kinds[report.page_kind or "NONE"] += 1
+        self.hint_mismatch += 1 if report.hint_mismatch else 0
+        self.items_total += report.items_total
+        self.items_valid += report.items_valid
+        self.identity_problems += report.identity_problems
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "documents": self.documents,
+            "with_listings": self.with_listings,
+            "unrecognised": self.unrecognised,
+            "parse_failed": self.failed,
+            "page_kinds": dict(self.page_kinds),
+            "hint_mismatch": self.hint_mismatch,
+            "items_total": self.items_total,
+            "items_valid": self.items_valid,
+            "items_dropped": self.items_total - self.items_valid,
+            "identity_problems": self.identity_problems,
+        }
 
 
 class IngestionService:
@@ -100,6 +148,7 @@ class IngestionService:
         fetched = 0
         errors = 0
         result = UpsertResult()
+        stats = ParseStats()
         error_message: str | None = None
         interrupted: asyncio.CancelledError | None = None
 
@@ -110,7 +159,7 @@ class IngestionService:
             fetched = len(documents)
             errors += fetch_errors
 
-            result, parse_errors = await self._parse_documents(source, documents, log)
+            result, parse_errors, stats = await self._parse_documents(source, documents, log)
             errors += parse_errors
         except asyncio.CancelledError as exc:
             # Ctrl-C / shutdown: close the run record honestly, then let the
@@ -126,6 +175,7 @@ class IngestionService:
         else:
             status = RunStatus.PARTIAL if errors else RunStatus.SUCCESS
         finally:
+            fetch_stats = source.fetch_stats()
             await source.aclose()
 
         finished = await self._runs.finish(
@@ -136,6 +186,7 @@ class IngestionService:
             listings_updated=result.updated,
             errors=errors,
             error_message=error_message,
+            stats={**stats.as_dict(), **fetch_stats},
         )
         await log.info(
             "ingestion finished",
@@ -191,6 +242,48 @@ class IngestionService:
             source_key, statuses=(RawDocumentStatus.UNRECOGNISED,), limit=limit
         )
 
+    async def reparse_stale(
+        self, source_key: str, *, graph_version: int, limit: int = 10_000
+    ) -> UpsertResult:
+        """Re-parse documents parsed by an extraction graph older than ``graph_version``.
+
+        A rule upgrade is not a data migration until this has run: documents
+        already ``PARSED`` otherwise keep their old interpretation forever.
+        """
+        return await self._parse_stored(
+            source_key,
+            statuses=(RawDocumentStatus.PARSED, RawDocumentStatus.UNRECOGNISED),
+            limit=limit,
+            graph_version_below=graph_version,
+        )
+
+    async def rebuild(self, source_key: str) -> UpsertResult:
+        """Delete a source's listings and re-parse every archived payload, in capture order.
+
+        For archive sources, whose payloads are the source of truth: repairs
+        rows that ordinary replays cannot (merged identities, false histories),
+        because a replay only adds and updates. Safe to re-run if interrupted --
+        documents left ``PENDING`` are parsed by the next run or crawl.
+        """
+        source = self._registry.create(source_key)
+        try:
+            if not isinstance(source, ArchiveDataSource):
+                raise ValueError(f"source '{source_key}' is not an archive source")
+        finally:
+            await source.aclose()
+        log = self._log.bind(source_key=source_key)
+        deleted = await self._listings.delete_source(source_key)
+        reset = await self._documents.reset_status(
+            source_key,
+            from_statuses=(
+                RawDocumentStatus.PARSED,
+                RawDocumentStatus.UNRECOGNISED,
+                RawDocumentStatus.FAILED,
+            ),
+        )
+        await log.info("rebuild: listings deleted, documents reset", deleted=deleted, reset=reset)
+        return await self.parse_pending(source_key, limit=1_000_000)
+
     async def _parse_stored(
         self,
         source_key: str | None,
@@ -198,8 +291,14 @@ class IngestionService:
         statuses: Sequence[RawDocumentStatus],
         limit: int,
         fetched_after: datetime | None = None,
+        graph_version_below: int | None = None,
     ) -> UpsertResult:
-        """Load documents in the given states and parse them, grouped by source."""
+        """Load documents in the given states and parse them, grouped by source.
+
+        Each source's documents are parsed in capture order (fetch order for
+        live sources), so merged listing state never depends on which
+        documents happened to be stored first.
+        """
         documents: list[RawDocument] = []
         for status in statuses:
             documents.extend(
@@ -208,11 +307,12 @@ class IngestionService:
                     status=status,
                     limit=limit,
                     fetched_after=fetched_after,
+                    graph_version_below=graph_version_below,
                 )
             )
 
         by_source: dict[str, list[RawDocument]] = {}
-        for document in documents:
+        for document in sorted(documents, key=_capture_order):
             by_source.setdefault(document.source_key, []).append(document)
 
         total = UpsertResult()
@@ -223,11 +323,25 @@ class IngestionService:
                     "skipping documents for an unregistered source", documents=len(group)
                 )
                 continue
+            # Replays are recorded as runs too, so their contributions are
+            # accounted for alongside fetching runs.
+            run = await self._runs.start(key, RunTrigger.REPLAY)
             source = self._registry.create(key)
+            errors = 0
+            stats = ParseStats()
+            result = UpsertResult()
             try:
-                result, _ = await self._parse_documents(source, group, log)
+                result, errors, stats = await self._parse_documents(source, group, log)
             finally:
                 await source.aclose()
+                await self._runs.finish(
+                    run.id,
+                    status=RunStatus.PARTIAL if errors else RunStatus.SUCCESS,
+                    listings_created=result.created,
+                    listings_updated=result.updated,
+                    errors=errors,
+                    stats=stats.as_dict(),
+                )
             total = total + result
         return total
 
@@ -253,6 +367,9 @@ class IngestionService:
             except Exception as exc:
                 errors += 1
                 await log.exception("failed to archive payload", exc, url=payload.source_url)
+                await source.acknowledge(payload, error=f"archive failed: {exc}")
+                continue
+            await source.acknowledge(payload)
 
         await log.info("fetch stage complete", documents=len(documents), errors=errors)
         return documents, errors
@@ -272,11 +389,12 @@ class IngestionService:
         source: DataSource,
         documents: Sequence[RawDocument],
         log: LogProvider,
-    ) -> tuple[UpsertResult, int]:
+    ) -> tuple[UpsertResult, int, ParseStats]:
         """Parse archived documents into listings, marking each one's outcome."""
         total = UpsertResult()
         errors = 0
         unrecognised = 0
+        stats = ParseStats()
 
         for document in documents:
             try:
@@ -290,13 +408,21 @@ class IngestionService:
                     meta=document.meta,
                 )
                 drafts = await source.parse(payload)
+                report = await _parse_report(source, payload)
                 result = await self._listings.upsert_many(
                     drafts, source_key=document.source_key, raw_document_id=document.id
                 )
             except UnrecognisedDocumentError as exc:
                 # Not a failure: rule induction will learn this page design.
                 unrecognised += 1
-                await self._documents.mark_unrecognised(document.id, str(exc))
+                stats.unrecognised += 1
+                missed = await _parse_report(source, payload)
+                await self._documents.mark_unrecognised(
+                    document.id,
+                    str(exc),
+                    graph_version=missed.graph_version if missed else None,
+                    report=missed.as_dict() if missed else None,
+                )
                 await log.debug(
                     "document unrecognised",
                     document_id=str(document.id),
@@ -308,11 +434,17 @@ class IngestionService:
                 # The payload is safe in the blob store, so a failure here is
                 # recoverable: fix the parser and replay.
                 errors += 1
+                stats.failed += 1
                 await self._documents.mark_failed(document.id, f"{type(exc).__name__}: {exc}")
                 await log.exception("failed to parse document", exc, document_id=str(document.id))
                 continue
 
-            await self._documents.mark_parsed(document.id)
+            await self._documents.mark_parsed(
+                document.id,
+                graph_version=report.graph_version if report else None,
+                report=report.as_dict() if report else None,
+            )
+            stats.add(report, len(drafts))
             total = total + result
             if self._links is not None:
                 await self._offer_links(source, payload, document, log)
@@ -334,8 +466,10 @@ class IngestionService:
             updated=total.updated,
             unchanged=total.unchanged,
             errors=errors,
+            hint_mismatch=stats.hint_mismatch,
+            items_dropped=stats.items_total - stats.items_valid,
         )
-        return total, errors
+        return total, errors, stats
 
     async def _offer_links(
         self,
@@ -353,7 +487,12 @@ class IngestionService:
         try:
             links = await source.discover_links(payload)
             if links:
-                matched = await self._links.offer(document.source_key, links)
+                timestamp = document.meta.get("timestamp") if document.meta else None
+                matched = await self._links.offer(
+                    document.source_key,
+                    links,
+                    parent_timestamp=str(timestamp) if timestamp else None,
+                )
                 await log.debug(
                     "links offered to the frontier",
                     document_id=str(document.id),
@@ -377,3 +516,11 @@ class IngestionService:
             raise DataSourceNotImplementedError(source_key)
         if trigger is RunTrigger.SCHEDULED and not descriptor.enabled:
             raise DataSourceDisabledError(source_key)
+
+
+async def _parse_report(source: DataSource, payload: RawPayload) -> ParseReport | None:
+    return await source.parse_report(payload) if isinstance(source, ArchiveDataSource) else None
+
+
+def _capture_order(document: RawDocument) -> tuple[datetime, str]:
+    return (document.captured_at or document.fetched_at, str(document.id))

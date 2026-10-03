@@ -50,8 +50,8 @@ construction and parsing; they do not establish live endpoint availability.
 For diagrams and a detailed walkthrough of the implemented OLX crawler, see
 [the Wayback crawler state machine guide](wayback-crawler-state-machine.md).
 
-`WaybackDataSource` is generic: a subclass names a domain and a year range. Nothing
-site-specific is hand-written. The crawl frontier (one row per CDX capture) is routed
+`WaybackDataSource` is generic: a subclass names a domain and a year range, and may
+add two fixed, site-specific pieces (see below). The crawl frontier (one row per CDX capture) is routed
 by a *navigation* graph; fetched pages are parsed by an *extraction* graph. Both are
 versioned state machines in Postgres (`rule_graph`, `rule_node`, `rule_edge`): edges
 are guarded by conditions (URL regex, CSS, text regex, embedded-JSON paths, spaCy
@@ -62,29 +62,53 @@ Misses are clustered into gaps (`rule_gap`) and sent to the LLM, which answers w
 selectors, regexes and vocabulary -- never values. Answers are validated against
 real samples before they become a new graph version, and every answer is kept in
 `llm_decision`. `parse()` uses the graph version pinned for the run and never calls
-the model, so replays stay deterministic. The only seed rule follows links from
-recognised pages, which is how advert URLs with empty slugs get fetched.
+the model, so replays stay deterministic. The only generic seed rule follows links
+from recognised pages, which is how advert URLs with empty slugs get fetched.
+
+Two things a subclass can fix in code instead of leaving to induction:
+
+- `identity_policy()` returns an `IdentityPolicy`: regexes reading the advert id
+  from an advert URL, and URL patterns that are never one advert (home, category,
+  search). Parsing derives external ids through it, and induction validates with
+  it. OLX ids stay bare numbers (`535715253`) across list and detail pages.
+- `extraction_seed()` returns curated templates (OLX ships
+  [`templates.json`](../core/src/realestate/infrastructure/sources/olx_eg_wayback/templates.json),
+  one per known page design). `rules seed` installs them as `HUMAN` states ahead of
+  every induced one, optionally retiring faulty induced states; a curated template
+  that works always wins.
 
 Observations carry the capture time (`observed_at`); the listing row always reflects
-the newest capture and `listing_observation` keeps one row per capture (price
-history; a re-parse refreshes it). Captures are partial, so detail columns (rooms,
-area, coordinates, URL, city...) missing from a newer capture keep their stored
-value, and an older capture fills what the row lacks.
+the newest capture and `listing_observation` keeps one row per capture with that
+capture's complete normalized `snapshot`, graph version and template (a re-parse
+refreshes it). Captures are partial, so detail columns (rooms, area, coordinates,
+URL, city...) missing from a newer capture keep their stored value, and an older
+capture fills what the row lacks; `attributes._provenance` names the raw document
+each merged value came from.
 
 Deterministic engine rules the templates rely on:
 
-- When several templates match a page, the one extracting most adverts and detail
-  values wins (priority breaks ties), so overlapping templates induced at different
-  times cannot shadow each other.
+- When several templates match a page, a curated one that works wins; otherwise
+  the one extracting most adverts and detail values (priority breaks ties), so
+  overlapping templates induced at different times cannot shadow each other.
 - Sale/rent is read from the type field, category, title, location, then the
-  advert's own text, then the page; a property-type text naming several types
-  ("Houses - Apartments") is skipped in favour of the next.
+  advert's own text, then the page; a text naming both ("for rent / for sale") is
+  skipped in favour of the next, and the first match is the fallback. A
+  property-type text naming several types ("Houses - Apartments") is skipped too.
+- With an identity policy, the advert URL's id wins over the template's, which
+  must agree; a whole-page `url` pointing home falls back to the archived page URL.
+- A price regex whose capture holds no amount falls back to the whole cell text
+  when it carries a currency marker (`ج.م125,000`).
+- Cities come from a curated alias table matched on whole names, never by
+  splitting on hyphens; a country name is not a city.
 - A `css` + `regex` field without `index` tries every matching node ("Bedrooms: 3"
   and "Bathrooms: 2" spans sharing one selector); a `title`/`alt` attribute that
   only adds a suffix to the visible text ("... - Cairo") yields the visible text.
 - Prices below 100 (5 per night/week/m²) are placeholders and stored as unknown; with
   no price field value, a title price is used only if it carries a currency marker.
-- Induction rejects a field that stays empty on every advert of 2+ sample pages.
+- Induction rejects a field that stays empty on every advert of 2+ list sample pages
+  (10+ adverts) or 3+ detail pages, doubly escaped regexes, home-page `url` recipes,
+  one id across different adverts, price regexes that drop the amount, and any
+  candidate that lowers the exact-match rate on verified gold pages.
 
 See [the plan](historical-sources-plan.md) for the investigation behind this.
 

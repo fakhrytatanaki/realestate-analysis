@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from realestate.domain.archive import ArchivedDocument
-from realestate.domain.enums import NodeKind, PageKind, RouteDecision
+from realestate.domain.archive import ArchivedDocument, IdentityPolicy
+from realestate.domain.enums import NodeKind, PageKind, RouteDecision, RuleOrigin
 from realestate.domain.ports.rules import RuleEngine
 from realestate.domain.rules import (
     CandidateReport,
@@ -48,24 +48,33 @@ class HtmlRuleEngine(RuleEngine):
         return None
 
     def extract(
-        self, graph: RuleGraph, document: ArchivedDocument, *, country_code: str | None
+        self,
+        graph: RuleGraph,
+        document: ArchivedDocument,
+        *,
+        country_code: str | None,
+        identity: IdentityPolicy | None = None,
     ) -> ExtractionOutcome | None:
         parsed = ParsedDocument(document)
         ctx = EvalContext(url=document.url, document=parsed, captured_at=document.captured_at)
-        succeeded: list[ExtractionOutcome] = []
+        succeeded: list[tuple[RuleNode, ExtractionOutcome]] = []
         for node, path in graph.candidates(lambda condition: evaluate(condition, ctx)):
             if node.kind is not NodeKind.TEMPLATE:
                 continue
-            outcome = self._run(graph, node, parsed, country_code=country_code, path=path)
+            outcome = self._run(
+                graph, node, parsed, country_code=country_code, identity=identity, path=path
+            )
             # A template that matched but produced nothing usable is skipped,
             # so a too-generic earlier rule cannot shadow a better one.
             if outcome is not None and outcome.succeeded:
-                succeeded.append(outcome)
+                succeeded.append((node, outcome))
         if not succeeded:
             return None
-        # Templates induced at different times can overlap on one design; the
-        # one extracting most wins, priority order breaking ties.
-        return max(succeeded, key=_richness)
+        # Templates induced at different times can overlap on one design; a
+        # curated one that works always wins (populated fields do not prove
+        # an induced recipe right), then the one extracting most, priority
+        # order breaking ties.
+        return max(succeeded, key=lambda pair: (_curated(pair[0]), *_richness(pair[1])))[1]
 
     def evaluate_candidate(
         self,
@@ -76,6 +85,7 @@ class HtmlRuleEngine(RuleEngine):
         document: ArchivedDocument,
         document_ref: str,
         country_code: str | None,
+        identity: IdentityPolicy | None = None,
     ) -> CandidateReport:
         parsed = ParsedDocument(document)
         ctx = EvalContext(url=document.url, document=parsed, captured_at=document.captured_at)
@@ -84,7 +94,9 @@ class HtmlRuleEngine(RuleEngine):
         except Exception as exc:
             return CandidateReport(document_ref, False, None, error=f"condition error: {exc}")
         try:
-            outcome = _execute(graph, node, parsed, country_code=country_code, path=[node.key])
+            outcome = _execute(
+                graph, node, parsed, country_code=country_code, identity=identity, path=[node.key]
+            )
         except (TemplateError, SelectorError, ValueError) as exc:
             return CandidateReport(document_ref, matched, None, error=f"template error: {exc}")
         return CandidateReport(document_ref, matched, outcome)
@@ -115,10 +127,13 @@ class HtmlRuleEngine(RuleEngine):
         parsed: ParsedDocument,
         *,
         country_code: str | None,
+        identity: IdentityPolicy | None,
         path: list[str],
     ) -> ExtractionOutcome | None:
         try:
-            return _execute(graph, node, parsed, country_code=country_code, path=path)
+            return _execute(
+                graph, node, parsed, country_code=country_code, identity=identity, path=path
+            )
         except (TemplateError, SelectorError, ValueError):
             return None
 
@@ -129,6 +144,7 @@ def _execute(
     parsed: ParsedDocument,
     *,
     country_code: str | None,
+    identity: IdentityPolicy | None,
     path: list[str],
 ) -> ExtractionOutcome:
     result = run_template(
@@ -138,6 +154,7 @@ def _execute(
         template_key=node.key,
         graph_version=graph.version,
         country_code=country_code,
+        identity=identity,
     )
     return ExtractionOutcome(
         template_key=node.key,
@@ -150,7 +167,12 @@ def _execute(
         vocab_misses=result.vocab_misses,
         path=path,
         empty_fields=result.empty_fields,
+        warnings=result.warnings,
     )
+
+
+def _curated(node: RuleNode) -> bool:
+    return node.origin in (RuleOrigin.HUMAN, RuleOrigin.SEED)
 
 
 def _richness(outcome: ExtractionOutcome) -> tuple[int, int]:

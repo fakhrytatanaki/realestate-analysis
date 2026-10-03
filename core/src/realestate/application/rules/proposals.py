@@ -10,12 +10,32 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from realestate.domain.enums import ListingType, PropertyType
 
 ROUTE_DECISIONS = ("FETCH", "SKIP", "DEFER")
 PAGE_KINDS = ("LIST", "DETAIL", "OTHER")
+#: ``\\d`` in a regex matches a literal backslash then "d": a JSON escape doubled
+#: once too often. It compiles, matches nothing, and fails silently.
+_OVERESCAPED = re.compile(r"\\\\[dDsSwWbB.()\[\]+*?]")
+
+
+def overescaped_regexes(value: Any, path: str = "") -> list[str]:
+    """``path: pattern`` for every ``regex``/``pattern`` string escaped twice."""
+    found: list[str] = []
+    if isinstance(value, dict):
+        for key, child in value.items():
+            where = f"{path}.{key}" if path else str(key)
+            doubled = isinstance(child, str) and _OVERESCAPED.search(child)
+            if key in ("regex", "pattern") and doubled:
+                found.append(f"{where}: {child!r}")
+            else:
+                found.extend(overescaped_regexes(child, where))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            found.extend(overescaped_regexes(child, f"{path}[{index}]"))
+    return found
 
 
 class NavRuleProposal(BaseModel):
@@ -132,6 +152,18 @@ class TemplateProposal(BaseModel):
         if isinstance(value, str) and re.fullmatch(r"[A-Za-z]{3}", value.strip()):
             return value.strip().upper()
         return None
+
+    @model_validator(mode="after")
+    def _single_escaping(self) -> TemplateProposal:
+        doubled = overescaped_regexes(
+            {"conditions": self.conditions, "fields": self.fields, "links": self.links}
+        )
+        if doubled:
+            raise ValueError(
+                "regex escaped twice (\\\\d matches a backslash, not a digit); use single "
+                "escaping such as \\d in: " + "; ".join(doubled[:4])
+            )
+        return self
 
     def action(self) -> dict[str, Any]:
         """The ``TEMPLATE`` node action this proposal compiles to."""
