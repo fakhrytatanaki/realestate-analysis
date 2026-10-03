@@ -104,6 +104,10 @@ class RawDocumentRepository(ABC):
         """Flag a document as unparseable and store the reason."""
 
     @abstractmethod
+    async def mark_unrecognised(self, document_id: UUID, reason: str) -> None:
+        """Flag a document no extraction rule recognised yet (not a failure)."""
+
+    @abstractmethod
     async def find_by_sha256(self, source_key: str, sha256: str) -> RawDocument | None:
         """Look up an identical earlier payload, to skip redundant work."""
 

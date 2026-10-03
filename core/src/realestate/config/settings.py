@@ -41,9 +41,29 @@ class DbSettings(BaseModel):
     generate_schemas: bool = False
 
 
+class S3BlobSettings(BaseModel):
+    """Any S3-compatible store. Unset credentials use botocore's default chain
+    (``AWS_*`` env vars, shared profile, instance/task role)."""
+
+    bucket: str | None = None
+    #: Key prefix inside the bucket, so several deployments can share one.
+    prefix: str = ""
+    region: str | None = None
+    #: Set for MinIO, R2, GCS interop (``https://storage.googleapis.com``)...
+    endpoint_url: str | None = None
+    access_key_id: str | None = None
+    secret_access_key: str | None = None
+    session_token: str | None = None
+    #: ``path`` for most self-hosted stores, ``virtual``/``auto`` for AWS.
+    addressing_style: Literal["auto", "path", "virtual"] = "auto"
+    max_attempts: int = 5
+
+
 class BlobSettings(BaseModel):
-    backend: Literal["local_fs"] = "local_fs"
+    backend: Literal["local_fs", "s3"] = "local_fs"
+    #: Root directory for ``local_fs``.
     root: str = "var/blob"
+    s3: S3BlobSettings = Field(default_factory=S3BlobSettings)
 
     @property
     def root_path(self) -> Path:
@@ -68,6 +88,41 @@ class SchedulerSettings(BaseModel):
     run_in_api: bool = False
     timezone: str = "UTC"
     misfire_grace_seconds: int = 60
+
+
+class LlmSettings(BaseModel):
+    """The model rule induction falls back to (Ollama Cloud by default).
+
+    ``api_key`` may be left unset and supplied as ``OLLAMA_API_KEY`` instead.
+    Point ``base_url`` at ``http://localhost:11434`` for a self-hosted Ollama.
+    """
+
+    provider: Literal["ollama"] = "ollama"
+    base_url: str = "https://ollama.com"
+    api_key: str | None = None
+    model: str = "gemma4:31b"
+    #: The free tier allows one request at a time; raise when the plan allows.
+    max_concurrency: int = 1
+    timeout_seconds: float = 600.0
+    temperature: float = 0.0
+    seed: int = 7
+    max_retries: int = 4
+    use_tools: bool = True
+    num_ctx: int | None = None
+    #: Size cap of the page rendering sent with each template question.
+    prompt_budget_chars: int = 24_000
+
+
+class ArchiveSettings(BaseModel):
+    """Crawl and rule-induction knobs shared by every archive source."""
+
+    max_captures_list: int = 4
+    max_captures_detail: int = 2
+    max_captures_other: int = 1
+    cdx_page_size: int = 5000
+    nav_batch_size: int = 12
+    max_repairs: int = 2
+    max_attempts: int = 3
 
 
 class SourceSettings(BaseModel):
@@ -99,6 +154,8 @@ class Settings(BaseSettings):
     blob: BlobSettings = Field(default_factory=BlobSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     scheduler: SchedulerSettings = Field(default_factory=SchedulerSettings)
+    llm: LlmSettings = Field(default_factory=LlmSettings)
+    archive: ArchiveSettings = Field(default_factory=ArchiveSettings)
     sources: dict[str, SourceSettings] = Field(default_factory=dict)
 
     @classmethod

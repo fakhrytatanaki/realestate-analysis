@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -17,7 +18,7 @@ from realestate.domain.ports.repositories import ListingRepository
 from realestate.domain.query import ListingQuery
 from realestate.infrastructure.db.geo import bounding_box, haversine_sql
 from realestate.infrastructure.db.mappers import to_listing
-from realestate.infrastructure.db.models import ListingModel
+from realestate.infrastructure.db.models import ListingModel, ListingObservationModel
 
 #: Alias under which the computed distance is selected and ordered.
 DISTANCE_ALIAS = "distance_km"
@@ -41,8 +42,12 @@ class TortoiseListingRepository(ListingRepository):
             return UpsertResult()
 
         now = datetime.now(UTC)
-        # Collapse duplicates inside the batch; the last draft wins.
-        by_external_id = {draft.external_id: draft for draft in drafts}
+        # Collapse duplicates inside the batch; the latest observation wins.
+        by_external_id: dict[str, ListingDraft] = {}
+        for draft in drafts:
+            current = by_external_id.get(draft.external_id)
+            if current is None or (draft.observed_at or now) >= (current.observed_at or now):
+                by_external_id[draft.external_id] = draft
 
         existing = {
             row.external_id: row
@@ -52,49 +57,91 @@ class TortoiseListingRepository(ListingRepository):
         }
 
         to_create: list[ListingModel] = []
-        unchanged_ids: list[UUID] = []
-        created = updated = 0
+        observations: list[ListingObservationModel] = []
+        #: observed_at -> ids, so archive rows keep their own capture times.
+        unchanged_groups: dict[datetime, list[UUID]] = defaultdict(list)
+        earlier_sightings: list[tuple[UUID, datetime]] = []
+        created = updated = unchanged = 0
 
         for external_id, draft in by_external_id.items():
+            observed_at = draft.observed_at or now
+            # Archive sources observe history, so every sighting is recorded;
+            # live sources only record genuine changes, not each hourly re-read.
+            historical = draft.observed_at is not None
             content_hash = compute_content_hash(draft)
             row = existing.get(external_id)
 
             if row is None:
+                listing_id = uuid4()
                 to_create.append(
                     ListingModel(
-                        id=uuid4(),
+                        id=listing_id,
                         source_key=source_key,
                         external_id=external_id,
                         content_hash=content_hash,
                         raw_document_id=raw_document_id,
+                        first_observed_at=observed_at,
+                        last_observed_at=observed_at,
                         **_draft_columns(draft),
                     )
                 )
+                observations.append(
+                    _observation(listing_id, draft, observed_at, content_hash, raw_document_id)
+                )
                 created += 1
+                continue
+
+            if row.last_observed_at is not None and observed_at < row.last_observed_at:
+                # An older capture arriving after a newer one (replays, CDX
+                # order): it is history, not the current state of the row.
+                if row.first_observed_at is None or observed_at < row.first_observed_at:
+                    earlier_sightings.append((row.id, observed_at))
+                if historical:
+                    observations.append(
+                        _observation(row.id, draft, observed_at, content_hash, raw_document_id)
+                    )
+                unchanged += 1
                 continue
 
             if row.content_hash == content_hash:
                 # Same ad as last time: record that we saw it, but leave
                 # `updated_at` alone so it keeps meaning "last real change".
-                unchanged_ids.append(row.id)
+                unchanged_groups[observed_at].append(row.id)
+                if historical:
+                    observations.append(
+                        _observation(row.id, draft, observed_at, content_hash, raw_document_id)
+                    )
+                unchanged += 1
                 continue
 
             for column, value in _draft_columns(draft).items():
                 setattr(row, column, value)
             row.content_hash = content_hash
             row.last_seen_at = now
+            row.last_observed_at = observed_at
+            if row.first_observed_at is None:
+                row.first_observed_at = observed_at
             if raw_document_id is not None:
                 row.raw_document_id = raw_document_id
             await row.save()
+            observations.append(
+                _observation(row.id, draft, observed_at, content_hash, raw_document_id)
+            )
             updated += 1
 
         if to_create:
             await ListingModel.bulk_create(to_create)
-        if unchanged_ids:
+        for observed_at, ids in unchanged_groups.items():
             # Queryset update deliberately: it does not fire `auto_now`.
-            await ListingModel.filter(id__in=unchanged_ids).update(last_seen_at=now)
+            await ListingModel.filter(id__in=ids).update(
+                last_seen_at=now, last_observed_at=observed_at
+            )
+        for listing_id, observed_at in earlier_sightings:
+            await ListingModel.filter(id=listing_id).update(first_observed_at=observed_at)
+        if observations:
+            await ListingObservationModel.bulk_create(observations, ignore_conflicts=True)
 
-        return UpsertResult(created=created, updated=updated, unchanged=len(unchanged_ids))
+        return UpsertResult(created=created, updated=updated, unchanged=unchanged)
 
     async def search(self, query: ListingQuery) -> Page[Listing]:
         queryset = ListingModel.filter(self._build_filters(query))
@@ -242,6 +289,25 @@ def _draft_columns(draft: ListingDraft) -> dict[str, Any]:
         "listed_at": draft.listed_at,
         "is_active": draft.is_active,
     }
+
+
+def _observation(
+    listing_id: UUID,
+    draft: ListingDraft,
+    observed_at: datetime,
+    content_hash: str,
+    raw_document_id: UUID | None,
+) -> ListingObservationModel:
+    return ListingObservationModel(
+        id=uuid4(),
+        listing_id=listing_id,
+        observed_at=observed_at,
+        price=draft.price.amount,
+        currency=draft.price.currency.upper(),
+        price_type=draft.price.price_type,
+        content_hash=content_hash,
+        raw_document_id=raw_document_id,
+    )
 
 
 def _quantize(value: Decimal) -> Decimal:

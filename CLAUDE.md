@@ -12,7 +12,7 @@ read it before changing the pipeline or the layering.
 All from `core/`. There is no poetry/uv; the venv is `core/venv`.
 
 ```bash
-./venv/bin/pytest                 # 81 tests, no database needed
+./venv/bin/pytest                 # 190 tests, no database needed
 ./venv/bin/ruff check src tests   # must be clean
 ./venv/bin/mypy                   # config sets packages/mypy_path
 
@@ -23,13 +23,17 @@ All from `core/`. There is no poetry/uv; the venv is `core/venv`.
 
 python -m realestate.cli scrape --source fixture
 python -m realestate.cli parse --source fixture --reparse
+python -m realestate.cli crawl --source olx_eg_wayback --max-fetches 60 --max-llm-calls 10
 ```
+
+`core/venv/bin/pip` has a stale shebang from an older checkout path; use
+`./venv/bin/python -m pip`.
 
 Integration tests need a separate database and are skipped without it:
 
 ```bash
 REALESTATE_TEST_DB_URL=postgres://realestate:realestate@127.0.0.1:5432/realestate_test \
-  ./venv/bin/pytest          # 96 tests
+  ./venv/bin/pytest          # 210 tests
 ```
 
 Docker needs `sudo` here — the user is not in the `docker` group.
@@ -52,8 +56,10 @@ grep -rE "^\s*(from|import) (tortoise|fastapi|pydantic)" src/realestate/domain
 ```
 
 This is why `IngestionService` depends on the `SourceRegistry` *port* rather
-than the concrete `DataSourceRegistry`, and why blob key naming lives in
-`domain/blob_keys.py` and not in the filesystem provider.
+than the concrete `DataSourceRegistry`, and why blob key naming and the key
+policy (`validate_blob_key`) live in `domain/blob_keys.py` and not in a provider.
+Blob backends (`local_fs`, `s3`) implement `BlobProvider`; a new one must pass
+the shared contract suite in `tests/test_blob_provider.py`.
 
 ## Pipeline invariant
 
@@ -65,6 +71,11 @@ as a PENDING `RawDocument`. `parse()` then reads those archived bytes back.
 
 Break either and replay (`--reparse`) stops being safe — which is the whole
 reason the stages are split.
+
+Archive sources keep this with rule graphs: `parse()` and `discover_links()` use
+the extraction-graph version loaded once per source instance and **never call the
+LLM** (not even its cache). The LLM only runs in `RuleInductionService`, and its
+answers become new graph versions after validation. Keep it that way.
 
 ## Gotchas (each one cost real debugging time)
 
@@ -86,8 +97,17 @@ reason the stages are split.
 - **Bounding boxes must round outward** (`_floor`/`_ceil` in
   `infrastructure/db/geo.py`). The box is an indexed prefilter, so anything it
   wrongly excludes can never be recovered by the exact distance check.
-- **Blob keys must be canonical and root-relative.** `LocalFsBlobProvider`
-  rejects `..`, absolute paths and `a//b`, since external ids reach these keys.
+- **Frontier URL keys must match the CDX `urlkey`.** Links found in pages reach
+  the frontier through `surt_key`, and `absolute_url` percent-encodes Arabic
+  slugs so they match; a mismatch silently loses link evidence.
+- **Ollama Cloud has no structured outputs** (the `format` schema parameter is
+  unsupported there). The
+  adapter forces a tool call and falls back to the first JSON object in the
+  reply; validation in the induction service is what actually guarantees shape.
+- **Blob keys must be canonical and root-relative.** Every provider calls
+  `validate_blob_key`, which rejects `..`, absolute paths and `a//b`, since
+  external ids reach these keys. The S3 backend needs the `s3` extra
+  (`aiobotocore`); its tests use moto's server and skip without it.
 
 ## Adding a data source
 
@@ -98,6 +118,10 @@ reason the stages are split.
    `implemented=False` once it works.
 3. Configure it under `[sources.<key>]` in `etc/settings.toml`; `params` arrives
    as `ctx.params`.
+
+Historical sources replayed from the Wayback Machine instead subclass
+`WaybackDataSource` (domain + year range only); their rules are induced, see
+`docs/sources.md`.
 
 `FixtureDataSource` is the worked example: vocabulary maps, per-item tolerant
 parsing that skips one bad advert rather than losing the page, deterministic

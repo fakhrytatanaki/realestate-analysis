@@ -11,8 +11,18 @@ admin_api_key = "dev-admin-key"   # required by POST /api/v1/sources/{key}/runs
 url = "postgres://realestate:realestate@127.0.0.1:5432/realestate"
 
 [blob]
-backend = "local_fs"   # local_fs (s3 is the documented extension point)
-root = "var/blob"      # relative paths resolve against the core/ directory
+backend = "local_fs"   # local_fs | s3 (s3 needs: pip install 'realestate[s3]')
+root = "var/blob"      # local_fs only; relative paths resolve against core/
+
+# [blob.s3]            # used when backend = "s3"
+# bucket = "realestate-raw"
+# prefix = "prod"      # optional key prefix inside the bucket
+# region = "eu-central-1"
+# endpoint_url = "http://127.0.0.1:9000"   # MinIO / R2 / GCS interop; omit for AWS
+# addressing_style = "path"                # path for most self-hosted stores
+# Credentials: omit to use AWS_* env vars, a shared profile or the instance role.
+# access_key_id = "..."
+# secret_access_key = "..."
 
 [logging]
 level = "INFO"
@@ -27,6 +37,23 @@ run_in_api = false     # true => scheduler runs inside the API process too
 timezone = "UTC"
 misfire_grace_seconds = 60
 
+[llm]
+# Rule induction for archive sources. Ollama Cloud by default; use
+# base_url = "http://localhost:11434" (and no key) for a self-hosted Ollama.
+base_url = "https://ollama.com"
+# api_key = "..."        # or set OLLAMA_API_KEY in the environment
+model = "gemma4:31b"
+max_concurrency = 1      # the free tier allows one request at a time
+timeout_seconds = 600
+
+[archive]
+max_captures_list = 4    # distinct-content captures fetched per list URL
+max_captures_detail = 2
+max_captures_other = 1
+nav_batch_size = 12      # URL-shape groups per navigation question
+max_repairs = 2          # feedback rounds per template question
+max_attempts = 3         # failed inductions before a gap is marked FAILED
+
 [sources.fixture]
 enabled = true
 interval_minutes = 60
@@ -36,6 +63,10 @@ params = { directory = "var/fixtures" }
 enabled = false
 interval_minutes = 180
 params = {}
+
+[sources.olx_eg_wayback]
+enabled = false          # crawled with `cli crawl`, not scheduled
+params = { from_year = 2010, to_year = 2023, min_delay_seconds = 1.5, user_agent = "realestatepy-archive-research/0.1 (contact: you@example.com)" }
 
 [sources.zillow]
 enabled = false

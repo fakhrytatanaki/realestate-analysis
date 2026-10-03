@@ -76,6 +76,13 @@ class TortoiseRawDocumentRepository(RawDocumentRepository):
         row.attempts += 1
         await row.save()
 
+    async def mark_unrecognised(self, document_id: UUID, reason: str) -> None:
+        await RawDocumentModel.filter(id=document_id).update(
+            status=RawDocumentStatus.UNRECOGNISED,
+            parsed_at=datetime.now(UTC),
+            parse_error=reason[:8000],
+        )
+
     async def find_by_sha256(self, source_key: str, sha256: str) -> RawDocument | None:
         row = (
             await RawDocumentModel.filter(source_key=source_key, sha256=sha256)

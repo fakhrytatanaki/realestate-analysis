@@ -1,0 +1,157 @@
+"""What the LLM is allowed to answer, validated before it becomes a rule.
+
+Deliberately permissive in shape (small models wrap single values in lists, or
+forget to) and strict in meaning (enums, compilable regexes, known condition
+types). Anything that fails here is sent back to the model as feedback.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from realestate.domain.enums import ListingType, PropertyType
+
+ROUTE_DECISIONS = ("FETCH", "SKIP", "DEFER")
+PAGE_KINDS = ("LIST", "DETAIL", "OTHER")
+
+
+class NavRuleProposal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    group: int = Field(ge=1)
+    pattern: str = Field(min_length=1, max_length=400)
+    decision: Literal["FETCH", "SKIP", "DEFER"]
+    page_kind: Literal["LIST", "DETAIL", "OTHER"] = "OTHER"
+    priority: int = Field(default=50, ge=0, le=100)
+    reason: str = ""
+
+    @field_validator("decision", "page_kind", mode="before")
+    @classmethod
+    def _upper(cls, value: Any) -> Any:
+        return value.upper() if isinstance(value, str) else value
+
+    @field_validator("pattern")
+    @classmethod
+    def _compiles(cls, value: str) -> str:
+        try:
+            re.compile(value, re.IGNORECASE)
+        except re.error as exc:
+            raise ValueError(f"regex does not compile: {exc}") from exc
+        if value.strip() in {".*", ".+", "^", "$", "^.*$", "http", "https?://"}:
+            raise ValueError("pattern matches everything")
+        return value
+
+
+class NavRuleBatch(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    rules: list[NavRuleProposal]
+
+
+class VocabEntry(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    pattern: str
+    value: str
+
+    @field_validator("pattern")
+    @classmethod
+    def _compiles(cls, value: str) -> str:
+        re.compile(value, re.IGNORECASE)
+        return value
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def _upper(cls, value: Any) -> Any:
+        return value.upper() if isinstance(value, str) else value
+
+
+class TemplateProposal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(default="template", max_length=80)
+    page_kind: Literal["LIST", "DETAIL", "OTHER"]
+    conditions: list[dict[str, Any]] = Field(min_length=1)
+    items: dict[str, Any] | None = None
+    fields: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    links: list[dict[str, Any]] = Field(default_factory=list)
+    default_currency: str | None = None
+    vocab: dict[str, list[VocabEntry]] = Field(default_factory=dict)
+
+    @field_validator("page_kind", mode="before")
+    @classmethod
+    def _upper(cls, value: Any) -> Any:
+        return value.upper() if isinstance(value, str) else value
+
+    @field_validator("conditions", "links", mode="before")
+    @classmethod
+    def _listify(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        return [value] if isinstance(value, dict) else value
+
+    @field_validator("fields", mode="before")
+    @classmethod
+    def _listify_fields(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        return {
+            name: ([spec] if isinstance(spec, dict) else spec)
+            for name, spec in value.items()
+            if spec is not None
+        }
+
+    @field_validator("vocab", mode="before")
+    @classmethod
+    def _vocab(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return {}
+        allowed = {
+            "listing_type": {item.value for item in ListingType},
+            "property_type": {item.value for item in PropertyType},
+        }
+        cleaned: dict[str, list[Any]] = {}
+        for key, entries in value.items():
+            if key not in allowed or not isinstance(entries, list):
+                continue
+            cleaned[key] = [
+                entry
+                for entry in entries
+                if isinstance(entry, dict)
+                and str(entry.get("value", "")).upper() in allowed[key]
+                and entry.get("pattern")
+            ]
+        return cleaned
+
+    @field_validator("default_currency", mode="before")
+    @classmethod
+    def _currency(cls, value: Any) -> Any:
+        if isinstance(value, str) and re.fullmatch(r"[A-Za-z]{3}", value.strip()):
+            return value.strip().upper()
+        return None
+
+    def action(self) -> dict[str, Any]:
+        """The ``TEMPLATE`` node action this proposal compiles to."""
+        return {
+            "page_kind": self.page_kind,
+            "items": self.items,
+            "fields": self.fields,
+            "links": self.links,
+            "default_currency": self.default_currency,
+            "name": self.name,
+        }
+
+    def condition(self) -> dict[str, Any]:
+        return (
+            self.conditions[0]
+            if len(self.conditions) == 1
+            else {"type": "all", "conditions": self.conditions}
+        )
+
+    def vocab_dict(self) -> dict[str, list[dict[str, Any]]]:
+        return {
+            key: [entry.model_dump() for entry in entries] for key, entries in self.vocab.items()
+        }

@@ -80,7 +80,7 @@ though the scraper re-reads the same adverts every hour.
 
 | Port (`domain/ports/`) | Shipped implementation | Extension point |
 |---|---|---|
-| `BlobProvider` | `LocalFsBlobProvider` (`var/blob`) | S3/GCS — one class + one branch in `BlobProviderFactory` |
+| `BlobProvider` | `LocalFsBlobProvider` (`var/blob`), `S3BlobProvider` (any S3-compatible store) | Native GCS/Azure — one class + one branch in `BlobProviderFactory`, passing `tests/test_blob_provider.py` |
 | `LogProvider` | `StdStreamLogProvider`, `FileLogProvider`, `CompositeLogProvider` | ship to a log aggregator |
 | `DataSource` | `FixtureDataSource`; `HttpDataSource` / `BrowserDataSource` bases | every new portal |
 | `SourceRegistry` | `DataSourceRegistry` | — |

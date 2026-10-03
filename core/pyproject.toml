@@ -18,15 +18,23 @@ dependencies = [
     "httpx>=0.28",
     "apscheduler>=3.11,<4",
     "aiofiles>=25.1",
+    "selectolax>=0.4",
 ]
 
 [project.optional-dependencies]
+# spaCy token patterns as a rule cue (blank pipelines only, no model download).
+nlp = ["spacy>=3.8"]
+# [blob] backend = "s3": AWS S3 or any S3-compatible store (MinIO, R2, GCS interop).
+s3 = ["aiobotocore>=2.15"]
 dev = [
     "pytest>=8",
     "pytest-asyncio>=1.0",
     "ruff>=0.9",
     "mypy>=1.14",
     "types-aiofiles",
+    # In-process S3 for the blob contract tests (skipped when absent).
+    "aiobotocore>=2.15",
+    "moto[server]>=5",
 ]
 
 [project.scripts]

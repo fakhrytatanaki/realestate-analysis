@@ -9,10 +9,23 @@ from realestate.domain.models import BlobRef
 
 
 class BlobProvider(ABC):
-    """Content-addressable-ish object storage for raw scrape payloads.
+    """Object storage for raw scrape payloads, whatever the backend.
 
-    Implementations must treat ``key`` as an opaque POSIX-style relative path and
-    reject anything that would escape their root.
+    Implementations: ``LocalFsBlobProvider`` (a directory) and
+    ``S3BlobProvider`` (any S3-compatible bucket, optionally under a prefix).
+    Callers only ever see this port, so switching backends is configuration.
+
+    Contract every implementation keeps (``tests/test_blob_provider.py`` runs
+    one suite against each):
+
+    - ``key`` is a POSIX-style relative path, checked with
+      :func:`~realestate.domain.blob_keys.validate_blob_key` before any I/O;
+      a rejected key raises ``BlobKeyError`` and stores nothing.
+    - ``put`` is all-or-nothing: readers see the old object or the new one,
+      never a partial write. The returned ``BlobRef.sha256`` is computed from
+      the bytes given, not trusted from the backend.
+    - A missing key raises ``BlobNotFoundError`` from ``get``/``stream``;
+      ``delete`` of a missing key is a no-op.
     """
 
     @abstractmethod

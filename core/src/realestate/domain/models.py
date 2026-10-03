@@ -129,6 +129,9 @@ class ListingDraft:
     listed_at: datetime | None = None
     is_active: bool = True
     attributes: dict[str, Any] = field(default_factory=dict)
+    #: When the advert was observed in this state. Archive sources set it to the
+    #: capture time; ``None`` means "now", which is right for live scrapes.
+    observed_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,6 +162,9 @@ class Listing:
     raw_document_id: UUID | None = None
     # Populated only by radius searches; not a stored column.
     distance_km: float | None = None
+    #: Earliest / latest observation time; capture times for archive sources.
+    first_observed_at: datetime | None = None
+    last_observed_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

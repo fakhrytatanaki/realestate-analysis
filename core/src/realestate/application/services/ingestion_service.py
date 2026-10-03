@@ -22,6 +22,7 @@ from realestate.domain.exceptions import (
     DataSourceDisabledError,
     DataSourceNotImplementedError,
     UnknownDataSourceError,
+    UnrecognisedDocumentError,
 )
 from realestate.domain.models import (
     FetchContext,
@@ -30,6 +31,7 @@ from realestate.domain.models import (
     ScrapeRun,
     UpsertResult,
 )
+from realestate.domain.ports.archive import LinkSink
 from realestate.domain.ports.blob_provider import BlobProvider
 from realestate.domain.ports.data_source import DataSource
 from realestate.domain.ports.log_provider import LogProvider
@@ -53,8 +55,10 @@ class IngestionService:
         documents: RawDocumentRepository,
         runs: ScrapeRunRepository,
         log: LogProvider,
+        links: LinkSink | None = None,
     ) -> None:
         self._registry = registry
+        self._links = links
         self._blob = blob
         self._listings = listings
         self._documents = documents
@@ -170,6 +174,12 @@ class IngestionService:
             source_key, statuses=statuses, limit=limit, fetched_after=since
         )
 
+    async def reparse_unrecognised(self, source_key: str, *, limit: int = 500) -> UpsertResult:
+        """Re-try documents no rule recognised, typically after rule induction."""
+        return await self._parse_stored(
+            source_key, statuses=(RawDocumentStatus.UNRECOGNISED,), limit=limit
+        )
+
     async def _parse_stored(
         self,
         source_key: str | None,
@@ -255,6 +265,7 @@ class IngestionService:
         """Parse archived documents into listings, marking each one's outcome."""
         total = UpsertResult()
         errors = 0
+        unrecognised = 0
 
         for document in documents:
             try:
@@ -271,6 +282,11 @@ class IngestionService:
                 result = await self._listings.upsert_many(
                     drafts, source_key=document.source_key, raw_document_id=document.id
                 )
+            except UnrecognisedDocumentError as exc:
+                # Not a failure: rule induction will learn this page design.
+                unrecognised += 1
+                await self._documents.mark_unrecognised(document.id, str(exc))
+                continue
             except Exception as exc:
                 # The payload is safe in the blob store, so a failure here is
                 # recoverable: fix the parser and replay.
@@ -281,6 +297,8 @@ class IngestionService:
 
             await self._documents.mark_parsed(document.id)
             total = total + result
+            if self._links is not None:
+                await self._offer_links(source, payload, document, log)
             await log.debug(
                 "parsed document",
                 document_id=str(document.id),
@@ -293,12 +311,33 @@ class IngestionService:
         await log.info(
             "parse stage complete",
             documents=len(documents),
+            unrecognised=unrecognised,
             created=total.created,
             updated=total.updated,
             unchanged=total.unchanged,
             errors=errors,
         )
         return total, errors
+
+    async def _offer_links(
+        self,
+        source: DataSource,
+        payload: RawPayload,
+        document: RawDocument,
+        log: LogProvider,
+    ) -> None:
+        """Hand links found on a parsed page to the crawl frontier.
+
+        Discovery reads the same archived bytes as parsing, so it is as
+        replay-safe; a failure here never un-parses the document.
+        """
+        assert self._links is not None
+        try:
+            links = await source.discover_links(payload)
+            if links:
+                await self._links.offer(document.source_key, links)
+        except Exception as exc:
+            await log.exception("link discovery failed", exc, document_id=str(document.id))
 
     def _ensure_runnable(self, source_key: str, trigger: RunTrigger) -> None:
         """Guard against running something that cannot work.

@@ -10,28 +10,62 @@ process that only needs the CLI never opens a scheduler.
 
 from __future__ import annotations
 
+import os
 from functools import cached_property
 
 from tortoise import Tortoise
 
 from realestate.application.jobs.parse_pending_job import make_parse_pending_job
 from realestate.application.jobs.scrape_source_job import make_scrape_job
+from realestate.application.services.archive_crawl_service import (
+    ArchiveCrawlService,
+    CrawlSettings,
+)
+from realestate.application.services.frontier_link_sink import FrontierLinkSink
 from realestate.application.services.ingestion_service import IngestionService
 from realestate.application.services.listing_query_service import ListingQueryService
+from realestate.application.services.rule_induction_service import (
+    InductionSettings,
+    RuleInductionService,
+)
 from realestate.config.settings import Settings, load_settings
 from realestate.config.tortoise import build_tortoise_config
+from realestate.domain.ports.archive import (
+    ArchiveIndex,
+    CrawlCursorRepository,
+    CrawlFrontierRepository,
+)
 from realestate.domain.ports.blob_provider import BlobProvider
 from realestate.domain.ports.job_scheduler import JobScheduler
+from realestate.domain.ports.llm import StructuredLlm
 from realestate.domain.ports.log_provider import LogProvider
 from realestate.domain.ports.repositories import (
     ListingRepository,
     RawDocumentRepository,
     ScrapeRunRepository,
 )
+from realestate.domain.ports.rules import (
+    LlmDecisionRepository,
+    RuleEngine,
+    RuleGapRepository,
+    RuleGraphRepository,
+)
+from realestate.infrastructure.archive.wayback import WaybackCdxIndex, WaybackClient
 from realestate.infrastructure.blob.factory import BlobProviderFactory
+from realestate.infrastructure.db.repositories.crawl import (
+    TortoiseCrawlCursorRepository,
+    TortoiseCrawlFrontierRepository,
+)
 from realestate.infrastructure.db.repositories.listing import TortoiseListingRepository
 from realestate.infrastructure.db.repositories.raw_document import TortoiseRawDocumentRepository
+from realestate.infrastructure.db.repositories.rules import (
+    TortoiseLlmDecisionRepository,
+    TortoiseRuleGapRepository,
+    TortoiseRuleGraphRepository,
+)
 from realestate.infrastructure.db.repositories.scrape_run import TortoiseScrapeRunRepository
+from realestate.infrastructure.extraction.engine import HtmlRuleEngine
+from realestate.infrastructure.llm.ollama import OllamaLlm, OllamaSettings
 from realestate.infrastructure.logging.factory import LogProviderFactory
 from realestate.infrastructure.scheduling.apscheduler_scheduler import ApSchedulerJobScheduler
 from realestate.infrastructure.sources.defaults import register_default_sources
@@ -78,6 +112,57 @@ class Container:
     def scheduler(self) -> JobScheduler:
         return ApSchedulerJobScheduler(self.settings.scheduler)
 
+    @cached_property
+    def frontier(self) -> CrawlFrontierRepository:
+        return TortoiseCrawlFrontierRepository()
+
+    @cached_property
+    def cursors(self) -> CrawlCursorRepository:
+        return TortoiseCrawlCursorRepository()
+
+    @cached_property
+    def rule_graphs(self) -> RuleGraphRepository:
+        return TortoiseRuleGraphRepository()
+
+    @cached_property
+    def rule_gaps(self) -> RuleGapRepository:
+        return TortoiseRuleGapRepository()
+
+    @cached_property
+    def llm_decisions(self) -> LlmDecisionRepository:
+        return TortoiseLlmDecisionRepository()
+
+    @cached_property
+    def rule_engine(self) -> RuleEngine:
+        return HtmlRuleEngine()
+
+    @cached_property
+    def llm(self) -> StructuredLlm:
+        config = self.settings.llm
+        return OllamaLlm(
+            OllamaSettings(
+                base_url=config.base_url,
+                api_key=config.api_key or os.environ.get("OLLAMA_API_KEY"),
+                model=config.model,
+                max_concurrency=config.max_concurrency,
+                timeout_seconds=config.timeout_seconds,
+                temperature=config.temperature,
+                seed=config.seed,
+                max_retries=config.max_retries,
+                use_tools=config.use_tools,
+                num_ctx=config.num_ctx,
+            ),
+            log=self.log,
+        )
+
+    @cached_property
+    def wayback(self) -> WaybackClient:
+        return WaybackClient(log=self.log)
+
+    @cached_property
+    def archive_index(self) -> ArchiveIndex:
+        return WaybackCdxIndex(self.wayback)
+
     # -- application ------------------------------------------------------
 
     @cached_property
@@ -89,6 +174,49 @@ class Container:
             documents=self.documents,
             runs=self.runs,
             log=self.log,
+            links=FrontierLinkSink(self.frontier),
+        )
+
+    @cached_property
+    def induction(self) -> RuleInductionService:
+        archive = self.settings.archive
+        return RuleInductionService(
+            graphs=self.rule_graphs,
+            gaps=self.rule_gaps,
+            decisions=self.llm_decisions,
+            llm=self.llm,
+            engine=self.rule_engine,
+            documents=self.documents,
+            blob=self.blob,
+            frontier=self.frontier,
+            log=self.log,
+            settings=InductionSettings(
+                nav_batch_size=archive.nav_batch_size,
+                max_repairs=archive.max_repairs,
+                max_attempts=archive.max_attempts,
+                prompt_budget_chars=self.settings.llm.prompt_budget_chars,
+            ),
+        )
+
+    @cached_property
+    def crawler(self) -> ArchiveCrawlService:
+        archive = self.settings.archive
+        return ArchiveCrawlService(
+            registry=self.registry,
+            frontier=self.frontier,
+            cursors=self.cursors,
+            index=self.archive_index,
+            graphs=self.rule_graphs,
+            engine=self.rule_engine,
+            ingestion=self.ingestion,
+            induction=self.induction,
+            log=self.log,
+            settings=CrawlSettings(
+                max_captures_list=archive.max_captures_list,
+                max_captures_detail=archive.max_captures_detail,
+                max_captures_other=archive.max_captures_other,
+                cdx_page_size=archive.cdx_page_size,
+            ),
         )
 
     @cached_property
@@ -165,6 +293,12 @@ class Container:
         if "scheduler" in self.__dict__:
             await self.scheduler.shutdown()
         await self.close_db()
+        if "llm" in self.__dict__:
+            close = getattr(self.llm, "aclose", None)
+            if close is not None:
+                await close()
+        if "wayback" in self.__dict__:
+            await self.wayback.aclose()
         if "blob" in self.__dict__:
             await self.blob.aclose()
         if "log" in self.__dict__:

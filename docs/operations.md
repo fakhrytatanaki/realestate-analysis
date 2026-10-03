@@ -16,9 +16,11 @@ with `REALESTATE_SETTINGS_FILE` before starting the process. Nested overrides us
 |---|---|
 | `app` | Name, environment, debug, admin API key |
 | `db` | PostgreSQL URL and optional test schema generation |
-| `blob` | Backend (`local_fs`) and archive root |
+| `blob` | Backend (`local_fs` or `s3`), archive root, and `[blob.s3]` bucket/prefix/region/endpoint/credentials |
 | `logging` | Level, console format, file sink/path |
 | `scheduler` | API scheduling flags, timezone, misfire grace |
+| `llm` | Rule-induction model: Ollama base URL, API key (or `OLLAMA_API_KEY`), model, concurrency, timeouts |
+| `archive` | Captures fetched per URL by page kind, CDX page size, induction batch/repair/attempt limits |
 | `sources.<key>` | Enabled state, interval/cron, payload cap, adapter parameters |
 
 Relative configured paths resolve against `core/`, independent of the shell's
@@ -106,6 +108,30 @@ For failures, inspect run status, `raw_document.parse_error`, and logs (default
 and replay; recover interrupted parsing with plain `parse`. CLI parse output
 reports upsert counts, so consult document state/logs for parse failures. A
 `PARTIAL` scrape may still exit zero: inspect its status and errors.
+
+## Archive sources
+
+Archive sources (`olx_eg_wayback`) are crawled, not scheduled. `crawl` runs rounds of
+route → induce navigation rules → fetch and parse → induce templates → re-parse,
+within explicit budgets, enumerating the CDX index first when the frontier is empty:
+
+```bash
+./venv/bin/python -m realestate.cli crawl --source olx_eg_wayback --rounds 3 --max-fetches 60 --max-llm-calls 10
+./venv/bin/python -m realestate.cli archive enumerate --source olx_eg_wayback --from-year 2013 --to-year 2013
+./venv/bin/python -m realestate.cli archive route --source olx_eg_wayback
+./venv/bin/python -m realestate.cli archive status --source olx_eg_wayback
+./venv/bin/python -m realestate.cli rules induce --source olx_eg_wayback --domain navigation --max-calls 3
+./venv/bin/python -m realestate.cli rules show --source olx_eg_wayback --domain extraction [--json]
+./venv/bin/python -m realestate.cli rules gaps --source olx_eg_wayback
+./venv/bin/python -m realestate.cli parse --source olx_eg_wayback --unrecognised
+```
+
+Enumeration resumes per year (`crawl_cursor`). Routing retries `UNROUTED` captures
+each time, so new navigation rules apply to old misses. Documents no template
+recognises are `UNRECOGNISED`, not `FAILED`; after induction, `parse --unrecognised`
+re-parses them. Without an API key, induction reports "model unavailable" and the
+rest of the crawl still runs on existing rules. Every model answer is in
+`llm_decision` (tokens, validity, error); `rules gaps` shows what keeps failing.
 
 ## Local database helpers
 

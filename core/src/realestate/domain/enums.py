@@ -43,6 +43,9 @@ class PriceType(StrEnum):
     PER_SQM = "PER_SQM"
     INSTALLMENT = "INSTALLMENT"
     ON_REQUEST = "ON_REQUEST"
+    #: The source gave no usable figure -- distinct from ``ON_REQUEST``, where the
+    #: seller deliberately withheld it. Common in archived, partial adverts.
+    UNKNOWN = "UNKNOWN"
 
 
 class RawDocumentKind(StrEnum):
@@ -62,6 +65,9 @@ class RawDocumentStatus(StrEnum):
     PARSED = "PARSED"
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"
+    #: No extraction rule recognised the document yet. Not an error: rule
+    #: induction turns these into new rules, after which they are re-parsed.
+    UNRECOGNISED = "UNRECOGNISED"
 
 
 class RunStatus(StrEnum):
@@ -90,6 +96,92 @@ class SortOrder(StrEnum):
     PRICE_ASC = "price_asc"
     PRICE_DESC = "price_desc"
     DISTANCE = "distance"
+
+
+class PageKind(StrEnum):
+    """What an archived page is, as far as listing extraction is concerned."""
+
+    LIST = "LIST"
+    DETAIL = "DETAIL"
+    #: Recognised, but carries no listings (help pages, other categories, ...).
+    OTHER = "OTHER"
+
+
+class CrawlStatus(StrEnum):
+    """Lifecycle of one archived capture in the crawl frontier."""
+
+    #: Enumerated from the archive index, not yet routed.
+    DISCOVERED = "DISCOVERED"
+    #: No navigation rule matched; waiting for rule induction.
+    UNROUTED = "UNROUTED"
+    QUEUED = "QUEUED"
+    #: Ambiguous; fetched only if a recognised page later links to it.
+    DEFERRED = "DEFERRED"
+    SKIPPED = "SKIPPED"
+    FETCHED = "FETCHED"
+    FAILED = "FAILED"
+
+
+class RouteDecision(StrEnum):
+    """What a navigation rule says to do with a URL."""
+
+    FETCH = "FETCH"
+    SKIP = "SKIP"
+    DEFER = "DEFER"
+
+
+class LinkRel(StrEnum):
+    """How a recognised page refers to another URL."""
+
+    DETAIL = "DETAIL"
+    LIST = "LIST"
+    PAGINATION = "PAGINATION"
+
+
+class RuleDomain(StrEnum):
+    """Which decision a rule graph caches."""
+
+    NAVIGATION = "NAVIGATION"
+    EXTRACTION = "EXTRACTION"
+
+
+class RuleGraphStatus(StrEnum):
+    """Lifecycle of one immutable rule graph version."""
+
+    DRAFT = "DRAFT"
+    ACTIVE = "ACTIVE"
+    RETIRED = "RETIRED"
+
+
+class NodeKind(StrEnum):
+    """States of a rule graph.
+
+    ``ROOT`` and ``BRANCH`` are classification states whose outgoing edges are
+    tried in priority order; ``ROUTE`` and ``TEMPLATE`` are terminal states that
+    carry the action -- a navigation decision or an extraction recipe.
+    """
+
+    ROOT = "ROOT"
+    BRANCH = "BRANCH"
+    ROUTE = "ROUTE"
+    TEMPLATE = "TEMPLATE"
+
+
+class RuleOrigin(StrEnum):
+    """Who authored a rule node."""
+
+    SEED = "SEED"
+    LLM = "LLM"
+    HUMAN = "HUMAN"
+
+
+class GapStatus(StrEnum):
+    """Lifecycle of a cluster of inputs no rule handled."""
+
+    OPEN = "OPEN"
+    RESOLVED = "RESOLVED"
+    #: Induction kept failing validation; left for a human or a better model.
+    FAILED = "FAILED"
 
 
 class LogLevel(StrEnum):

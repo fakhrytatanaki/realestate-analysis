@@ -28,7 +28,7 @@ flowchart LR
     API[FastAPI / CLI / scheduled jobs] --> Ingest[IngestionService]
     Ingest --> Fetch[DataSource.fetch]
     Fetch --> Bytes[RawPayload bytes]
-    Bytes --> Blob[Local blob storage]
+    Bytes --> Blob[Blob storage: local FS or S3]
     Blob --> Raw[RawDocument: PENDING]
     Raw --> Read[Read archived bytes]
     Read --> Parse[DataSource.parse]
@@ -73,9 +73,13 @@ Upserts collapse duplicate IDs within a batch (last draft wins), then compare
 - Unchanged advert: update only `last_seen_at`; preserve `updated_at` and the
   previous provenance link. The queryset `.update()` deliberately avoids `auto_now`.
 
-Blobs use `{source}/{YYYY}/{MM}/{DD}/{uuid}.{extension}`. Filesystem writes use a
-temporary sibling plus atomic replacement. Keys must be canonical relative paths;
-traversal and paths resolving outside the blob root are rejected. Payload SHA-256
+Blobs use `{source}/{YYYY}/{MM}/{DD}/{uuid}.{extension}` behind the `BlobProvider`
+port, with two backends: local filesystem and S3-compatible object storage.
+`validate_blob_key` (domain) rejects non-canonical keys, traversal and absolute
+paths for every backend before any I/O. Filesystem writes use a temporary sibling
+plus atomic replacement; S3 relies on `PutObject` being atomic. The database
+stores the backend-neutral key and the backend-specific `blob_uri`, so changing
+backends needs the existing objects copied across under the same keys. Payload SHA-256
 lookup exists, but ingestion currently archives repeated payloads again.
 
 ## Query path

@@ -78,3 +78,15 @@ class ParseError(RealEstateError):
 
 class AuthorizationError(RealEstateError):
     """A privileged operation was attempted without valid credentials."""
+
+
+class UnrecognisedDocumentError(ParseError):
+    """No extraction rule recognised the document yet.
+
+    Not a bug: the pipeline records the document as ``UNRECOGNISED`` and rule
+    induction later learns a rule for it, after which it is re-parsed.
+    """
+
+
+class LlmError(RealEstateError):
+    """The language model could not be reached or returned nothing usable."""

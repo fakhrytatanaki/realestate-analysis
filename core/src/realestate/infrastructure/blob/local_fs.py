@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 import aiofiles
 import aiofiles.os
 
+from realestate.domain.blob_keys import validate_blob_key
 from realestate.domain.exceptions import BlobKeyError, BlobNotFoundError
 from realestate.domain.models import BlobRef
 from realestate.domain.ports.blob_provider import BlobProvider
@@ -34,15 +35,8 @@ class LocalFsBlobProvider(BlobProvider):
 
     def _path_for(self, key: str) -> Path:
         """Resolve ``key`` inside the root, rejecting traversal attempts."""
-        if not key or key.startswith("/"):
-            raise BlobKeyError(f"blob key must be a non-empty relative path: {key!r}")
-        pure = PurePosixPath(key)
-        if any(part in ("..", ".", "") for part in pure.parts):
-            raise BlobKeyError(f"blob key must not contain empty, '.' or '..' segments: {key!r}")
-        # Insist on the canonical spelling, so "a//b" and "a/b" can never end up
-        # as two database rows pointing at one file.
-        if "/".join(pure.parts) != key:
-            raise BlobKeyError(f"blob key is not in canonical form: {key!r}")
+        pure = PurePosixPath(validate_blob_key(key))
+        # Defence in depth: symlinks inside the root must not lead out of it.
         candidate = (self._root / Path(*pure.parts)).resolve()
         if candidate != self._root and self._root not in candidate.parents:
             raise BlobKeyError(f"blob key escapes the storage root: {key!r}")
@@ -109,4 +103,3 @@ class LocalFsBlobProvider(BlobProvider):
         except OSError:
             return False
         return os.access(self._root, os.W_OK)
-

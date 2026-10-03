@@ -242,11 +242,25 @@ async def initialised_db(integration_db_url: str) -> AsyncIterator[None]:
         yield
     finally:
         from realestate.infrastructure.db.models import (
+            CrawlCursorModel,
+            CrawlFrontierModel,
             ListingModel,
+            LlmDecisionModel,
             RawDocumentModel,
+            RuleGapModel,
+            RuleGraphModel,
             ScrapeRunModel,
         )
 
+        archive_models = (
+            CrawlFrontierModel,
+            CrawlCursorModel,
+            RuleGraphModel,
+            RuleGapModel,
+            LlmDecisionModel,
+        )
+        for model in archive_models:
+            await model.all().delete()
         await ListingModel.all().delete()
         await RawDocumentModel.all().delete()
         await ScrapeRunModel.all().delete()
@@ -317,6 +331,16 @@ class InMemoryRawDocumentRepository:
             status=RawDocumentStatus.FAILED,
             parse_error=error,
             attempts=document.attempts + 1,
+        )
+
+    async def mark_unrecognised(self, document_id, reason):  # type: ignore[no-untyped-def]
+        from dataclasses import replace
+
+        from realestate.domain.enums import RawDocumentStatus
+
+        document = self.documents[document_id]
+        self.documents[document_id] = replace(
+            document, status=RawDocumentStatus.UNRECOGNISED, parse_error=reason
         )
 
     async def find_by_sha256(self, source_key, sha256):  # type: ignore[no-untyped-def]

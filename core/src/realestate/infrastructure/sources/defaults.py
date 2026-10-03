@@ -6,8 +6,12 @@ portal means importing it here and adding a :meth:`register` call.
 
 from __future__ import annotations
 
+from realestate.infrastructure.db.repositories.crawl import TortoiseCrawlFrontierRepository
+from realestate.infrastructure.db.repositories.rules import TortoiseRuleGraphRepository
+from realestate.infrastructure.extraction.engine import HtmlRuleEngine
 from realestate.infrastructure.sources.dubizzle_eg.source import DubizzleEgDataSource
 from realestate.infrastructure.sources.fixture.source import FixtureDataSource
+from realestate.infrastructure.sources.olx_eg_wayback.source import OlxEgWaybackDataSource
 from realestate.infrastructure.sources.registry import DataSourceRegistry, SourceContext
 from realestate.infrastructure.sources.zillow.source import ZillowDataSource
 
@@ -27,6 +31,19 @@ def register_default_sources(registry: DataSourceRegistry) -> DataSourceRegistry
         display_name=DubizzleEgDataSource.display_name,
         country_code=DubizzleEgDataSource.country_code,
         factory=lambda ctx: DubizzleEgDataSource(log=ctx.log, params=ctx.params),
+        implemented=True,
+    )
+    registry.register(
+        key=OlxEgWaybackDataSource.key,
+        display_name=OlxEgWaybackDataSource.display_name,
+        country_code=OlxEgWaybackDataSource.country_code,
+        factory=lambda ctx: OlxEgWaybackDataSource(
+            log=ctx.log,
+            params=ctx.params,
+            frontier=TortoiseCrawlFrontierRepository(),
+            graphs=TortoiseRuleGraphRepository(),
+            engine=HtmlRuleEngine(),
+        ),
         implemented=True,
     )
     registry.register(

@@ -64,7 +64,11 @@ def draft_fingerprint(draft: ListingDraft) -> dict[str, Any]:
         "longitude": str(point.longitude) if point else None,
         "listed_at": draft.listed_at.isoformat() if draft.listed_at else None,
         "is_active": draft.is_active,
-        "attributes": draft.attributes,
+        # `_`-prefixed keys are provenance (rule versions, raw snippets), not
+        # advert content: a new extraction rule must not look like an edit.
+        "attributes": {
+            key: value for key, value in draft.attributes.items() if not key.startswith("_")
+        },
     }
 
 

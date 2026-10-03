@@ -70,6 +70,8 @@ def to_listing(row: ListingModel, *, distance_km: float | None = None) -> Listin
         raw_document_id=row.raw_document_id,  # type: ignore[attr-defined]
         # Only radius searches populate this; it is computed, not stored.
         distance_km=distance_km if distance_km is None else float(distance_km),
+        first_observed_at=row.first_observed_at,
+        last_observed_at=row.last_observed_at,
     )
 
 
