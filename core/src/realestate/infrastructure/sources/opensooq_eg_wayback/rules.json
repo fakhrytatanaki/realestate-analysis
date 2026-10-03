@@ -1,0 +1,542 @@
+{
+  "source_key": "opensooq_eg_wayback",
+  "navigation": [
+    {
+      "pattern": "^https?://(?!(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?(?:/|$))",
+      "decision": "SKIP",
+      "page_kind": "OTHER",
+      "priority": 0,
+      "group": 1,
+      "reason": "Keep replay and link routing on the Egypt host."
+    },
+    {
+      "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/(?:view(?:/[0-9]+)?|ar)?/?(?:\\?[^#]*)?$",
+      "decision": "FETCH",
+      "page_kind": "OTHER",
+      "priority": 95,
+      "group": 2,
+      "reason": "Enumerate the historical redirect destinations as independent captures."
+    },
+    {
+      "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/search/?\\?(?:[^#]*&)?sc2id=(?:1|14)(?:&[^#]*)?$",
+      "decision": "FETCH",
+      "page_kind": "LIST",
+      "priority": 90,
+      "group": 3,
+      "reason": "2008 property sale and rental categories, verified in archived navigation."
+    },
+    {
+      "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/ar/(?:عقارات|%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA)(?:/|-|\\?|$)",
+      "decision": "FETCH",
+      "page_kind": "LIST",
+      "priority": 90,
+      "group": 4,
+      "reason": "Arabic property categories; accept both literal and percent-encoded paths."
+    },
+    {
+      "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/(?:ar/)?search/[0-9]+(?:/[^?#]*)?(?:[?#].*)?$",
+      "decision": "DEFER",
+      "page_kind": "DETAIL",
+      "priority": 60,
+      "group": 5,
+      "reason": "Numeric advert IDs across old and newer templates; follow property-list evidence."
+    },
+    {
+      "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/(?:aboutus|contact|login|registration|city|ar/(?:post/create|site/|login|register))(?:[/?]|$)",
+      "decision": "SKIP",
+      "page_kind": "OTHER",
+      "priority": 0,
+      "group": 6,
+      "reason": "Account, contact and advert creation pages carry no historical property observations."
+    }
+  ],
+  "extraction": [
+    {
+      "name": "legacy_property_sale",
+      "page_kind": "LIST",
+      "identity_url_pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/(?:ar/)?search/([0-9]+)(?:/[^?#]*)?(?:[?#].*)?$",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/search/?\\?(?:[^#]*&)?sc2id=1(?:&[^#]*)?$"
+        },
+        {
+          "type": "dom_css",
+          "css": "#main_img_eg"
+        },
+        {
+          "type": "dom_css",
+          "css": "tr:has(> td.separator_post > a.bold_link):has(> td.separator_post > a[href$=\"?sc2id=1\"])"
+        }
+      ],
+      "items": {
+        "css": "tr:has(> td.separator_post > a.bold_link):has(> td.separator_post > a[href$=\"?sc2id=1\"])"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": "a.bold_link"
+          }
+        ],
+        "url": [
+          {
+            "css": "a.bold_link",
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "css": "a.bold_link",
+            "attr": "href",
+            "regex": "/search/([0-9]+)(?:/|\\?|$)"
+          }
+        ],
+        "listing_type": [
+          {
+            "const": "SALE"
+          }
+        ],
+        "property_type": [
+          {
+            "css": "a.bold_link"
+          }
+        ],
+        "category": [
+          {
+            "css": "a[href$=\"?sc2id=1\"]"
+          }
+        ],
+        "city": [
+          {
+            "css": "a[href*=\"?scid=\"]"
+          }
+        ],
+        "location": [
+          {
+            "css": "a[href*=\"?scid=\"]"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": ".date_block"
+          }
+        ]
+      },
+      "required_fields": [
+        "title",
+        "url",
+        "external_id",
+        "listing_type"
+      ],
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "allow_title_price": false,
+      "links": [
+        {
+          "css": "a[href]",
+          "regex": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/search/?\\?(?:[^#]*&)?sc2id=1(?:&[^#]*)?$",
+          "rel": "PAGINATION"
+        }
+      ]
+    },
+    {
+      "name": "legacy_property_rent",
+      "page_kind": "LIST",
+      "identity_url_pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/(?:ar/)?search/([0-9]+)(?:/[^?#]*)?(?:[?#].*)?$",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/search/?\\?(?:[^#]*&)?sc2id=14(?:&[^#]*)?$"
+        },
+        {
+          "type": "dom_css",
+          "css": "#main_img_eg"
+        },
+        {
+          "type": "dom_css",
+          "css": "tr:has(> td.separator_post > a.bold_link):has(> td.separator_post > a[href$=\"?sc2id=14\"])"
+        }
+      ],
+      "items": {
+        "css": "tr:has(> td.separator_post > a.bold_link):has(> td.separator_post > a[href$=\"?sc2id=14\"])"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": "a.bold_link"
+          }
+        ],
+        "url": [
+          {
+            "css": "a.bold_link",
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "css": "a.bold_link",
+            "attr": "href",
+            "regex": "/search/([0-9]+)(?:/|\\?|$)"
+          }
+        ],
+        "listing_type": [
+          {
+            "const": "RENT"
+          }
+        ],
+        "property_type": [
+          {
+            "css": "a.bold_link"
+          }
+        ],
+        "category": [
+          {
+            "css": "a[href$=\"?sc2id=14\"]"
+          }
+        ],
+        "city": [
+          {
+            "css": "a[href*=\"?scid=\"]"
+          }
+        ],
+        "location": [
+          {
+            "css": "a[href*=\"?scid=\"]"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": ".date_block"
+          }
+        ]
+      },
+      "required_fields": [
+        "title",
+        "url",
+        "external_id",
+        "listing_type"
+      ],
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "allow_title_price": false,
+      "links": [
+        {
+          "css": "a[href]",
+          "regex": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/search/?\\?(?:[^#]*&)?sc2id=14(?:&[^#]*)?$",
+          "rel": "PAGINATION"
+        }
+      ]
+    },
+    {
+      "name": "apartment_cards_sale",
+      "page_kind": "LIST",
+      "identity_url_pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/(?:ar/)?search/([0-9]+)(?:/[^?#]*)?(?:[?#].*)?$",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?(?:/ar/عقارات/شقق-للبيع|/ar/%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA/%D8%B4%D9%82%D9%82-%D9%84%D9%84%D8%A8%D9%8A%D8%B9)/?(?:\\?[^#]*)?$"
+        },
+        {
+          "type": "dom_css",
+          "css": "a.postListItemData .postDet h2"
+        },
+        {
+          "type": "dom_css",
+          "css": "a.postListItemData .priceColor"
+        }
+      ],
+      "items": {
+        "css": "a.postListItemData[href]"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": ".postDet h2"
+          }
+        ],
+        "url": [
+          {
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "attr": "href",
+            "regex": "/ar/search/([0-9]+)(?:/|\\?|$)"
+          }
+        ],
+        "listing_type": [
+          {
+            "const": "SALE"
+          }
+        ],
+        "property_type": [
+          {
+            "const": "APARTMENT"
+          }
+        ],
+        "price": [
+          {
+            "css": ".priceColor"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": ".postDate"
+          }
+        ],
+        "location": [
+          {
+            "css": ".postDet > div.darkGrayColor"
+          }
+        ],
+        "city": [
+          {
+            "css": ".postDet > div.darkGrayColor",
+            "regex": "^([^,،]+)"
+          }
+        ],
+        "district": [
+          {
+            "css": ".postDet > div.darkGrayColor",
+            "regex": "[,،]\\s*(.+)$"
+          }
+        ],
+        "area": [
+          {
+            "css": ".postDet p",
+            "regex": "مساحة البناء:\\s*([0-9٠-٩.,]+\\s*م[٢2²]?)"
+          }
+        ],
+        "bedrooms": [
+          {
+            "css": ".postDet p",
+            "regex": "([0-9٠-٩]+)\\s*غرف(?:ة|تا)?\\s*نوم"
+          }
+        ],
+        "bathrooms": [
+          {
+            "css": ".postDet p",
+            "regex": "([0-9٠-٩]+)\\s*حمّ?امات"
+          }
+        ]
+      },
+      "required_fields": [
+        "title",
+        "url",
+        "external_id",
+        "listing_type"
+      ],
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "allow_title_price": false,
+      "links": [
+        {
+          "css": "a[href*=\"page=\"]",
+          "regex": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?(?:/ar/عقارات/شقق-للبيع|/ar/%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA/%D8%B4%D9%82%D9%82-%D9%84%D9%84%D8%A8%D9%8A%D8%B9)/?(?:\\?[^#]*)?$",
+          "rel": "PAGINATION"
+        }
+      ]
+    },
+    {
+      "name": "apartment_cards_rent",
+      "page_kind": "LIST",
+      "identity_url_pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/(?:ar/)?search/([0-9]+)(?:/[^?#]*)?(?:[?#].*)?$",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?(?:/ar/عقارات/شقق-للايجار|/ar/%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA/%D8%B4%D9%82%D9%82-%D9%84%D9%84%D8%A7%D9%8A%D8%AC%D8%A7%D8%B1)/?(?:\\?[^#]*)?$"
+        },
+        {
+          "type": "dom_css",
+          "css": "a.postListItemData .postDet h2"
+        },
+        {
+          "type": "dom_css",
+          "css": "a.postListItemData .priceColor"
+        }
+      ],
+      "items": {
+        "css": "a.postListItemData[href]"
+      },
+      "fields": {
+        "title": [
+          {
+            "css": ".postDet h2"
+          }
+        ],
+        "url": [
+          {
+            "attr": "href"
+          }
+        ],
+        "external_id": [
+          {
+            "attr": "href",
+            "regex": "/ar/search/([0-9]+)(?:/|\\?|$)"
+          }
+        ],
+        "listing_type": [
+          {
+            "const": "RENT"
+          }
+        ],
+        "property_type": [
+          {
+            "const": "APARTMENT"
+          }
+        ],
+        "price": [
+          {
+            "css": ".priceColor"
+          }
+        ],
+        "price_period": [
+          {
+            "css": ".postDet p"
+          }
+        ],
+        "listed_at": [
+          {
+            "css": ".postDate"
+          }
+        ],
+        "location": [
+          {
+            "css": ".postDet > div.darkGrayColor"
+          }
+        ],
+        "city": [
+          {
+            "css": ".postDet > div.darkGrayColor",
+            "regex": "^([^,،]+)"
+          }
+        ],
+        "district": [
+          {
+            "css": ".postDet > div.darkGrayColor",
+            "regex": "[,،]\\s*(.+)$"
+          }
+        ],
+        "area": [
+          {
+            "css": ".postDet p",
+            "regex": "مساحة البناء:\\s*([0-9٠-٩.,]+\\s*م[٢2²]?)"
+          }
+        ],
+        "bedrooms": [
+          {
+            "css": ".postDet p",
+            "regex": "([0-9٠-٩]+)\\s*غرف(?:ة|تا)?\\s*نوم"
+          }
+        ],
+        "bathrooms": [
+          {
+            "css": ".postDet p",
+            "regex": "([0-9٠-٩]+)\\s*حمّ?امات"
+          }
+        ]
+      },
+      "required_fields": [
+        "title",
+        "url",
+        "external_id",
+        "listing_type"
+      ],
+      "default_currency": "EGP",
+      "default_rental_price_type": "UNKNOWN",
+      "strict_classification": true,
+      "allow_title_price": false,
+      "links": [
+        {
+          "css": "a[href*=\"page=\"]",
+          "regex": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?(?:/ar/عقارات/شقق-للايجار|/ar/%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA/%D8%B4%D9%82%D9%82-%D9%84%D9%84%D8%A7%D9%8A%D8%AC%D8%A7%D8%B1)/?(?:\\?[^#]*)?$",
+          "rel": "PAGINATION"
+        }
+      ]
+    },
+    {
+      "name": "legacy_portal",
+      "page_kind": "OTHER",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/(?:view(?:/[0-9]+)?)?/?(?:\\?[^#]*)?$"
+        },
+        {
+          "type": "dom_css",
+          "css": "#main_img_eg ul.categories a.cat_link"
+        }
+      ],
+      "fields": {},
+      "links": [
+        {
+          "css": "ul.categories a.cat_link",
+          "regex": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/search/?\\?(?:[^#]*&)?sc2id=(?:1|14)(?:&[^#]*)?$",
+          "rel": "LIST"
+        }
+      ],
+      "allow_title_price": false
+    },
+    {
+      "name": "arabic_portal",
+      "page_kind": "OTHER",
+      "conditions": [
+        {
+          "type": "url_regex",
+          "pattern": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/ar/?(?:\\?[^#]*)?$"
+        },
+        {
+          "type": "dom_css",
+          "css": ".mainUl a.lvl_1[data-id]"
+        }
+      ],
+      "fields": {},
+      "links": [
+        {
+          "css": ".mainUl a.lvl_1[href]",
+          "regex": "^https?://(?:www\\.)?eg\\.opensooq\\.com(?::(?:80|443))?/ar/(?:عقارات|%D8%B9%D9%82%D8%A7%D8%B1%D8%A7%D8%AA)(?:/|-|\\?|$)",
+          "rel": "LIST"
+        }
+      ],
+      "allow_title_price": false
+    }
+  ],
+  "vocab": {
+    "listing_type": [
+      {
+        "pattern": "^SALE$",
+        "value": "SALE"
+      },
+      {
+        "pattern": "^RENT$",
+        "value": "RENT"
+      }
+    ],
+    "property_type": [
+      {
+        "pattern": "^APARTMENT$|شق[ةقه]|شقق|apartment",
+        "value": "APARTMENT"
+      },
+      {
+        "pattern": "أرض|ارض|أراضي|اراضي|\\bland\\b",
+        "value": "LAND"
+      },
+      {
+        "pattern": "محل|محلات",
+        "value": "SHOP"
+      },
+      {
+        "pattern": "مكتب",
+        "value": "OFFICE"
+      },
+      {
+        "pattern": "فيلا|فيلل|فلل|قصر|قصور|villa",
+        "value": "VILLA"
+      }
+    ]
+  }
+}

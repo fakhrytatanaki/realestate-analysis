@@ -87,3 +87,8 @@ params = { from_year = 2023, to_year = 2026, min_delay_seconds = 1.5, user_agent
 enabled = false
 interval_minutes = 180
 params = {}
+
+[sources.opensooq_eg_wayback]
+enabled = false          # manual archive runs; seed reviewed rules explicitly first
+# Enumerates the whole Egypt host, including /view/, /ar/ and property search paths.
+params = { from_year = 2008, to_year = 2026, min_delay_seconds = 1.5, user_agent = "realestatepy-archive-research/0.1 (contact: you@example.com)" }

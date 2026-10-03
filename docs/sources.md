@@ -15,6 +15,7 @@ parameters. `enabled=false` still permits manual runs of implemented sources.
 | `zillow` | Registered stub; fetch/parse raise `DataSourceNotImplementedError` | Cannot run; HTTP trigger returns 501 |
 | `olx_eg_wayback` | OLX Egypt 2010-2023 from the Wayback Machine; navigation and extraction rules induced by an LLM and stored as rule graphs | `params.domain`, `from_year`, `to_year`, `user_agent`, `min_delay_seconds`, `max_fetches_per_run`; crawl with `cli crawl` |
 | `dubizzle_eg_wayback` | Separate Dubizzle Egypt archive, 2023-2026; reviewed JSON-list rules plus observed 2023 JSON detail and sales-card fallback | Disabled by default; same archive parameters; explicitly install rules with `cli rules seed --source dubizzle_eg_wayback` |
+| `opensooq_eg_wayback` | OpenSooq Egypt archive, 2008-2026; direct `/view/` and `/ar/` discovery, reviewed 2008 property tables and newer Arabic apartment cards | Disabled by default; explicitly install rules with `cli rules seed --source opensooq_eg_wayback`; [guide and limits](opensooq-eg-wayback.md) |
 
 The shared fixture directory currently contains both generic `results` fixtures
 and `dubizzle_eg_apartments_sale.json` in Dubizzle's format. A full `fixture` run
@@ -80,7 +81,7 @@ Two things a subclass can fix in code instead of leaving to induction:
   curated template that works always wins. The file's vocabulary is installed ahead
   of induced entries and replaces what the previous seed installed.
 
-Dubizzle also ships reviewed source-specific graphs, installed explicitly with
+Dubizzle and OpenSooq also ship reviewed source-specific graphs, installed explicitly with
 `rules seed` without replacing either domain's active graph.
 
 Wayback collection limits count selected capture attempts, including failures,

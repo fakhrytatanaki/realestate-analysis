@@ -96,6 +96,7 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [infrastructure/sources/wayback/source.py](../core/src/realestate/infrastructure/sources/wayback/source.py) | Generic archive source: frontier-driven fetch, pinned-graph parse and link discovery |
 | [infrastructure/sources/olx_eg_wayback/source.py](../core/src/realestate/infrastructure/sources/olx_eg_wayback/source.py) | OLX Egypt 2010-2023 archive: domain and year range only |
 | [infrastructure/sources/dubizzle_eg_wayback/source.py](../core/src/realestate/infrastructure/sources/dubizzle_eg_wayback/source.py) | Separate Dubizzle Egypt 2023-2026 archive; packaged reviewed rules alongside the adapter |
+| [infrastructure/sources/opensooq_eg_wayback/source.py](../core/src/realestate/infrastructure/sources/opensooq_eg_wayback/source.py) | OpenSooq Egypt 2008-2026 archive: numeric advert identity, `/view/` and `/ar/` discovery, packaged reviewed property rules |
 | [infrastructure/extraction/seeds.py](../core/src/realestate/infrastructure/extraction/seeds.py) | Packaged JSON loading, proposal/condition validation and compilation into version-one graphs |
 | [infrastructure/archive/wayback.py](../core/src/realestate/infrastructure/archive/wayback.py) | Polite Wayback client, validated/throttled redirects, original-byte replay with requested/served provenance and time proof, CDX paging |
 | [infrastructure/llm/ollama.py](../core/src/realestate/infrastructure/llm/ollama.py) | Ollama Cloud/self-hosted chat: tool-call structure, JSON fallback, retries, concurrency cap |

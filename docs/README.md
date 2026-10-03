@@ -18,6 +18,7 @@ them into PostgreSQL, and exposes a filterable FastAPI API. The backend lives in
 | [Rule induction review](rule-induction-review.md) | Review of the rule-graph state machine and its LLM loop: measured problems, reproductions, and a phased fix plan |
 | [Historical sources plan](historical-sources-plan.md) | Proposal: archived olx.com.eg via Wayback, LLM-compiled rule graph |
 | [Dubizzle Egypt archive plan](dubizzle-eg-wayback-plan.md) | Capture investigation and implementation plan for a separate 2023-onward Dubizzle Wayback source |
+| [OpenSooq Egypt archive](opensooq-eg-wayback.md) | `/view/` and `/ar/` discovery, initial extraction rules, fixture evidence and crawl instructions |
 
 For a first change, read the architecture, locate the relevant module and tests,
 then follow the development checklist. For exact request schemas, run the API and

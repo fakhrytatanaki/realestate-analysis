@@ -46,7 +46,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 # Curated extraction templates shipped with archive sources.
-realestate = ["infrastructure/sources/*/templates.json"]
+realestate = ["infrastructure/sources/*/templates.json", "infrastructure/sources/*/rules.json"]
 "realestate.infrastructure.sources.dubizzle_eg_wayback" = ["*.json"]
 
 [tool.aerich]

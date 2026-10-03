@@ -118,6 +118,7 @@ CAPTURE_2013 = datetime(2013, 3, 5, 3, 26, tzinfo=UTC)
         ("28 Dec", CAPTURE_2013, datetime(2012, 12, 28, tzinfo=UTC)),  # yearless, would be future
         ("21 سبتمبر 2015", None, datetime(2015, 9, 21, tzinfo=UTC)),
         ("2019-04-04", None, datetime(2019, 4, 4, tzinfo=UTC)),
+        ("13-07-2025", None, datetime(2025, 7, 13, tzinfo=UTC)),
         ("13 hours and 4 minutes ago", CAPTURE_2013, datetime(2013, 3, 4, 14, 22, tzinfo=UTC)),
         ("منذ يومين", CAPTURE_2013, datetime(2013, 3, 3, 3, 26, tzinfo=UTC)),
         ("Yesterday", CAPTURE_2013, datetime(2013, 3, 4, 3, 26, tzinfo=UTC)),

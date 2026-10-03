@@ -336,7 +336,7 @@ _MONTH_DAY = re.compile(
     re.IGNORECASE,
 )
 _ISO_DATE = re.compile(r"(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s](\d{1,2}):(\d{2}))?")
-_NUMERIC_DATE = re.compile(r"(?<!\d)(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})(?!\d)")
+_NUMERIC_DATE = re.compile(r"(?<!\d)(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?!\d)")
 _EPOCH = re.compile(r"^\d{9,13}(?:\.\d+)?$")
 
 #: Dual forms (يومين = two days) come first so the singular stem cannot match inside them.
