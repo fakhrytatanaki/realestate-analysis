@@ -12,7 +12,7 @@ read it before changing the pipeline or the layering.
 All from `core/`. There is no poetry/uv; the venv is `core/venv`.
 
 ```bash
-./venv/bin/pytest                 # 285 tests, no database needed
+./venv/bin/pytest                 # 501 tests, no database needed
 ./venv/bin/ruff check src tests   # must be clean
 ./venv/bin/mypy                   # config sets packages/mypy_path
 
@@ -29,6 +29,7 @@ python -m realestate.cli crawl --source olx_eg_wayback --rounds 0 --max-fetches 
 python -m realestate.cli archive audit --source olx_eg_wayback      # offline replay + quality report
 python -m realestate.cli archive coverage --source olx_eg_wayback   # per year/quarter
 python -m realestate.cli rules seed --source olx_eg_wayback --dry-run  # curated templates
+python -m realestate.cli rules compact --source olx_eg_wayback --dry-run  # dead navigation rules
 python -m realestate.cli parse --source olx_eg_wayback --stale      # apply a new graph version
 python -m realestate.cli archive rebuild --source olx_eg_wayback --dry-run  # --yes rewrites rows
 python -m realestate.cli archive explore --source olx_eg_wayback --per-year 3  # routing false negatives
@@ -42,7 +43,7 @@ Integration tests need a separate database and are skipped without it:
 
 ```bash
 REALESTATE_TEST_DB_URL=postgres://realestate:realestate@127.0.0.1:5432/realestate_test \
-  ./venv/bin/pytest          # 317 tests
+  ./venv/bin/pytest          # 538 tests
 ```
 
 `main_frontend/` is the signed-in SvelteKit app (auth + price trends); it talks
@@ -135,6 +136,13 @@ seed --dry-run`) before applying them: `PARSED` only means a rule matched.
 - **A graph upgrade is not a data migration.** New extraction versions reach
   already-`PARSED` documents only through `reparse_stale` (`parse --stale`;
   `crawl` does it after induction). Merged identities need `archive rebuild`.
+- **Induction judges a candidate as it will run, on current evidence.** Navigation
+  prompts show a gap's *current* misses, and a batch is checked under first-match
+  order and for URL-shape reach. Extraction candidates must win inside the active
+  graph, and a malfunctioning curated winner sends the gap to `NEEDS_HUMAN`. A
+  saved version is crawl progress only if it changed outcomes. Isolated checks on
+  stored samples are how 88% of the live navigation rules ended up dead
+  (`docs/rule-induction-review.md`).
 - **Frontier captures complete on acknowledgement, not on yield.** The Wayback
   source claims rows (`FETCHING`) and `IngestionService` calls
   `source.acknowledge()` after the blob and raw document are stored. Do not move

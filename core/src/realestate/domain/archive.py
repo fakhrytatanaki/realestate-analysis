@@ -142,6 +142,26 @@ class ArchivedDocument:
 #: decisions, to measure how often SKIP/DEFER/miss turned adverts away.
 EXPLORE_NODE = "explore"
 
+#: Appended to a route node's key on captures its decision would fetch but the
+#: per-URL capture cap skipped.
+CAPTURE_CAP = "#capture-cap"
+
+
+def routing_node(route_node: str) -> str:
+    """The rule a capture's ``route_node`` names, without the capture-cap marker."""
+    return route_node.removesuffix(CAPTURE_CAP)
+
+
+def link_evidence(captures: Sequence[FrontierEntry]) -> dict[str, list[str]]:
+    """How recognised pages linked to any capture of one URL, merged for routing."""
+    evidence: dict[str, list[str]] = {}
+    for entry in captures:
+        for rel in entry.evidence.get("linked_as") or []:
+            rels = evidence.setdefault("linked_as", [])
+            if rel not in rels:
+                rels.append(rel)
+    return evidence
+
 
 def capture_year(timestamp: str) -> int:
     return int(timestamp[:4])
@@ -197,21 +217,35 @@ class IdentityPolicy:
 
     id_patterns: tuple[str, ...]
     reject_patterns: tuple[str, ...] = ()
+    #: Advert URLs whose token is *not* trusted as identity (a base62 slug
+    #: token, say) but still names one advert: evidence that a page lists
+    #: adverts, never an external id.
+    advert_patterns: tuple[str, ...] = ()
 
     def canonical_id(self, url: str | None) -> str | None:
         """The advert id in ``url``, or ``None`` if it names no advert."""
         if not url or self.rejects(url):
             return None
-        for pattern in self.id_patterns:
-            match = re.search(pattern, url, re.IGNORECASE)
-            if match:
-                return match.group(1) if match.groups() else match.group(0)
-        return None
+        return _first_match(self.id_patterns, url)
+
+    def advert_key(self, url: str | None) -> str | None:
+        """A key for the advert ``url`` links to, trusted as identity or not."""
+        if not url or self.rejects(url):
+            return None
+        return _first_match(self.id_patterns, url) or _first_match(self.advert_patterns, url)
 
     def rejects(self, url: str) -> bool:
         return is_site_root(url) or any(
             re.search(pattern, url, re.IGNORECASE) for pattern in self.reject_patterns
         )
+
+
+def _first_match(patterns: Sequence[str], url: str) -> str | None:
+    for pattern in patterns:
+        match = re.search(pattern, url, re.IGNORECASE)
+        if match:
+            return match.group(1) if match.groups() else match.group(0)
+    return None
 
 
 def is_site_root(url: str) -> bool:

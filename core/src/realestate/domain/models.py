@@ -246,6 +246,12 @@ class ParseReport:
     empty_fields: tuple[str, ...] = ()
     #: Routed as LIST/DETAIL but recognised as OTHER (or as the other kind).
     hint_mismatch: bool = False
+    #: Structural fingerprint of a page no template recognised, so gap
+    #: collection can cluster it without re-reading the payload.
+    fingerprint: str | None = None
+    #: Distinct adverts an ``OTHER`` page links to: a page "without adverts"
+    #: that links to many is a misrecognised list.
+    advert_links: int = 0
 
     @property
     def identity_problems(self) -> int:
@@ -264,6 +270,8 @@ class ParseReport:
             "identity_problems": self.identity_problems,
             "empty_fields": list(self.empty_fields),
             "hint_mismatch": self.hint_mismatch,
+            "fingerprint": self.fingerprint,
+            "advert_links": self.advert_links,
         }
 
 

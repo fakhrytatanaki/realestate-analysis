@@ -65,6 +65,9 @@ class ParseStats:
     items_total: int = 0
     items_valid: int = 0
     identity_problems: int = 0
+    #: Documents whose status or winning template differs from before the
+    #: parse: what a replay after a rule change actually changed.
+    changed: int = 0
 
     def add(self, report: ParseReport | None, drafts: int) -> None:
         self.documents += 1
@@ -89,7 +92,17 @@ class ParseStats:
             "items_valid": self.items_valid,
             "items_dropped": self.items_total - self.items_valid,
             "identity_problems": self.identity_problems,
+            "outcome_changed": self.changed,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class ReplayResult(UpsertResult):
+    """Listing writes of a replay, plus how many documents it read and changed."""
+
+    documents: int = 0
+    #: Documents whose status or winning template differs from before.
+    changed: int = 0
 
 
 class IngestionService:
@@ -206,7 +219,7 @@ class IngestionService:
         source_key: str | None = None,
         *,
         limit: int = 200,
-    ) -> UpsertResult:
+    ) -> ReplayResult:
         """Parse archived payloads still waiting to be interpreted.
 
         Used by the standalone parse job, and as a retry path when a fetch run
@@ -223,7 +236,7 @@ class IngestionService:
         since: datetime | None = None,
         limit: int = 500,
         include_failed: bool = True,
-    ) -> UpsertResult:
+    ) -> ReplayResult:
         """Re-run parsing over already-processed payloads.
 
         This is what the two-stage split buys: fix a mapping, replay history, no
@@ -236,28 +249,49 @@ class IngestionService:
             source_key, statuses=statuses, limit=limit, fetched_after=since
         )
 
-    async def reparse_unrecognised(self, source_key: str, *, limit: int = 500) -> UpsertResult:
-        """Re-try documents no rule recognised, typically after rule induction."""
+    async def reparse_unrecognised(self, source_key: str, *, limit: int = 500) -> ReplayResult:
+        """Re-try documents no rule recognised, typically after rule induction.
+
+        Least recently tried first, so repeated bounded retries rotate through
+        every unrecognised document instead of re-reading the oldest ones.
+        """
         return await self._parse_stored(
-            source_key, statuses=(RawDocumentStatus.UNRECOGNISED,), limit=limit
+            source_key,
+            statuses=(RawDocumentStatus.UNRECOGNISED,),
+            limit=limit,
+            least_recently_parsed=True,
         )
 
     async def reparse_stale(
-        self, source_key: str, *, graph_version: int, limit: int = 10_000
-    ) -> UpsertResult:
+        self, source_key: str, *, graph_version: int, limit: int | None = 10_000
+    ) -> ReplayResult:
         """Re-parse documents parsed by an extraction graph older than ``graph_version``.
 
         A rule upgrade is not a data migration until this has run: documents
         already ``PARSED`` otherwise keep their old interpretation forever.
+        Oldest interpretation first; ``limit=None`` keeps going, a batch at a
+        time, until no document is stale.
         """
-        return await self._parse_stored(
-            source_key,
-            statuses=(RawDocumentStatus.PARSED, RawDocumentStatus.UNRECOGNISED),
-            limit=limit,
-            graph_version_below=graph_version,
-        )
+        statuses = (RawDocumentStatus.PARSED, RawDocumentStatus.UNRECOGNISED)
+        if limit is not None:
+            return await self._parse_stored(
+                source_key, statuses=statuses, limit=limit, graph_version_below=graph_version
+            )
+        total = ReplayResult()
+        seen: set[UUID] = set()
+        while True:
+            batch = await self._parse_stored(
+                source_key,
+                statuses=statuses,
+                limit=_STALE_BATCH,
+                graph_version_below=graph_version,
+                skip=seen,
+            )
+            total = _combine(total, batch)
+            if batch.documents == 0:
+                return total
 
-    async def rebuild(self, source_key: str) -> UpsertResult:
+    async def rebuild(self, source_key: str) -> ReplayResult:
         """Delete a source's listings and re-parse every archived payload, in capture order.
 
         For archive sources, whose payloads are the source of truth: repairs
@@ -292,30 +326,39 @@ class IngestionService:
         limit: int,
         fetched_after: datetime | None = None,
         graph_version_below: int | None = None,
-    ) -> UpsertResult:
+        least_recently_parsed: bool = False,
+        skip: set[UUID] | None = None,
+    ) -> ReplayResult:
         """Load documents in the given states and parse them, grouped by source.
 
         Each source's documents are parsed in capture order (fetch order for
         live sources), so merged listing state never depends on which
-        documents happened to be stored first.
+        documents happened to be stored first. ``skip`` holds documents an
+        earlier batch already parsed (and is extended with this batch), so a
+        document a parse cannot move out of the selection is read only once.
         """
         documents: list[RawDocument] = []
         for status in statuses:
             documents.extend(
-                await self._documents.list_by_status(
+                document
+                for document in await self._documents.list_by_status(
                     source_key=source_key,
                     status=status,
                     limit=limit,
                     fetched_after=fetched_after,
                     graph_version_below=graph_version_below,
+                    least_recently_parsed=least_recently_parsed,
                 )
+                if skip is None or document.id not in skip
             )
+        if skip is not None:
+            skip.update(document.id for document in documents)
 
         by_source: dict[str, list[RawDocument]] = {}
         for document in sorted(documents, key=_capture_order):
             by_source.setdefault(document.source_key, []).append(document)
 
-        total = UpsertResult()
+        total = ReplayResult()
         for key, group in by_source.items():
             log = self._log.bind(source_key=key)
             if not self._registry.has(key):
@@ -342,7 +385,16 @@ class IngestionService:
                     errors=errors,
                     stats=stats.as_dict(),
                 )
-            total = total + result
+            total = _combine(
+                total,
+                ReplayResult(
+                    created=result.created,
+                    updated=result.updated,
+                    unchanged=result.unchanged,
+                    documents=len(group),
+                    changed=stats.changed,
+                ),
+            )
         return total
 
     async def _fetch_stage(
@@ -406,6 +458,7 @@ class IngestionService:
         stats = ParseStats()
 
         for document in documents:
+            before = _outcome(document.status, document.parse_report)
             try:
                 content = await self._blob.get(document.blob_key)
                 payload = RawPayload(
@@ -425,6 +478,7 @@ class IngestionService:
                 # Not a failure: rule induction will learn this page design.
                 unrecognised += 1
                 stats.unrecognised += 1
+                stats.changed += before != (RawDocumentStatus.UNRECOGNISED, None)
                 missed = await _parse_report(source, payload)
                 await self._documents.mark_unrecognised(
                     document.id,
@@ -444,6 +498,7 @@ class IngestionService:
                 # recoverable: fix the parser and replay.
                 errors += 1
                 stats.failed += 1
+                stats.changed += before != (RawDocumentStatus.FAILED, None)
                 await self._documents.mark_failed(document.id, f"{type(exc).__name__}: {exc}")
                 await log.exception("failed to parse document", exc, document_id=str(document.id))
                 continue
@@ -454,6 +509,9 @@ class IngestionService:
                 report=report.as_dict() if report else None,
             )
             stats.add(report, len(drafts))
+            stats.changed += before != _outcome(
+                RawDocumentStatus.PARSED, report.as_dict() if report else None
+            )
             total = total + result
             if self._links is not None:
                 await self._offer_links(source, payload, document, log)
@@ -525,6 +583,28 @@ class IngestionService:
             raise DataSourceNotImplementedError(source_key)
         if trigger is RunTrigger.SCHEDULED and not descriptor.enabled:
             raise DataSourceDisabledError(source_key)
+
+
+#: Documents per batch when a replay must reach every stale document.
+_STALE_BATCH = 1_000
+
+
+def _outcome(
+    status: RawDocumentStatus, report: dict[str, Any] | None
+) -> tuple[RawDocumentStatus, str | None]:
+    """What a parse concluded about a document: its status and winning template."""
+    template = (report or {}).get("template_key")
+    return status, str(template) if template else None
+
+
+def _combine(left: ReplayResult, right: ReplayResult) -> ReplayResult:
+    return ReplayResult(
+        created=left.created + right.created,
+        updated=left.updated + right.updated,
+        unchanged=left.unchanged + right.unchanged,
+        documents=left.documents + right.documents,
+        changed=left.changed + right.changed,
+    )
 
 
 async def _parse_report(source: DataSource, payload: RawPayload) -> ParseReport | None:

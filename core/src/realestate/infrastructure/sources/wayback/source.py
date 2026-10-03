@@ -278,7 +278,11 @@ class WaybackDataSource(ArchiveDataSource):
         hint = str(payload.meta.get("page_kind_hint") or "").upper()
         routed_as_adverts = hint in (PageKind.LIST.value, PageKind.DETAIL.value)
         if outcome is None:
-            return ParseReport(graph_version=graph.version, hint_mismatch=routed_as_adverts)
+            return ParseReport(
+                graph_version=graph.version,
+                hint_mismatch=routed_as_adverts,
+                fingerprint=self._engine.fingerprint(_document(payload)),
+            )
         origin = (
             graph.node(outcome.template_key).origin
             if graph.has_node(outcome.template_key)
@@ -294,6 +298,11 @@ class WaybackDataSource(ArchiveDataSource):
             problems=tuple(outcome.problems),
             empty_fields=tuple(outcome.empty_fields),
             hint_mismatch=routed_as_adverts and outcome.page_kind.value != hint,
+            advert_links=(
+                self._engine.advert_links(_document(payload), identity=self.identity_policy())
+                if outcome.page_kind is PageKind.OTHER
+                else 0
+            ),
         )
 
     async def discover_links(self, payload: RawPayload) -> Sequence[DiscoveredLink]:

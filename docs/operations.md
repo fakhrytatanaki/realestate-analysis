@@ -213,8 +213,13 @@ linked pages the enumeration missed (default `link_lookups_per_round` per round)
 **Repairing an archive source.** Rule changes are measured offline before they
 are applied: `rules seed --dry-run` (or `archive audit --graph-version N`) replays
 every archived page and reports identity, completeness and a diff against stored
-rows, writing JSON to `var/audit/`. `parse --stale` re-reads already-parsed
-documents with the active graph. Merged identities and false histories need
+rows, writing JSON to `var/audit/`. A seed also replays the corpus through the
+active graph and reports what changes per document and advert (`…-seed-diff-…`);
+the summary is stored in the new version's notes. `rules compact --dry-run` reports
+the routing diff of dropping navigation rules that never decide a URL; without
+`--dry-run` it saves the version and reroutes the removed rules' captures
+(`archive route --reopen-removed`). `parse --stale` re-reads every document
+parsed by an older graph than the active one. Merged identities and false histories need
 `archive rebuild --source ... --yes`: it deletes the source's listings and
 observations and re-parses every archived payload in capture order. The archived
 payloads are the source of truth, so a rebuild is repeatable; an interrupted one
@@ -277,7 +282,10 @@ retried with a backoff, permanent ones (404/410/403) become `FAILED`. Documents 
 recognises are `UNRECOGNISED`, not `FAILED`; after induction, `parse --unrecognised`
 re-parses them. Without an API key, induction reports "model unavailable" and the
 rest of the crawl still runs on existing rules. Every model answer is in
-`llm_decision` (tokens, validity, error); `rules gaps` shows what keeps failing.
+`llm_decision` (tokens, validity, error); `rules gaps` shows what keeps failing,
+including `NEEDS_HUMAN` gaps (a curated template wins on those pages and
+malfunctions, so only a `rules seed` fix helps) and how far each `FAILED` gap has
+grown since it failed. `archive status` counts both.
 
 **Ollama API key.** Read from, in order: `REALESTATE__LLM__API_KEY`, `[llm] api_key`
 in `core/etc/settings.toml` (gitignored), then `OLLAMA_API_KEY`. `crawl` and

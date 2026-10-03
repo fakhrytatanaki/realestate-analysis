@@ -42,6 +42,20 @@ ROOT_KEY = "root"
 #: A condition evaluator: given a condition dict, does it hold for the input?
 ConditionEvaluator = Callable[[Mapping[str, Any]], bool]
 
+#: A FAILED gap gets fresh attempts once its backlog grows this many times past
+#: what it was when it failed: the inputs it stands for are no longer a corner.
+FAILED_GAP_REGROWTH = 4
+
+
+def is_curated_vocab(entry: Mapping[str, Any]) -> bool:
+    """Whether a vocabulary entry was installed from a source's curated seed."""
+    return entry.get("origin") == RuleOrigin.HUMAN.value
+
+
+def failed_gap_outgrown(occurrences: int, failed_occurrences: int) -> bool:
+    """Whether a FAILED gap now stands for enough new inputs to be asked about again."""
+    return occurrences >= FAILED_GAP_REGROWTH * max(1, failed_occurrences)
+
 
 @dataclass(frozen=True, slots=True)
 class RuleNode:
@@ -82,6 +96,11 @@ class RuleGraph:
     parent_id: UUID | None = None
     created_at: datetime | None = None
     notes: str | None = None
+    #: Nodes by key and edges by source in evaluation order, built on first use.
+    #: Versions are immutable, so the index never goes stale; without it every
+    #: walk re-sorted all edges and scanned all nodes per edge, which made
+    #: routing a URL no rule matches quadratic in the rule count.
+    _index: _GraphIndex | None = field(default=None, init=False, repr=False, compare=False)
 
     @classmethod
     def empty(cls, source_key: str, domain: RuleDomain) -> RuleGraph:
@@ -95,18 +114,23 @@ class RuleGraph:
         )
 
     def node(self, key: str) -> RuleNode:
-        for node in self.nodes:
-            if node.key == key:
-                return node
-        raise KeyError(key)
+        found = self._indexed().nodes.get(key)
+        if found is None:
+            raise KeyError(key)
+        return found
 
     def has_node(self, key: str) -> bool:
-        return any(node.key == key for node in self.nodes)
+        return key in self._indexed().nodes
 
     def outgoing(self, key: str) -> list[RuleEdge]:
         """Edges leaving ``key`` in evaluation order (priority, then age)."""
-        indexed = [(edge.priority, index, edge) for index, edge in enumerate(self.edges)]
-        return [edge for _, _, edge in sorted(indexed) if edge.from_key == key]
+        return list(self._indexed().outgoing.get(key, ()))
+
+    def _indexed(self) -> _GraphIndex:
+        if self._index is None:
+            object.__setattr__(self, "_index", _GraphIndex.of(self))
+        assert self._index is not None
+        return self._index
 
     def terminals(self) -> list[RuleNode]:
         return [node for node in self.nodes if node.kind in (NodeKind.ROUTE, NodeKind.TEMPLATE)]
@@ -131,10 +155,11 @@ class RuleGraph:
         if key in visiting:  # a malformed cyclic graph must not hang a parse
             return
         visiting = visiting | {key}
-        for edge in self.outgoing(key):
-            if not self.has_node(edge.to_key) or not evaluate(edge.condition):
+        index = self._indexed()
+        for edge in index.outgoing.get(key, ()):
+            child = index.nodes.get(edge.to_key)
+            if child is None or not evaluate(edge.condition):
                 continue
-            child = self.node(edge.to_key)
             child_path = [*path, child.key]
             if child.kind in (NodeKind.ROUTE, NodeKind.TEMPLATE):
                 yield child, child_path
@@ -163,6 +188,7 @@ class RuleGraph:
         edges: Sequence[RuleEdge] = (),
         remove: Sequence[str] = (),
         vocab: Mapping[str, Sequence[Mapping[str, Any]]] | None = None,
+        replace_vocab: bool = False,
         notes: str | None = None,
     ) -> RuleGraph:
         """The next version, optionally retiring states.
@@ -170,6 +196,8 @@ class RuleGraph:
         Removed states take every edge into or out of them along; the root
         cannot be removed. Retiring is how a faulty template is superseded:
         appending a better one alone leaves the old one competing.
+        ``replace_vocab`` makes ``vocab`` the whole vocabulary instead of
+        merging it in, which is how entries are retired or reordered.
         """
         retired = set(remove)
         if ROOT_KEY in retired:
@@ -187,7 +215,9 @@ class RuleGraph:
         clashes = existing & {node.key for node in nodes}
         if clashes:
             raise ValueError(f"node keys already exist: {sorted(clashes)}")
-        merged_vocab = {key: list(entries) for key, entries in self.vocab.items()}
+        merged_vocab = (
+            {} if replace_vocab else {key: list(entries) for key, entries in self.vocab.items()}
+        )
         for key, entries in (vocab or {}).items():
             bucket = merged_vocab.setdefault(key, [])
             for entry in entries:
@@ -215,6 +245,26 @@ class RuleGraph:
         """A priority after every existing edge from ``from_key``."""
         priorities = [edge.priority for edge in self.edges if edge.from_key == from_key]
         return (max(priorities) + 10) if priorities else 100
+
+
+@dataclass(frozen=True, slots=True)
+class _GraphIndex:
+    nodes: dict[str, RuleNode]
+    outgoing: dict[str, tuple[RuleEdge, ...]]
+
+    @classmethod
+    def of(cls, graph: RuleGraph) -> _GraphIndex:
+        nodes: dict[str, RuleNode] = {}
+        for node in graph.nodes:
+            nodes.setdefault(node.key, node)  # the first of duplicate keys wins, as before
+        ordered = sorted(
+            ((edge.priority, position, edge) for position, edge in enumerate(graph.edges)),
+            key=lambda item: item[:2],
+        )
+        outgoing: dict[str, list[RuleEdge]] = {}
+        for _, _, edge in ordered:
+            outgoing.setdefault(edge.from_key, []).append(edge)
+        return cls(nodes, {key: tuple(edges) for key, edges in outgoing.items()})
 
 
 @dataclass(frozen=True, slots=True)
@@ -303,6 +353,11 @@ class RuleGap:
     attempts: int = 0
     last_error: str | None = None
     resolved_version: int | None = None
+    #: ``model|prompt version`` of the induction that last failed it, so a
+    #: model or prompt change gives FAILED gaps fresh attempts.
+    attempted_with: str | None = None
+    #: Occurrences when it became FAILED; growth past that reopens it.
+    failed_occurrences: int = 0
 
 
 @dataclass(frozen=True, slots=True)

@@ -71,6 +71,74 @@ class NavRuleBatch(BaseModel):
     rules: list[NavRuleProposal]
 
 
+#: Text that says nothing about sale/rent or property type. Vocabulary is
+#: shared by every template, so a pattern matching much of this would classify
+#: every advert of every page design, not just the one it was written for.
+NEUTRAL_TEXTS = (
+    "Cairo",
+    "Giza",
+    "Alexandria",
+    "Hurghada, Red Sea",
+    "Egypt",
+    "القاهرة",
+    "الإسكندرية",
+    "مصر",
+    "Call now",
+    "Contact the owner",
+    "اتصل الآن",
+    "Details",
+    "التفاصيل",
+    "Price",
+    "السعر",
+    "Posted 3 days ago",
+    "منذ 3 أيام",
+    "2 bedrooms, 1 bathroom",
+    "150 m2",
+    "Search results, page 2",
+    "Home",
+    "Electronics and home appliances",
+    "Cars and vehicles",
+    "Jobs",
+)
+_MAX_NEUTRAL_SHARE = 0.25
+_MIN_VOCAB_PATTERN = 3
+
+
+def bound_latin_words(pattern: str) -> str:
+    """Give each top-level alternative starting with a Latin letter a leading ``\\b``.
+
+    ``rent`` should not match "cur*rent*" or "pa*rent*", nor ``sale`` "whole*sale*";
+    a leading boundary still allows "rental", "Rentals" and "sales". Arabic
+    alternatives are left alone: their prefixes (``للبيع``) attach to the word.
+    """
+    alternatives: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_class = escaped = False
+    for char in pattern:
+        if escaped:
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif in_class:
+            in_class = char != "]"
+        elif char == "[":
+            in_class = True
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "|" and depth == 0:
+            alternatives.append("".join(current))
+            current = []
+            continue
+        current.append(char)
+    alternatives.append("".join(current))
+    return "|".join(
+        rf"\b{alt}" if alt[:1].isascii() and alt[:1].isalpha() else alt for alt in alternatives
+    )
+
+
 class VocabEntry(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -80,7 +148,20 @@ class VocabEntry(BaseModel):
     @field_validator("pattern")
     @classmethod
     def _compiles(cls, value: str) -> str:
-        re.compile(value, re.IGNORECASE)
+        value = value.strip()
+        if len(value) < _MIN_VOCAB_PATTERN:
+            raise ValueError(f"vocab pattern {value!r} is too short to name a category")
+        value = bound_latin_words(value)
+        try:
+            compiled = re.compile(value, re.IGNORECASE)
+        except re.error as exc:
+            raise ValueError(f"vocab pattern {value!r} does not compile: {exc}") from exc
+        generic = [text for text in NEUTRAL_TEXTS if compiled.search(text)]
+        if len(generic) > _MAX_NEUTRAL_SHARE * len(NEUTRAL_TEXTS):
+            raise ValueError(
+                f"vocab pattern {value!r} matches generic text such as {generic[0]!r}; "
+                "vocabulary is shared by every page design, so it would classify everything"
+            )
         return value
 
     @field_validator("value", mode="before")

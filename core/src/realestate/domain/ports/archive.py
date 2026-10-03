@@ -134,6 +134,22 @@ class CrawlFrontierRepository(ABC):
         """Send captures skipped by the per-URL capture cap back to routing."""
 
     @abstractmethod
+    async def routed_nodes(self, source_key: str) -> set[str]:
+        """Distinct ``route_node`` values of queued, skipped and deferred captures."""
+
+    @abstractmethod
+    async def reopen_routed_by(self, source_key: str, route_nodes: Sequence[str]) -> int:
+        """Send queued, skipped and deferred captures routed by these nodes back to routing."""
+
+    @abstractmethod
+    async def url_keys_page(self, source_key: str, *, after: str | None, limit: int) -> list[str]:
+        """Up to ``limit`` distinct URL keys following ``after``, in a stable order.
+
+        Pages through every URL key of the frontier, whatever its status, for
+        whole-frontier replays; pass the last key of a page as ``after``.
+        """
+
+    @abstractmethod
     async def status_by_quarter(self, source_key: str) -> dict[tuple[str, CrawlStatus], int]:
         """Capture counts per ``(capture quarter, status)``, for coverage reports."""
 
@@ -155,6 +171,14 @@ class CrawlFrontierRepository(ABC):
     @abstractmethod
     async def counts(self, source_key: str) -> dict[CrawlStatus, int]:
         """Captures per status."""
+
+    @abstractmethod
+    async def spread_urls(self, source_key: str, *, limit: int) -> list[str]:
+        """About ``limit`` original URLs spread evenly over the whole frontier, any status.
+
+        A picture of the site's URL space, e.g. to tell how far a proposed
+        routing rule reaches beyond the URLs it was written for.
+        """
 
     @abstractmethod
     async def sample_urls(self, source_key: str, status: CrawlStatus, *, limit: int) -> list[str]:

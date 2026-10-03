@@ -14,7 +14,14 @@ from realestate.domain.ports.rules import (
     RuleGapRepository,
     RuleGraphRepository,
 )
-from realestate.domain.rules import LlmDecision, RuleEdge, RuleGap, RuleGraph, RuleNode
+from realestate.domain.rules import (
+    LlmDecision,
+    RuleEdge,
+    RuleGap,
+    RuleGraph,
+    RuleNode,
+    failed_gap_outgrown,
+)
 from realestate.infrastructure.db.models import (
     LlmDecisionModel,
     RuleEdgeModel,
@@ -145,13 +152,19 @@ def _to_gap(row: RuleGapModel) -> RuleGap:
         attempts=row.attempts,
         last_error=row.last_error,
         resolved_version=row.resolved_version,
+        attempted_with=row.attempted_with,
+        failed_occurrences=row.failed_occurrences,
     )
 
 
+#: Gaps whose counts are a live backlog, recounted from zero on every collection.
+_COUNTED = (GapStatus.OPEN, GapStatus.FAILED, GapStatus.NEEDS_HUMAN)
+
+
 class TortoiseRuleGapRepository(RuleGapRepository):
-    async def reset_open(self, source_key: str, domain: RuleDomain) -> None:
+    async def reset_counts(self, source_key: str, domain: RuleDomain) -> None:
         await RuleGapModel.filter(
-            source_key=source_key, domain=domain, status=GapStatus.OPEN
+            source_key=source_key, domain=domain, status__in=list(_COUNTED)
         ).update(occurrences=0)
 
     async def record(
@@ -182,10 +195,17 @@ class TortoiseRuleGapRepository(RuleGapRepository):
             # The rule that resolved it does not cover these: ask again.
             row.status = GapStatus.OPEN
             row.occurrences = 0
-        if row.status is GapStatus.OPEN:
-            row.occurrences += occurrences
-            row.samples = list(dict.fromkeys([*(row.samples or []), *samples]))[:max_samples]
-            await row.save()
+        # Unresolved gaps keep counting, so the count is the live backlog and
+        # a FAILED gap is not a black hole for every later input like it.
+        row.occurrences += occurrences
+        # Current inputs first: older samples may be handled by now.
+        row.samples = list(dict.fromkeys([*samples, *(row.samples or [])]))[:max_samples]
+        if row.status is GapStatus.FAILED and failed_gap_outgrown(
+            row.occurrences, row.failed_occurrences
+        ):
+            row.status = GapStatus.OPEN
+            row.attempts = 0
+        await row.save()
         return _to_gap(row)
 
     async def list(
@@ -209,20 +229,46 @@ class TortoiseRuleGapRepository(RuleGapRepository):
             status=GapStatus.RESOLVED, resolved_version=version, last_error=None
         )
 
-    async def record_failure(self, gap_id: UUID, error: str, *, max_attempts: int) -> RuleGap:
+    async def record_failure(
+        self, gap_id: UUID, error: str, *, max_attempts: int, attempted_with: str | None = None
+    ) -> RuleGap:
         row = await RuleGapModel.get(id=gap_id)
         row.attempts += 1
         row.last_error = error[:4000]
+        if attempted_with is not None:
+            row.attempted_with = attempted_with[:255]
         if row.attempts >= max_attempts:
             row.status = GapStatus.FAILED
+            row.failed_occurrences = row.occurrences
         await row.save()
         return _to_gap(row)
 
+    async def mark_needs_human(self, gap_id: UUID, reason: str) -> None:
+        await RuleGapModel.filter(id=gap_id).update(
+            status=GapStatus.NEEDS_HUMAN, last_error=reason[:4000]
+        )
+
     async def reopen_failed(self, source_key: str, domain: RuleDomain | None = None) -> int:
-        queryset = RuleGapModel.filter(source_key=source_key, status=GapStatus.FAILED)
+        queryset = RuleGapModel.filter(
+            source_key=source_key, status__in=[GapStatus.FAILED, GapStatus.NEEDS_HUMAN]
+        )
         if domain is not None:
             queryset = queryset.filter(domain=domain)
         return await queryset.update(status=GapStatus.OPEN, attempts=0)
+
+    async def reopen_superseded(
+        self, source_key: str, domain: RuleDomain, *, attempted_with: str
+    ) -> int:
+        return (
+            await RuleGapModel.filter(
+                source_key=source_key,
+                domain=domain,
+                status=GapStatus.FAILED,
+                attempted_with__isnull=False,
+            )
+            .exclude(attempted_with=attempted_with[:255])
+            .update(status=GapStatus.OPEN, attempts=0)
+        )
 
 
 def _to_decision(row: LlmDecisionModel) -> LlmDecision:

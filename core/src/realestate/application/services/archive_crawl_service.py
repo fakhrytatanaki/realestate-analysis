@@ -28,12 +28,20 @@ from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
 from realestate.application.rules.seeds import seed_navigation_graph
-from realestate.application.services.ingestion_service import IngestionService
+from realestate.application.services.ingestion_service import IngestionService, ReplayResult
 from realestate.application.services.rule_induction_service import (
     InductionReport,
     RuleInductionService,
 )
-from realestate.domain.archive import EXPLORE_NODE, ArchiveScope, FrontierEntry, capture_year
+from realestate.domain.archive import (
+    CAPTURE_CAP,
+    EXPLORE_NODE,
+    ArchiveScope,
+    FrontierEntry,
+    capture_year,
+    link_evidence,
+    routing_node,
+)
 from realestate.domain.enums import (
     CrawlStatus,
     LinkRequestStatus,
@@ -92,6 +100,8 @@ class RouteReport:
     skipped: int = 0
     deferred: int = 0
     unrouted: int = 0
+    #: Captures sent back to routing because their rule was removed.
+    reopened: int = 0
 
     def add(self, other: RouteReport) -> None:
         self.url_keys += other.url_keys
@@ -359,17 +369,28 @@ class ArchiveCrawlService:
         return graph
 
     async def route(
-        self, source_key: str, *, retry_unrouted: bool = True, reopen_capped: bool = False
+        self,
+        source_key: str,
+        *,
+        retry_unrouted: bool = True,
+        reopen_capped: bool = False,
+        reopen_removed: bool = False,
     ) -> RouteReport:
         """Decide what to do with every discovered capture.
 
         ``reopen_capped`` first sends captures skipped by the per-URL capture
         cap back to routing, e.g. after the cap policy changed.
+        ``reopen_removed`` first sends queued, skipped and deferred captures
+        whose rule the active graph no longer has back to routing, e.g. after
+        ``rules compact`` removed a rule; the report counts them as ``reopened``.
         """
         graph = await self.navigation_graph(source_key)
+        reopened_removed = 0
         if reopen_capped:
             reopened = await self._frontier.reopen_capped(source_key)
             await self._log.info("capture-capped captures reopened", count=reopened)
+        if reopen_removed:
+            reopened_removed = await self.reopen_removed(source_key, graph)
         if retry_unrouted:
             await self._frontier.reset_status(
                 source_key, from_status=CrawlStatus.UNROUTED, to_status=CrawlStatus.DISCOVERED
@@ -397,6 +418,7 @@ class ArchiveCrawlService:
             if batch.url_keys == 0:  # nothing changed state: never spin
                 break
             report.add(batch)
+        report.reopened = reopened_removed
         await self._log.info(
             "routing complete",
             graph_version=graph.version,
@@ -407,6 +429,29 @@ class ArchiveCrawlService:
             unrouted=report.unrouted,
         )
         return report
+
+    async def reopen_removed(self, source_key: str, graph: RuleGraph) -> int:
+        """Send captures routed by rules ``graph`` no longer has back to routing.
+
+        Covers queued, skipped (capture-capped included) and deferred captures;
+        fetched ones keep their history, and exploration samples are not rules.
+        """
+        present = {node.key for node in graph.nodes}
+        removed = sorted(
+            node
+            for node in await self._frontier.routed_nodes(source_key)
+            if node != EXPLORE_NODE and routing_node(node) not in present
+        )
+        reopened = await self._frontier.reopen_routed_by(source_key, removed)
+        if reopened:
+            await self._log.info(
+                "captures of removed rules reopened",
+                source_key=source_key,
+                graph_version=graph.version,
+                rules=len({routing_node(node) for node in removed}),
+                count=reopened,
+            )
+        return reopened
 
     def _route_url(
         self,
@@ -419,13 +464,7 @@ class ArchiveCrawlService:
         if not pending:
             return
         report.url_keys += 1
-        evidence: dict[str, list[str]] = {}
-        for entry in captures:
-            for rel in entry.evidence.get("linked_as") or []:
-                evidence.setdefault("linked_as", [])
-                if rel not in evidence["linked_as"]:
-                    evidence["linked_as"].append(rel)
-        outcome = self._engine.route(graph, captures[-1].original_url, evidence)
+        outcome = self._engine.route(graph, captures[-1].original_url, link_evidence(captures))
         ids = [entry.id for entry in pending]
         if outcome is None:
             updates[(CrawlStatus.UNROUTED, None, 0, None)] += ids
@@ -448,7 +487,7 @@ class ArchiveCrawlService:
             updates[key] += queue
             report.queued += 1
         if rest:
-            updates[(CrawlStatus.SKIPPED, f"{outcome.node_key}#capture-cap", 0, None)] += rest
+            updates[(CrawlStatus.SKIPPED, f"{outcome.node_key}{CAPTURE_CAP}", 0, None)] += rest
 
     def _cap(self, page_kind: PageKind | None) -> int:
         if page_kind is PageKind.LIST:
@@ -561,15 +600,18 @@ class ArchiveCrawlService:
             )
             routed = await self.route(source_key)
 
+            # Counted every round, budget or not, so gap counts are the backlog.
+            await self._induction.collect_navigation_gaps(source_key)
             navigation = InductionReport()
+            rerouted = RouteReport()
             if llm_left > 0 and routed.unrouted:
-                await self._induction.collect_navigation_gaps(source_key)
                 navigation = await self._induction.induce(
                     source_key, domain=RuleDomain.NAVIGATION, max_calls=llm_left, domain_name=domain
                 )
                 llm_left -= navigation.llm_calls
                 if navigation.versions:
-                    routed.add(await self.route(source_key))
+                    rerouted = await self.route(source_key)
+                    routed.add(rerouted)
 
             fetch_ctx = FetchContext(max_items=min(per_round, fetches_left))
             run = await self._ingestion.ingest(
@@ -583,23 +625,21 @@ class ArchiveCrawlService:
             )
             fetches_left -= fetch_attempts
 
+            await self._induction.collect_extraction_gaps(source_key)
             extraction = InductionReport()
-            reparsed = 0
+            replay = ReplayResult()
             if llm_left > 0:
-                await self._induction.collect_extraction_gaps(source_key)
                 extraction = await self._induction.induce(
                     source_key, domain=RuleDomain.EXTRACTION, max_calls=llm_left
                 )
                 llm_left -= extraction.llm_calls
                 if extraction.versions:
-                    reparsed = (await self._ingestion.reparse_unrecognised(source_key)).created
-                    # A new graph version is not applied until parsed documents
-                    # are re-read with it.
-                    reparsed += (
-                        await self._ingestion.reparse_stale(
-                            source_key, graph_version=max(extraction.versions)
-                        )
-                    ).created
+                    # A new graph version is not applied until every unrecognised
+                    # and older-parsed document is re-read with it.
+                    replay = await self._ingestion.reparse_stale(
+                        source_key, graph_version=max(extraction.versions), limit=None
+                    )
+            reparsed = replay.created
 
             links = await self.resolve_links(
                 source_key, limit=min(self._settings.link_lookups_per_round, lookups_left)
@@ -638,9 +678,17 @@ class ArchiveCrawlService:
             )
             for note in navigation.notes + extraction.notes:
                 await log.warning("induction note", note=note)
-            progressed = (
-                fetch_attempts or navigation.versions or extraction.versions or links.captures_added
+            # A saved version counts only if it changed something: a rule that
+            # never wins must not keep an unbounded crawl alive.
+            rules_took_effect = (
+                rerouted.queued
+                + rerouted.skipped
+                + rerouted.deferred
+                + replay.changed
+                + replay.created
+                + replay.updated
             )
+            progressed = fetch_attempts or links.captures_added or rules_took_effect
             if not progressed:
                 report.stopped = (
                     "no progress (nothing queued to fetch and no new rules)"

@@ -29,6 +29,9 @@ from realestate.application.services.ingestion_service import IngestionService
 from realestate.application.services.initial_rule_seed_service import InitialRuleSeedService
 from realestate.application.services.listing_query_service import ListingQueryService
 from realestate.application.services.market_service import MarketTrendService
+from realestate.application.services.navigation_compaction_service import (
+    NavigationCompactionService,
+)
 from realestate.application.services.rule_induction_service import (
     InductionSettings,
     RuleInductionService,
@@ -303,6 +306,12 @@ class Container:
     @cached_property
     def seeder(self) -> RuleSeedService:
         return RuleSeedService(registry=self.registry, graphs=self.rule_graphs, log=self.log)
+
+    @cached_property
+    def compactor(self) -> NavigationCompactionService:
+        return NavigationCompactionService(
+            frontier=self.frontier, graphs=self.rule_graphs, engine=self.rule_engine, log=self.log
+        )
 
     @cached_property
     def queries(self) -> ListingQueryService:

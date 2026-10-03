@@ -198,6 +198,9 @@ class GapStatus(StrEnum):
     RESOLVED = "RESOLVED"
     #: Induction kept failing validation; left for a human or a better model.
     FAILED = "FAILED"
+    #: Induction cannot help: a curated rule already wins on these inputs and
+    #: malfunctions, so only a human fixing that rule can resolve them.
+    NEEDS_HUMAN = "NEEDS_HUMAN"
 
 
 class LogLevel(StrEnum):

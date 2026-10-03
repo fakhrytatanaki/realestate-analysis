@@ -358,10 +358,14 @@ async def test_induction_rejects_a_gold_regression(tmp_path: Path) -> None:
     )
     errors = await validate(harness, worse, samples_of("1", "2"), graph=current, gold=gold)
     assert any("less accurate" in error for error in errors), errors
-    assert (
-        await validate(harness, detail_proposal(), samples_of("1", "2"), graph=current, gold=gold)
-        == []
+    # Also richer, but with the right title: it must outrank "good" to take
+    # effect at all (a copy of it would not), and gold does not get worse.
+    better = detail_proposal(description=[{"css": "#description-text"}])
+    assert await validate(harness, better, samples_of("1", "2"), graph=current, gold=gold) == []
+    duplicate = await validate(
+        harness, detail_proposal(), samples_of("1", "2"), graph=current, gold=gold
     )
+    assert any("good still wins" in error for error in duplicate), duplicate
 
 
 # -- parse provenance, replay, rebuild --------------------------------------------------

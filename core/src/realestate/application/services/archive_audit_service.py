@@ -230,6 +230,79 @@ def _fmt(counter: Counter[str]) -> str:
     return ", ".join(f"{key} {count}" for key, count in counter.most_common())
 
 
+#: Fields whose values a graph diff names (``listing_type RENT -> SALE``);
+#: changes to the other compared fields are counted by name only.
+_CLASSIFICATION_FIELDS = ("listing_type", "property_type", "currency")
+
+
+@dataclass(slots=True)
+class GraphDiff:
+    """What a candidate extraction graph changes against a baseline, page by page.
+
+    Unlike the audit's diff against stored rows, both sides are replays of the
+    same bytes, so every difference is the candidate's doing.
+    """
+
+    source_key: str
+    baseline_version: int
+    candidate_version: int
+    documents: int = 0
+    changed_documents: int = 0
+    #: ``"template (KIND) -> template (KIND)"`` -> documents whose winner changed.
+    outcomes: Counter[str] = field(default_factory=Counter)
+    #: Advert occurrences only the candidate / only the baseline produced.
+    drafts_added: int = 0
+    drafts_lost: int = 0
+    #: ``"listing_type RENT -> SALE"`` or ``"price"`` -> advert occurrences.
+    fields: Counter[str] = field(default_factory=Counter)
+    examples: dict[str, list[str]] = field(default_factory=dict)
+
+    def note(self, key: str, example: str) -> None:
+        found = self.examples.setdefault(key, [])
+        if len(found) < 5:
+            found.append(example)
+
+    def summary(self) -> str:
+        parts = [
+            f"vs v{self.baseline_version}: {self.changed_documents} of {self.documents} "
+            "documents change"
+        ]
+        if self.outcomes:
+            parts.append("outcomes " + _fmt(self.outcomes))
+        if self.drafts_added or self.drafts_lost:
+            parts.append(f"adverts +{self.drafts_added} -{self.drafts_lost}")
+        if self.fields:
+            parts.append("fields " + _fmt(self.fields))
+        return "; ".join(parts)
+
+    def summary_lines(self) -> list[str]:
+        lines = [
+            f"{self.source_key} extraction graph v{self.candidate_version} vs "
+            f"v{self.baseline_version}: {self.changed_documents} of {self.documents} "
+            "documents change",
+            "outcomes: " + (_fmt(self.outcomes) or "unchanged"),
+            f"adverts: +{self.drafts_added} -{self.drafts_lost}; fields: "
+            + (_fmt(self.fields) or "unchanged"),
+        ]
+        for key, found in list(self.examples.items())[:12]:
+            lines.append(f"  e.g. {key}: {found[0]}")
+        return lines
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "source_key": self.source_key,
+            "baseline_version": self.baseline_version,
+            "candidate_version": self.candidate_version,
+            "documents": self.documents,
+            "changed_documents": self.changed_documents,
+            "outcomes": dict(self.outcomes.most_common()),
+            "drafts_added": self.drafts_added,
+            "drafts_lost": self.drafts_lost,
+            "fields": dict(self.fields.most_common()),
+            "examples": self.examples,
+        }
+
+
 class ArchiveAuditService:
     def __init__(
         self,
@@ -371,6 +444,45 @@ class ArchiveAuditService:
         )
         return report
 
+    async def compare(
+        self, source_key: str, *, baseline: RuleGraph, candidate: RuleGraph
+    ) -> GraphDiff:
+        """Replay every archived payload through both graphs and diff the outcomes."""
+        source = self._registry.create(source_key)
+        try:
+            if not isinstance(source, ArchiveDataSource):
+                raise ConfigurationError(f"source '{source_key}' is not an archive source")
+            identity = source.identity_policy()
+            country = source.country_code
+        finally:
+            await source.aclose()
+        diff = GraphDiff(source_key, baseline.version, candidate.version)
+        for raw in await self._all_documents(source_key):
+            try:
+                content = await self._blob.get(raw.blob_key)
+            except Exception:
+                continue
+            diff.documents += 1
+            document = ArchivedDocument.from_payload(
+                content, content_type=raw.content_type, source_url=raw.source_url, meta=raw.meta
+            )
+            before = self._engine.extract(
+                baseline, document, country_code=country, identity=identity
+            )
+            after = self._engine.extract(
+                candidate, document, country_code=country, identity=identity
+            )
+            if _compare_documents(diff, document.url, before, after):
+                diff.changed_documents += 1
+        await self._log.info(
+            "graph diff complete",
+            source_key=source_key,
+            baseline=baseline.version,
+            candidate=candidate.version,
+            changed_documents=diff.changed_documents,
+        )
+        return diff
+
     async def gold_candidates(self, source_key: str, *, sample: int) -> list[dict[str, Any]]:
         """Unverified gold labels pre-filled by the active graph, for a person to correct.
 
@@ -454,6 +566,49 @@ class ArchiveAuditService:
             raw_price = (draft.attributes.get("_raw") or {}).get("price")
             if draft.price.amount is None and raw_price and re.search(r"\d", str(raw_price)):
                 report.price_unparsed_with_text += 1
+
+
+def _compare_documents(
+    diff: GraphDiff, url: str, before: ExtractionOutcome | None, after: ExtractionOutcome | None
+) -> bool:
+    """Record how one document's outcome changes; whether it changed at all."""
+    changed = False
+    old, new = _outcome_label(before), _outcome_label(after)
+    if old != new:
+        transition = f"{old} -> {new}"
+        diff.outcomes[transition] += 1
+        diff.note(transition, url)
+        changed = True
+    old_drafts = {draft.external_id: draft for draft in (before.drafts if before else [])}
+    new_drafts = {draft.external_id: draft for draft in (after.drafts if after else [])}
+    added = new_drafts.keys() - old_drafts.keys()
+    lost = old_drafts.keys() - new_drafts.keys()
+    diff.drafts_added += len(added)
+    diff.drafts_lost += len(lost)
+    for label, ids, drafts in (
+        ("advert added", added, new_drafts),
+        ("advert lost", lost, old_drafts),
+    ):
+        for external_id in sorted(ids):
+            diff.note(label, f"{url} [{external_id}] {drafts[external_id].title[:60]}")
+    changed = changed or bool(added or lost)
+    for external_id in old_drafts.keys() & new_drafts.keys():
+        draft, other = old_drafts[external_id], new_drafts[external_id]
+        for name in DIFF_FIELDS:
+            was, now = _value(draft, name), _value(other, name)
+            if was == now:
+                continue
+            key = f"{name} {was} -> {now}" if name in _CLASSIFICATION_FIELDS else name
+            diff.fields[key] += 1
+            diff.note(key, f"{url} [{external_id}] {other.title[:60]}")
+            changed = True
+    return changed
+
+
+def _outcome_label(outcome: ExtractionOutcome | None) -> str:
+    if outcome is None:
+        return "UNRECOGNISED"
+    return f"{outcome.template_key} ({outcome.page_kind})"
 
 
 def _gold_item(draft: ListingDraft) -> dict[str, Any]:

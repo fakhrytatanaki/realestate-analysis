@@ -15,6 +15,7 @@ them into PostgreSQL, and exposes a filterable FastAPI API. The backend lives in
 | [Operations and API](operations.md) | Configuration, endpoints, scheduling, and replay |
 | [Wayback crawler state machine](wayback-crawler-state-machine.md) | Implemented OLX archive crawler: rule graphs, learning loop, state diagrams, and restart behavior |
 | [Wayback performance assessment](wayback-performance-assessment.md) | Live database and raw-HTML audit: coverage, identity collisions, extraction losses, and prioritized improvement options |
+| [Rule induction review](rule-induction-review.md) | Review of the rule-graph state machine and its LLM loop: measured problems, reproductions, and a phased fix plan |
 | [Historical sources plan](historical-sources-plan.md) | Proposal: archived olx.com.eg via Wayback, LLM-compiled rule graph |
 | [Dubizzle Egypt archive plan](dubizzle-eg-wayback-plan.md) | Capture investigation and implementation plan for a separate 2023-onward Dubizzle Wayback source |
 

@@ -74,9 +74,11 @@ Two things a subclass can fix in code instead of leaving to induction:
   it. OLX ids stay bare numbers (`535715253`) across list and detail pages.
 - `extraction_seed()` returns curated templates (OLX ships
   [`templates.json`](../core/src/realestate/infrastructure/sources/olx_eg_wayback/templates.json),
-  one per known page design). `rules seed` installs them as `HUMAN` states ahead of
-  every induced one, optionally retiring faulty induced states; a curated template
-  that works always wins.
+  one per known page design, plus `OTHER` templates for known non-listing pages
+  that refuse any page linking to an advert). `rules seed` installs them as `HUMAN`
+  states ahead of every induced one, optionally retiring faulty induced states; a
+  curated template that works always wins. The file's vocabulary is installed ahead
+  of induced entries and replaces what the previous seed installed.
 
 Dubizzle also ships reviewed source-specific graphs, installed explicitly with
 `rules seed` without replacing either domain's active graph.
@@ -171,7 +173,11 @@ Deterministic engine rules the templates rely on:
 - Induction rejects a field that stays empty on every advert of 2+ list sample pages
   (10+ adverts) or 3+ detail pages, doubly escaped regexes, home-page `url` recipes,
   one id across different adverts, price regexes that drop the amount, and any
-  candidate that lowers the exact-match rate on verified gold pages.
+  candidate that lowers the exact-match rate on verified gold pages. A candidate
+  must also win inside the active graph; `OTHER` is refused for pages linking to
+  three or more adverts; vocabulary patterns that match generic text are refused
+  (vocabulary is shared by every template). Give archive sources an identity
+  policy: it is also how induction tells advert links from other links.
 
 See [the plan](historical-sources-plan.md) for the investigation behind this.
 
