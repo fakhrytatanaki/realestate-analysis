@@ -52,15 +52,20 @@ class HtmlRuleEngine(RuleEngine):
     ) -> ExtractionOutcome | None:
         parsed = ParsedDocument(document)
         ctx = EvalContext(url=document.url, document=parsed, captured_at=document.captured_at)
+        succeeded: list[ExtractionOutcome] = []
         for node, path in graph.candidates(lambda condition: evaluate(condition, ctx)):
             if node.kind is not NodeKind.TEMPLATE:
                 continue
             outcome = self._run(graph, node, parsed, country_code=country_code, path=path)
+            # A template that matched but produced nothing usable is skipped,
+            # so a too-generic earlier rule cannot shadow a better one.
             if outcome is not None and outcome.succeeded:
-                return outcome
-            # Matched but produced nothing usable: fall through to the next
-            # candidate, so a too-generic earlier rule cannot shadow a better one.
-        return None
+                succeeded.append(outcome)
+        if not succeeded:
+            return None
+        # Templates induced at different times can overlap on one design; the
+        # one extracting most wins, priority order breaking ties.
+        return max(succeeded, key=_richness)
 
     def evaluate_candidate(
         self,
@@ -144,7 +149,30 @@ def _execute(
         problems=result.problems,
         vocab_misses=result.vocab_misses,
         path=path,
+        empty_fields=result.empty_fields,
     )
+
+
+def _richness(outcome: ExtractionOutcome) -> tuple[int, int]:
+    """(adverts extracted, detail values filled across them)."""
+    filled = sum(
+        sum(
+            value is not None
+            for value in (
+                draft.price.amount,
+                draft.area_sqm,
+                draft.bedrooms,
+                draft.bathrooms,
+                draft.listed_at,
+                draft.url,
+                draft.description,
+                draft.location.city,
+                draft.location.point,
+            )
+        )
+        for draft in outcome.drafts
+    )
+    return outcome.items_valid, filled
 
 
 def _route_outcome(node: RuleNode, evidence: Mapping[str, Any]) -> RouteOutcome | None:

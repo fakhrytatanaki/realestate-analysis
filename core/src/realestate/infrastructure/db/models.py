@@ -185,7 +185,9 @@ class ListingObservationModel(Model):
 
     class Meta:
         table = "listing_observation"
-        unique_together = (("listing", "observed_at", "content_hash"),)
+        #: One state per listing per moment: re-parsing the same capture with
+        #: better rules replaces its observation instead of adding another.
+        unique_together = (("listing", "observed_at"),)
 
 
 class CrawlFrontierModel(Model):

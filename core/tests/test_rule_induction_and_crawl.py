@@ -397,6 +397,23 @@ async def test_template_induction_repairs_after_feedback(tmp_path: Path) -> None
     )
 
 
+async def test_field_that_never_fills_is_sent_back(tmp_path: Path) -> None:
+    good = proposal("a2_2013_list")
+    wrong_area = proposal(
+        "a2_2013_list",
+        fields={**good["fields"], "area": [{"css": "div", "regex": r"(\d+)\s*sqft-nowhere"}]},
+    )
+    harness = Harness(tmp_path, ScriptedLlm(by_tool={"submit_template": [wrong_area, good]}), [])
+    await harness.archive("a2_2013_list")
+    await harness.archive("a2_2013_list_alex")  # two pages: enough evidence
+    await harness.induction.collect_extraction_gaps(SOURCE)
+
+    report = await harness.induction.induce(SOURCE, domain=RuleDomain.EXTRACTION, max_calls=5)
+
+    assert (report.llm_calls, report.accepted) == (2, 1)
+    assert "field 'area' produced no value" in harness.llm.calls[1][1][-1].content
+
+
 async def test_template_without_vocabulary_is_sent_back(tmp_path: Path) -> None:
     no_vocab = proposal("a2_2013_list", vocab={})
     harness = Harness(
@@ -462,6 +479,48 @@ async def test_crawl_end_to_end_follows_evidence_to_deferred_detail_pages(tmp_pa
     assert not await harness.documents.list_by_status(
         source_key=SOURCE, status=RawDocumentStatus.UNRECOGNISED
     )
+
+
+async def test_crawl_until_idle_stops_by_itself_and_parses_leftovers(tmp_path: Path) -> None:
+    llm = ScriptedLlm(
+        by_tool={
+            "submit_rules": [nav_answer],
+            "submit_template": [template_answer, template_answer],
+        }
+    )
+    harness = Harness(tmp_path, llm, captures())
+    # A payload archived by an interrupted run and never parsed.
+    meta = fixture_meta("a2_2013_list")
+    content = fixture_bytes("a2_2013_list")
+    blob = await harness.blob.put(f"{SOURCE}/leftover.html", content, content_type="text/html")
+    await harness.documents.create(
+        source_key=SOURCE,
+        payload=RawPayload(
+            content=content,
+            kind=RawDocumentKind.HTML,
+            content_type="text/html",
+            source_url=meta["url"],
+            meta={"timestamp": meta["timestamp"], "original_url": meta["url"]},
+        ),
+        blob=blob,
+    )
+
+    report = await harness.crawler.crawl(SOURCE, rounds=0, max_fetches=100, max_llm_calls=6)
+
+    assert report.stopped.startswith("no progress")
+    assert len(report.rounds) == 3  # the third round found nothing left to do
+    for status in (RawDocumentStatus.PENDING, RawDocumentStatus.UNRECOGNISED):
+        assert not await harness.documents.list_by_status(source_key=SOURCE, status=status)
+
+
+async def test_crawl_stops_when_the_fetch_budget_is_spent(tmp_path: Path) -> None:
+    llm = ScriptedLlm(by_tool={"submit_rules": [nav_answer], "submit_template": []})
+    harness = Harness(tmp_path, llm, captures())
+
+    report = await harness.crawler.crawl(SOURCE, rounds=0, max_fetches=1, max_llm_calls=1)
+
+    assert report.stopped == "fetch budget spent"
+    assert sum(r.run.documents_fetched for r in report.rounds if r.run) == 1
 
 
 async def test_enumeration_resumes_per_year(tmp_path: Path) -> None:

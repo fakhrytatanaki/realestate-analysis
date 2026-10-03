@@ -76,6 +76,10 @@ class WaybackClient:
         self._cooldown = self._settings.rate_limit_cooldown_seconds
 
     @property
+    def log(self) -> LogProvider:
+        return self._log
+
+    @property
     def client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(
@@ -98,6 +102,7 @@ class WaybackClient:
                 wait = self._settings.min_delay_seconds - (time.monotonic() - self._last_request_at)
                 if wait > 0:
                     await asyncio.sleep(wait)
+                started = time.monotonic()
                 try:
                     response = await self.client.get(url, params=params)
                 except httpx.HTTPError as exc:
@@ -105,6 +110,14 @@ class WaybackClient:
                     last_error = f"{type(exc).__name__}: {exc}"
                 finally:
                     self._last_request_at = time.monotonic()
+            await self._log.debug(
+                "archive request",
+                url=str(response.url) if response is not None else url,
+                status=response.status_code if response is not None else last_error,
+                bytes=len(response.content) if response is not None else 0,
+                ms=int((time.monotonic() - started) * 1000),
+                attempt=attempt,
+            )
 
             if response is not None:
                 if response.status_code == 200:
@@ -217,6 +230,14 @@ class WaybackCdxIndex(ArchiveIndex):
                 params["resumeKey"] = resume_key
             response = await self._client.get(CDX_ENDPOINT, params=params)
             captures, next_key = parse_cdx_json(response.json() if response.content.strip() else [])
+            await self._client.log.debug(
+                "cdx page",
+                domain=domain,
+                year=year,
+                captures=len(captures),
+                resumed=resume_key is not None,
+                more=next_key is not None,
+            )
             yield CapturePage(captures=captures, resume_key=next_key)
             if not next_key or not captures:
                 return

@@ -101,6 +101,8 @@ class CrawlRound:
 class CrawlReport:
     enumeration: EnumerationReport | None = None
     rounds: list[CrawlRound] = field(default_factory=list)
+    #: Why the loop ended: rounds done, a budget spent, or no progress.
+    stopped: str = ""
 
     @property
     def llm_calls(self) -> int:
@@ -282,18 +284,54 @@ class ArchiveCrawlService:
         rounds: int = 3,
         max_fetches: int = 100,
         max_llm_calls: int = 10,
+        fetches_per_round: int | None = None,
         enumerate_if_empty: bool = True,
         max_enumeration_pages: int | None = None,
     ) -> CrawlReport:
+        """Run rounds until ``rounds`` (0 = no limit), a budget, or no progress.
+
+        Safe to interrupt and re-run: frontier state, rule graphs and archived
+        payloads are all persisted, and payloads archived but not yet parsed
+        (an interrupted run) are parsed first.
+        """
         report = CrawlReport()
+        log = self._log.bind(source_key=source_key)
         counts = await self._frontier.counts(source_key)
         if enumerate_if_empty and sum(counts.values()) == 0:
+            await log.info("frontier empty, enumerating the archive index")
             report.enumeration = await self.enumerate(source_key, max_pages=max_enumeration_pages)
+
+        leftover = await self._ingestion.parse_pending(source_key, limit=10_000)
+        if leftover.created or leftover.updated or leftover.unchanged:
+            await log.info(
+                "parsed payloads left pending by an earlier run",
+                created=leftover.created,
+                updated=leftover.updated,
+            )
 
         domain = self.scope(source_key).domain
         llm_left = max_llm_calls
-        fetches_per_round = max(1, max_fetches // max(1, rounds))
-        for number in range(1, rounds + 1):
+        fetches_left = max_fetches
+        per_round = fetches_per_round or (
+            max(1, max_fetches // rounds) if rounds > 0 else min(max_fetches, 50)
+        )
+        await log.info(
+            "crawl started",
+            rounds=rounds or "until idle",
+            max_fetches=max_fetches,
+            fetches_per_round=per_round,
+            max_llm_calls=max_llm_calls,
+            frontier=_format_counts(counts),
+        )
+        number = 0
+        while rounds <= 0 or number < rounds:
+            number += 1
+            if fetches_left <= 0:
+                report.stopped = "fetch budget spent"
+                break
+            await log.info(
+                "crawl round started", round=number, fetches_left=fetches_left, llm_left=llm_left
+            )
             routed = await self.route(source_key)
 
             navigation = InductionReport()
@@ -309,8 +347,9 @@ class ArchiveCrawlService:
             run = await self._ingestion.ingest(
                 source_key,
                 trigger=RunTrigger.BACKFILL,
-                ctx=FetchContext(max_items=fetches_per_round),
+                ctx=FetchContext(max_items=min(per_round, fetches_left)),
             )
+            fetches_left -= run.documents_fetched
 
             extraction = InductionReport()
             reparsed = 0
@@ -333,17 +372,47 @@ class ArchiveCrawlService:
                     reparsed_created=reparsed,
                 )
             )
-            await self._log.info(
+            await log.info(
                 "crawl round finished",
                 round=number,
+                queued=routed.queued,
+                unrouted=routed.unrouted,
+                nav_rules=navigation.accepted,
                 fetched=run.documents_fetched,
                 created=run.listings_created + reparsed,
+                updated=run.listings_updated,
+                templates=extraction.accepted,
                 llm_calls=navigation.llm_calls + extraction.llm_calls,
+                llm_left=llm_left,
+                fetches_left=fetches_left,
             )
+            for note in navigation.notes + extraction.notes:
+                await log.warning("induction note", note=note)
             progressed = run.documents_fetched or navigation.versions or extraction.versions
             if not progressed:
+                report.stopped = (
+                    "no progress (nothing queued to fetch and no new rules)"
+                    if llm_left > 0
+                    else "no progress and the LLM budget is spent"
+                )
                 break
+        else:
+            report.stopped = f"{rounds} rounds done"
+        if not report.stopped:
+            report.stopped = "fetch budget spent"
+        await log.info(
+            "crawl finished",
+            reason=report.stopped,
+            rounds=len(report.rounds),
+            llm_calls=report.llm_calls,
+            frontier=_format_counts(await self._frontier.counts(source_key)),
+        )
         return report
+
+
+def _format_counts(counts: dict[CrawlStatus, int] | dict[str, int]) -> str:
+    shown = (f"{str(status).lower()}:{count}" for status, count in counts.items() if count)
+    return ",".join(shown) or "empty"
 
 
 def select_captures(captures: Sequence[FrontierEntry], cap: int) -> set[int]:

@@ -61,6 +61,7 @@ class TortoiseListingRepository(ListingRepository):
         #: observed_at -> ids, so archive rows keep their own capture times.
         unchanged_groups: dict[datetime, list[UUID]] = defaultdict(list)
         earlier_sightings: list[tuple[UUID, datetime]] = []
+        backfills: list[tuple[UUID, dict[str, Any]]] = []
         created = updated = unchanged = 0
 
         for external_id, draft in by_external_id.items():
@@ -93,9 +94,14 @@ class TortoiseListingRepository(ListingRepository):
 
             if row.last_observed_at is not None and observed_at < row.last_observed_at:
                 # An older capture arriving after a newer one (replays, CDX
-                # order): it is history, not the current state of the row.
+                # order): it is history, not the current state of the row --
+                # though it may fill details the newer capture did not show.
                 if row.first_observed_at is None or observed_at < row.first_observed_at:
                     earlier_sightings.append((row.id, observed_at))
+                if historical:
+                    gaps = _fill_gaps(row, _draft_columns(draft))
+                    if gaps:
+                        backfills.append((row.id, gaps))
                 if historical:
                     observations.append(
                         _observation(row.id, draft, observed_at, content_hash, raw_document_id)
@@ -114,7 +120,16 @@ class TortoiseListingRepository(ListingRepository):
                 unchanged += 1
                 continue
 
-            for column, value in _draft_columns(draft).items():
+            columns = _draft_columns(draft)
+            if historical:
+                # Archived captures are partial: a capture parsed by a template
+                # without e.g. bedrooms must not erase what an earlier one found.
+                for column in _CARRY_FORWARD:
+                    if columns[column] is None:
+                        columns[column] = getattr(row, column)
+                if columns["location_name"] == _UNKNOWN_LOCATION:
+                    columns["location_name"] = row.location_name
+            for column, value in columns.items():
                 setattr(row, column, value)
             row.content_hash = content_hash
             row.last_seen_at = now
@@ -138,8 +153,16 @@ class TortoiseListingRepository(ListingRepository):
             )
         for listing_id, observed_at in earlier_sightings:
             await ListingModel.filter(id=listing_id).update(first_observed_at=observed_at)
+        for listing_id, gaps in backfills:
+            await ListingModel.filter(id=listing_id).update(**gaps)
         if observations:
-            await ListingObservationModel.bulk_create(observations, ignore_conflicts=True)
+            # Re-parsing a capture refreshes its observation (better rules,
+            # same moment) rather than adding a second one.
+            await ListingObservationModel.bulk_create(
+                observations,
+                on_conflict=["listing_id", "observed_at"],
+                update_fields=_OBSERVATION_STATE,
+            )
 
         return UpsertResult(created=created, updated=updated, unchanged=unchanged)
 
@@ -259,6 +282,37 @@ class TortoiseListingRepository(ListingRepository):
                 return (DISTANCE_ALIAS, "id") if query.geo else ("-listed_at", "id")
             case _:
                 return ("-listed_at", "id")
+
+
+#: Details an archived capture may simply not show (another page design, a
+#: list row instead of the detail page); absent in a newer capture, the
+#: stored value stands.
+_CARRY_FORWARD = (
+    "url",
+    "description",
+    "area_sqm",
+    "bedrooms",
+    "bathrooms",
+    "city",
+    "district",
+    "latitude",
+    "longitude",
+    "listed_at",
+)
+_UNKNOWN_LOCATION = "unknown"
+_OBSERVATION_STATE = ("price", "currency", "price_type", "content_hash", "raw_document_id")
+
+
+def _fill_gaps(row: ListingModel, columns: dict[str, Any]) -> dict[str, Any]:
+    """Carry-forward columns the row lacks and an (older) capture has."""
+    gaps = {
+        column: columns[column]
+        for column in _CARRY_FORWARD
+        if getattr(row, column) is None and columns[column] is not None
+    }
+    if row.location_name == _UNKNOWN_LOCATION and columns["location_name"] != _UNKNOWN_LOCATION:
+        gaps["location_name"] = columns["location_name"]
+    return gaps
 
 
 def _draft_columns(draft: ListingDraft) -> dict[str, Any]:

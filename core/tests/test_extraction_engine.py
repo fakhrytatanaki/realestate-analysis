@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 
 from realestate.application.rules.seeds import EVIDENCE_NODE, seed_navigation_graph
+from realestate.domain.archive import ArchivedDocument
 from realestate.domain.enums import (
     LinkRel,
     ListingType,
@@ -19,6 +21,7 @@ from realestate.domain.enums import (
     RuleDomain,
 )
 from realestate.domain.rules import ROOT_KEY, RuleEdge, RuleGraph, RuleNode
+from realestate.infrastructure.extraction.document import ParsedDocument
 from realestate.infrastructure.extraction.engine import HtmlRuleEngine
 from realestate.infrastructure.extraction.normalisers import (
     parse_area,
@@ -26,6 +29,7 @@ from realestate.infrastructure.extraction.normalisers import (
     parse_int,
     parse_price,
 )
+from realestate.infrastructure.extraction.template import run_template
 from realestate.infrastructure.extraction.text import absolute_url
 from tests.archive_fakes import TEMPLATES, fixture_document
 
@@ -84,6 +88,15 @@ def test_parse_price_types() -> None:
     assert parse_price("0").amount is None
     assert parse_price("Price on request").price_type is PriceType.ON_REQUEST
     assert parse_price("900", default_currency="EGP").currency == "EGP"
+
+
+def test_placeholder_prices_are_unknown() -> None:
+    """Archived adverts post "ج.م1.00" to get past a required price field."""
+    for text in ("ج.م1.00", "ج.م8.00", "23 EGP"):
+        parsed = parse_price(text, listing_type=ListingType.SALE)
+        assert (parsed.amount, parsed.price_type) == (None, PriceType.UNKNOWN)
+    assert parse_price("ج.م150", listing_type=ListingType.RENT).amount == Decimal("150.00")
+    assert parse_price("$40 per night", listing_type=ListingType.RENT).amount == Decimal("40.00")
 
 
 def test_parse_area_and_counts() -> None:
@@ -237,6 +250,39 @@ def test_matching_but_empty_template_falls_through_to_the_next() -> None:
     assert outcome is not None and outcome.template_key == "a2_2013_list"
 
 
+def test_price_stated_only_in_the_title_needs_a_currency_marker() -> None:
+    full = TEMPLATES["a2_2013_list"]["template"]
+    # No title fallback in the template's own price field.
+    fields = {**full["fields"], "price": [{"css": ".no-price-column"}]}
+    graph = RuleGraph.empty("olx", RuleDomain.EXTRACTION).extended(
+        nodes=[RuleNode("t", NodeKind.TEMPLATE, {**full, "fields": fields})],
+        edges=[RuleEdge(ROOT_KEY, "t", {"type": "dom_css", "css": "#the-list"})],
+        vocab=TEMPLATES["vocab"],
+    )
+    outcome = ENGINE.extract(graph, fixture_document("a2_2013_list"), country_code="EG")
+    assert outcome is not None
+    gbp = [d for d in outcome.drafts if d.title.endswith("GBP")]
+    assert gbp and all(d.price.currency == "GBP" and d.price.amount for d in gbp)
+    assert gbp[0].attributes["_raw"]["price_source"] == "title"
+    # Titles without a currency marker never yield a price ("3 bedrooms").
+    assert all(
+        d.price.amount is None for d in outcome.drafts if not re.search(r"GBP|USD|EUR", d.title)
+    )
+
+
+def test_overlapping_templates_pick_the_richest() -> None:
+    """A sparser template earlier in priority must not win over a fuller one."""
+    full = TEMPLATES["a2_2013_list"]["template"]
+    sparse_fields = {k: v for k, v in full["fields"].items() if k not in ("bedrooms", "listed_at")}
+    sparse = RuleNode("sparse", NodeKind.TEMPLATE, {**full, "fields": sparse_fields})
+    graph = graph_with("a2_2013_list").extended(
+        nodes=[sparse],
+        edges=[RuleEdge(ROOT_KEY, "sparse", {"type": "dom_css", "css": "#the-list"}, priority=-1)],
+    )
+    outcome = ENGINE.extract(graph, fixture_document("a2_2013_list"), country_code="EG")
+    assert outcome is not None and outcome.template_key == "a2_2013_list"
+
+
 def test_vocabulary_gaps_are_reported() -> None:
     name = "c_2021_list"
     graph = RuleGraph.empty("olx", RuleDomain.EXTRACTION).extended(
@@ -308,3 +354,88 @@ def test_prompt_view_is_compact_and_surfaces_embedded_json() -> None:
     assert 'path "algolia.content.hits"' in view
     listing = ENGINE.prompt_view(fixture_document("a2_2013_list"), budget_chars=24_000)
     assert "more similar <div>" in listing and "<script" not in listing
+
+
+# 2013 city-subdomain list rows, as captured (cairocity.olx.com.eg).
+_ROWS_2013 = """
+<div id="the-list">
+ <div class="li">
+  <h3><a href="/villa-for-sale-in-mivida-iid-469672672"
+         title="Villa for sale in Mivida compound, New Cairo - al-Qāhirah">
+     Villa for sale in Mivida compound, New Cairo</a></h3>
+  <div class="c-4"><span>Bedrooms: 3</span><span>Bathrooms: 2</span>
+   <span>Square Meters: 560</span></div>
+  <div class="itemlistinginfo"><a>Houses - Apartments for Sale - al-Qāhirah</a></div>
+  <div class="third-column-container">ج.م4,000,000</div>
+ </div>
+ <div class="li">
+  <h3><a href="/modern-apartment-iid-319193135"
+         title="Modern Apartment Lovely Kitchen - al-Qāhirah">
+     Modern Apartment Lovely Kitchen</a></h3>
+  <div class="c-4"><span>Bedrooms: 3</span><span>Bathrooms: 3</span></div>
+  <div class="itemlistinginfo"><a>Houses - Apartments for Rent - al-Qāhirah</a></div>
+  <div class="third-column-container">ج.م1.00</div>
+ </div>
+</div>"""
+
+
+def test_list_rows_with_label_value_spans_and_combined_categories() -> None:
+    document = ParsedDocument(
+        ArchivedDocument.from_payload(
+            _ROWS_2013.encode(),
+            content_type="text/html",
+            source_url="http://cairocity.olx.com.eg/real-estate-cat-16",
+            meta={"timestamp": "20130425050016"},
+        )
+    )
+    spec = {
+        "page_kind": "LIST",
+        "items": {"css": "#the-list .li"},
+        "fields": {
+            "title": [{"css": "h3 a", "attr": "title"}],
+            "url": [{"css": "h3 a", "attr": "href"}],
+            "external_id": [{"css": "h3 a", "attr": "href", "regex": r"iid-(\d+)"}],
+            "price": [{"css": ".third-column-container"}],
+            # The category is mapped as location only, and as property type.
+            "location": [{"css": ".itemlistinginfo a"}],
+            "property_type": [{"css": ".itemlistinginfo a"}],
+            "bedrooms": [{"css": ".c-4 span", "regex": r"Bedrooms:\s*(\d+)"}],
+            "bathrooms": [{"css": ".c-4 span", "regex": r"Bathrooms:\s*(\d+)"}],
+            "area": [{"css": ".c-4 span", "regex": r"Square Meters:\s*([\d,]+)"}],
+        },
+        "default_currency": "EGP",
+    }
+    vocab = {
+        # "rent" alone, so neither title says sale/rent: only the row text does.
+        "listing_type": [
+            {"value": "RENT", "pattern": "for rent"},
+            {"value": "SALE", "pattern": "for sale"},
+        ],
+        "property_type": [
+            {"value": "VILLA", "pattern": "villa"},
+            {"value": "APARTMENT", "pattern": "apartment"},
+            {"value": "HOUSE", "pattern": "house"},
+        ],
+    }
+    result = run_template(
+        spec, document, vocab=vocab, template_key="t", graph_version=1, country_code="EG"
+    )
+
+    villa, flat = result.drafts
+    assert villa.title == "Villa for sale in Mivida compound, New Cairo"  # no " - al-Qāhirah"
+    assert (villa.bedrooms, villa.bathrooms, villa.area_sqm) == (3, 2, Decimal("560"))
+    # "Houses - Apartments" names two types, so the title decides.
+    assert villa.property_type is PropertyType.VILLA
+    assert villa.listing_type is ListingType.SALE
+    # Only the row's category text says "for Rent".
+    assert flat.listing_type is ListingType.RENT
+    assert flat.property_type is PropertyType.APARTMENT
+    assert flat.price.amount is None  # "ج.م1.00" is a placeholder
+    assert "area" not in result.empty_fields
+
+    # With no field holding the category at all, the row text still decides.
+    bare = {**spec, "fields": {k: v for k, v in spec["fields"].items() if k != "location"}}
+    rerun = run_template(
+        bare, document, vocab=vocab, template_key="t", graph_version=1, country_code="EG"
+    )
+    assert [d.listing_type for d in rerun.drafts] == [ListingType.SALE, ListingType.RENT]

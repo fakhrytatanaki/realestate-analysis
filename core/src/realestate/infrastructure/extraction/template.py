@@ -41,7 +41,7 @@ from typing import Any
 from selectolax.lexbor import LexborNode
 
 from realestate.domain.archive import DiscoveredLink, surt_key
-from realestate.domain.enums import LinkRel, ListingType, PageKind, PropertyType
+from realestate.domain.enums import LinkRel, ListingType, PageKind, PriceType, PropertyType
 from realestate.domain.models import ListingDraft, Location, Price
 from realestate.infrastructure.extraction.conditions import compiled
 from realestate.infrastructure.extraction.document import ParsedDocument, select
@@ -105,6 +105,8 @@ class TemplateResult:
     items_total: int = 0
     problems: list[str] = field(default_factory=list)
     vocab_misses: list[str] = field(default_factory=list)
+    #: Declared fields that produced no value on any item.
+    empty_fields: list[str] = field(default_factory=list)
 
 
 def run_template(
@@ -135,12 +137,14 @@ def run_template(
     items = _items(spec.get("items"), document, page_kind)
     result.items_total = len(items)
     seen_ids: set[str] = set()
+    filled: set[str] = set()
 
     for index, item in enumerate(items):
         values = {
             name: _field_value(alternatives, item, document)
             for name, alternatives in fields.items()
         }
+        filled.update(name for name, value in values.items() if value)
         draft, problem, miss = _build_draft(
             values,
             item=item,
@@ -163,6 +167,8 @@ def run_template(
         if draft.url and page_kind is PageKind.LIST:
             result.links.append(DiscoveredLink(url=draft.url, rel=LinkRel.DETAIL))
 
+    if items:
+        result.empty_fields = [name for name in fields if name not in filled]
     result.links.extend(_links(spec.get("links") or [], document))
     result.links = _unique_links(result.links, exclude=document.url)
     return result
@@ -229,22 +235,42 @@ def _one_value(spec: Mapping[str, Any], item: _Item, document: ParsedDocument) -
         scope: Any = document.tree if (scope_page or item.element is None) else item.element
         if spec.get("css"):
             nodes = select(scope, str(spec["css"]))
-            index = int(spec.get("index", 0))
-            node = nodes[index] if -len(nodes) <= index < len(nodes) else None
+            if "index" in spec:
+                index = int(spec["index"])
+                nodes = [nodes[index]] if -len(nodes) <= index < len(nodes) else []
+            elif not spec.get("regex"):
+                nodes = nodes[:1]
         else:
-            node = scope if isinstance(scope, LexborNode) else None
-        if node is None:
-            return None
-        if spec.get("attr"):
-            value = node.attributes.get(str(spec["attr"]))
-            if spec.get("decode"):
-                decoded = decode_attribute(value, str(spec["decode"]))
-                raw = first_scalar(resolve(decoded, spec.get("json")))
-            else:
-                raw = value
-        else:
-            raw = node.text(deep=True, separator=" ")
+            nodes = [scope] if isinstance(scope, LexborNode) else []
+        # With a regex and no index, the first node whose text matches wins:
+        # "label: value" rows (Bedrooms:, Bathrooms:) usually share one selector.
+        for node in nodes:
+            value = _apply_regex(spec, _node_value(spec, node))
+            if value:
+                return value
+        return None
 
+    return _apply_regex(spec, raw)
+
+
+def _node_value(spec: Mapping[str, Any], node: LexborNode) -> str | None:
+    if not spec.get("attr"):
+        return node.text(deep=True, separator=" ")
+    attr = str(spec["attr"])
+    value = node.attributes.get(attr)
+    if spec.get("decode"):
+        decoded = decode_attribute(value, str(spec["decode"]))
+        return first_scalar(resolve(decoded, spec.get("json")))
+    if attr in ("title", "alt") and value:
+        # Tooltips often repeat the visible text plus a suffix ("... - Cairo");
+        # the visible text is the cleaner value when it is a prefix of it.
+        visible = clean_text(node.text(deep=True, separator=" "))
+        if len(visible) >= 8 and clean_text(value).startswith(visible):
+            return visible
+    return value
+
+
+def _apply_regex(spec: Mapping[str, Any], raw: str | None) -> str | None:
     if raw and spec.get("regex"):
         match = compiled(str(spec["regex"]), re.IGNORECASE | re.DOTALL).search(raw)
         if match is None:
@@ -315,19 +341,36 @@ def _merge_vocab(
     return merged
 
 
-def _vocab_lookup(entries: Sequence[Mapping[str, Any]], texts: Sequence[str | None]) -> str | None:
+def _vocab_lookup(
+    entries: Sequence[Mapping[str, Any]],
+    texts: Sequence[str | None],
+    *,
+    unambiguous: bool = False,
+) -> str | None:
+    """The value of the first entry matching the first text that matches any.
+
+    With ``unambiguous``, a text matching entries of different values is
+    skipped in favour of the next text.
+    """
     for text in texts:
         if not text:
             continue
+        found: list[str] = []
         for entry in entries:
             pattern = entry.get("pattern")
             if not pattern:
                 continue
             try:
                 if compiled(str(pattern)).search(text):
-                    return str(entry.get("value", "")).upper() or None
+                    value = str(entry.get("value", "")).upper()
+                    if value and value not in found:
+                        found.append(value)
+                    if not unambiguous:
+                        break
             except re.error:
                 continue
+        if len(found) == 1 or (found and not unambiguous):
+            return found[0]
     return None
 
 
@@ -361,7 +404,23 @@ def _build_draft(
     external_id = external_id[:_MAX_EXTERNAL_ID]
 
     category = clean_text(values.get("category"))
-    context = [values.get("listing_type"), category, title, document.url, document.title]
+    # The item's own text before page-wide context: list rows often carry the
+    # category ("Houses - Apartments for Sale - Alexandria") without the
+    # template mapping it to a field.
+    item_text = (
+        clean_text(item.element.text(deep=True, separator=" "))[:2000]
+        if item.element is not None and not item.whole_page
+        else None
+    )
+    context = [
+        values.get("listing_type"),
+        category,
+        title,
+        values.get("location"),
+        item_text,
+        document.url,
+        document.title,
+    ]
     listing_value = _vocab_lookup(vocab.get("listing_type", []), context)
     try:
         listing_type = ListingType(listing_value) if listing_value else None
@@ -371,9 +430,13 @@ def _build_draft(
         return None, "listing type unknown (no vocabulary match)", category or title
 
     # The title before the category: categories are coarse ("Houses -
-    # Apartments") while titles name the thing ("luxury villa", "مكتب").
+    # Apartments") while titles name the thing ("luxury villa", "مكتب"). A
+    # text naming several types (that same category, even as the template's
+    # property_type field) says nothing and is skipped.
     property_value = _vocab_lookup(
-        vocab.get("property_type", []), [values.get("property_type"), title, category, document.url]
+        vocab.get("property_type", []),
+        [values.get("property_type"), title, category, document.url],
+        unambiguous=True,
     )
     try:
         property_type = PropertyType(property_value) if property_value else PropertyType.OTHER
@@ -385,8 +448,18 @@ def _build_draft(
         listing_type=listing_type,
         default_currency=str(default_currency).upper() if default_currency else None,
     )
+    price_from_title = False
+    if parsed.amount is None and parsed.price_type is not PriceType.ON_REQUEST:
+        # Some adverts state the price only in the title ("2b, Red Sea -
+        # 39600 GBP"); trusted only with an explicit currency marker, so
+        # "3 bedrooms" never becomes a price.
+        title_currency, _ = detect_currency(title)
+        if title_currency:
+            from_title = parse_price(title, listing_type=listing_type)
+            if from_title.amount is not None:
+                parsed, price_from_title = from_title, True
     currency = parsed.currency
-    explicit_currency = values.get("currency")
+    explicit_currency = None if price_from_title else values.get("currency")
     if explicit_currency:
         detected, _ = detect_currency(explicit_currency)
         if detected:
@@ -415,6 +488,8 @@ def _build_draft(
         for key in ("price", "listed_at", "category", "location", "area")
         if values.get(key)
     }
+    if price_from_title:
+        attributes["_raw"]["price_source"] = "title"
 
     area: Decimal | None = parse_area(values.get("area"))
     draft = ListingDraft(

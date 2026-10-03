@@ -211,6 +211,8 @@ class ExtractionOutcome:
     #: Category/title texts no vocabulary entry matched.
     vocab_misses: list[str] = field(default_factory=list)
     path: list[str] = field(default_factory=list)
+    #: Fields the template declares that produced no value on any item.
+    empty_fields: list[str] = field(default_factory=list)
 
     @property
     def succeeded(self) -> bool:

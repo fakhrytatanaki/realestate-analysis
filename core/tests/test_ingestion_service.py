@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Sequence
 from pathlib import Path
 from typing import ClassVar
@@ -238,3 +239,36 @@ async def test_ingest_reuses_a_prestarted_run(harness) -> None:  # type: ignore[
     assert finished.id == started.id
     assert len(runs.runs) == 1
     assert finished.status is RunStatus.SUCCESS
+
+
+class HangingSource(StubSource):
+    """Yields one payload, then blocks as a slow archive request would."""
+
+    def __init__(self, **kwargs: int) -> None:
+        super().__init__(**kwargs)
+        self.blocked = asyncio.Event()
+
+    async def fetch(self, ctx: FetchContext) -> AsyncIterator[RawPayload]:
+        async for payload in super().fetch(ctx):
+            yield payload
+            break
+        self.blocked.set()  # the first payload has been archived by now
+        await asyncio.Event().wait()
+
+
+async def test_interrupted_run_is_closed_as_failed(harness) -> None:  # type: ignore[no-untyped-def]
+    source = HangingSource(payloads=2)
+    service, _, documents, runs = harness(source)
+
+    task = asyncio.create_task(service.ingest("stub"))
+    await source.blocked.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    (run,) = runs.runs.values()
+    assert run.status is RunStatus.FAILED
+    assert run.error_message == "interrupted before completion"
+    assert run.documents_fetched == 0  # the archived payload stays PENDING for replay
+    assert [d.status for d in documents.documents.values()] == [RawDocumentStatus.PENDING]
+    assert source.closed

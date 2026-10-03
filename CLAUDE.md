@@ -12,7 +12,7 @@ read it before changing the pipeline or the layering.
 All from `core/`. There is no poetry/uv; the venv is `core/venv`.
 
 ```bash
-./venv/bin/pytest                 # 190 tests, no database needed
+./venv/bin/pytest                 # 198 tests, no database needed
 ./venv/bin/ruff check src tests   # must be clean
 ./venv/bin/mypy                   # config sets packages/mypy_path
 
@@ -23,7 +23,8 @@ All from `core/`. There is no poetry/uv; the venv is `core/venv`.
 
 python -m realestate.cli scrape --source fixture
 python -m realestate.cli parse --source fixture --reparse
-python -m realestate.cli crawl --source olx_eg_wayback --max-fetches 60 --max-llm-calls 10
+python -m realestate.cli crawl --source olx_eg_wayback --max-fetches 60 --max-llm-calls 10 -v
+python -m realestate.cli crawl --source olx_eg_wayback --rounds 0 --max-fetches 2000  # until idle; Ctrl-C safe
 ```
 
 `core/venv/bin/pip` has a stale shebang from an older checkout path; use
@@ -33,7 +34,7 @@ Integration tests need a separate database and are skipped without it:
 
 ```bash
 REALESTATE_TEST_DB_URL=postgres://realestate:realestate@127.0.0.1:5432/realestate_test \
-  ./venv/bin/pytest          # 210 tests
+  ./venv/bin/pytest          # 220 tests
 ```
 
 Docker needs `sudo` here — the user is not in the `docker` group.

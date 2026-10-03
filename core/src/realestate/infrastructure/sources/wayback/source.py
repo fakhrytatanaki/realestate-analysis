@@ -119,6 +119,15 @@ class WaybackDataSource(ArchiveDataSource):
                 # Resumed means the pipeline has archived the payload.
                 await self._frontier.mark_fetched(entry.id)
                 fetched += 1
+                await self._log.info(
+                    "capture fetched",
+                    progress=f"{fetched}/{budget}",
+                    url=entry.original_url,
+                    captured=archived.timestamp,
+                    bytes=len(archived.content),
+                    kind=entry.page_kind.value if entry.page_kind else "?",
+                    rule=entry.route_node,
+                )
 
     async def parse(self, payload: RawPayload) -> Sequence[ListingDraft]:
         graph = await self._extraction_graph()

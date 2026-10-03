@@ -181,6 +181,42 @@ async def test_upsert_keeps_the_latest_observation_whatever_the_order() -> None:
     assert await ListingObservationModel.filter(listing_id=row.id).count() == 2
 
 
+async def test_reparsing_a_capture_replaces_its_observation() -> None:
+    repo = TortoiseListingRepository()
+    first = make_draft(external_id="r", observed_at=T0, price=Price(Decimal("1000"), "EGP"))
+    # Same capture, better rules: a different price reading.
+    better = make_draft(external_id="r", observed_at=T0, price=Price(Decimal("1500"), "EGP"))
+
+    await repo.upsert_many([first], source_key="archive")
+    await repo.upsert_many([better], source_key="archive")
+
+    row = await ListingModel.get(source_key="archive", external_id="r")
+    history = await ListingObservationModel.filter(listing_id=row.id)
+    assert [h.price for h in history] == [Decimal("1500.00")]
+
+
+async def test_partial_captures_do_not_erase_details() -> None:
+    repo = TortoiseListingRepository()
+    detailed = make_draft(
+        external_id="p", observed_at=T0, bedrooms=3, area_sqm=Decimal("120"), title="Flat"
+    )
+    # A later capture from a page design that shows neither.
+    sparse = make_draft(external_id="p", observed_at=T0 + timedelta(days=10), title="Flat!")
+    await repo.upsert_many([detailed], source_key="archive")
+    await repo.upsert_many([sparse], source_key="archive")
+
+    row = await ListingModel.get(source_key="archive", external_id="p")
+    assert (row.title, row.bedrooms, row.area_sqm) == ("Flat!", 3, Decimal("120.00"))
+
+    # And an older capture arriving late fills what the current row lacks.
+    late = make_draft(external_id="q", observed_at=T0 + timedelta(days=10))
+    early = make_draft(external_id="q", observed_at=T0, bathrooms=2)
+    await repo.upsert_many([late], source_key="archive")
+    await repo.upsert_many([early], source_key="archive")
+    row = await ListingModel.get(source_key="archive", external_id="q")
+    assert (row.bathrooms, row.last_observed_at) == (2, T0 + timedelta(days=10))
+
+
 async def test_live_sources_record_only_changes_as_history() -> None:
     repo = TortoiseListingRepository()
     draft = make_draft(external_id="live")

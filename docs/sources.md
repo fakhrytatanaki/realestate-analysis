@@ -63,7 +63,26 @@ the model, so replays stay deterministic. The only seed rule follows links from
 recognised pages, which is how advert URLs with empty slugs get fetched.
 
 Observations carry the capture time (`observed_at`); the listing row always reflects
-the newest capture and `listing_observation` keeps every sighting (price history).
+the newest capture and `listing_observation` keeps one row per capture (price
+history; a re-parse refreshes it). Captures are partial, so detail columns (rooms,
+area, coordinates, URL, city...) missing from a newer capture keep their stored
+value, and an older capture fills what the row lacks.
+
+Deterministic engine rules the templates rely on:
+
+- When several templates match a page, the one extracting most adverts and detail
+  values wins (priority breaks ties), so overlapping templates induced at different
+  times cannot shadow each other.
+- Sale/rent is read from the type field, category, title, location, then the
+  advert's own text, then the page; a property-type text naming several types
+  ("Houses - Apartments") is skipped in favour of the next.
+- A `css` + `regex` field without `index` tries every matching node ("Bedrooms: 3"
+  and "Bathrooms: 2" spans sharing one selector); a `title`/`alt` attribute that
+  only adds a suffix to the visible text ("... - Cairo") yields the visible text.
+- Prices below 100 (5 per night/week/m²) are placeholders and stored as unknown; with
+  no price field value, a title price is used only if it carries a currency marker.
+- Induction rejects a field that stays empty on every advert of 2+ sample pages.
+
 See [the plan](historical-sources-plan.md) for the investigation behind this.
 
 ## Add or repair an adapter

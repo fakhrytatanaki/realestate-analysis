@@ -145,6 +145,14 @@ class RuleInductionService:
                 occurrences=len(members),
                 max_samples=self._settings.nav_samples_per_gap,
             )
+        largest = sorted(by_shape.items(), key=lambda item: -len(item[1]))[:5]
+        await self._log.info(
+            "navigation gaps collected",
+            source_key=source_key,
+            unrouted_urls=len(urls),
+            shapes=len(by_shape),
+            largest=", ".join(f"{shape} x{len(members)}" for shape, members in largest) or "-",
+        )
         return len(by_shape)
 
     async def collect_extraction_gaps(self, source_key: str) -> int:
@@ -193,6 +201,12 @@ class RuleInductionService:
                 max_samples=self._settings.extraction_samples,
             )
             touched.add(fingerprint)
+        await self._log.info(
+            "extraction gaps collected",
+            source_key=source_key,
+            unrecognised_documents=len(documents),
+            page_designs=len(touched),
+        )
         return len(touched)
 
     # -- induction --------------------------------------------------------
@@ -247,6 +261,13 @@ class RuleInductionService:
                     ),
                 ),
             ]
+            await self._log.info(
+                "asking llm for navigation rules",
+                groups=len(open_gaps),
+                urls=sum(gap.occurrences for gap in open_gaps),
+                shapes=", ".join(gap.fingerprint for gap in open_gaps[:4])
+                + (" ..." if len(open_gaps) > 4 else ""),
+            )
             try:
                 answer = await self._ask(
                     "nav_rules",
@@ -309,9 +330,20 @@ class RuleInductionService:
                     await self._gaps.record_failure(
                         gap.id, reason, max_attempts=self._settings.max_attempts
                     )
+            for index, rule in accepted:
+                await self._log.info(
+                    "navigation rule accepted",
+                    group=index + 1,
+                    decision=rule.decision,
+                    page_kind=rule.page_kind,
+                    pattern=rule.pattern,
+                )
+            for problem in problems[:10]:
+                await self._log.info("navigation proposal rejected", problem=problem[:300])
             await self._log.info(
                 "navigation induction round",
                 gaps=len(open_gaps),
+                covered=len(covered),
                 accepted=len(accepted),
                 problems=len(problems),
             )
@@ -415,10 +447,19 @@ class RuleInductionService:
             ),
         ]
         errors: list[str] = []
-        for _ in range(1 + self._settings.max_repairs):
+        for attempt in range(1, 2 + self._settings.max_repairs):
             if report.llm_calls >= budget:
                 errors.append("LLM call budget exhausted")
                 break
+            await self._log.info(
+                "asking llm for an extraction template",
+                gap=gap.fingerprint,
+                attempt=attempt,
+                pages=gap.occurrences,
+                samples=len(samples),
+                url=primary.url,
+                captured=captured,
+            )
             try:
                 answer = await self._ask(
                     "extraction_template",
@@ -474,6 +515,12 @@ class RuleInductionService:
                     page_kind=proposal.page_kind,
                 )
                 return report
+            await self._log.info(
+                "template attempt rejected",
+                gap=gap.fingerprint,
+                attempt=attempt,
+                errors=" | ".join(error[:200] for error in errors[:4]),
+            )
             messages = [
                 *messages,
                 LlmMessage(
@@ -574,6 +621,21 @@ class RuleInductionService:
                 "patterns (SALE/RENT) matching this wording, or a listing_type field"
             )
         problems += [problem for problem in outcome.problems[:4] if "listing type" not in problem]
+        # A field empty on every advert of every sample is a wrong selector or
+        # regex (e.g. "m2" where the page says "Square Meters: 170").
+        # Needs real evidence (2+ pages, 10+ adverts): one detail page without
+        # bedrooms is not proof the bedrooms field is wrong.
+        outcomes = [r.outcome for r in matched if r.outcome is not None and r.outcome.items_total]
+        never_filled = set(outcome.empty_fields)
+        for other_outcome in outcomes[1:]:
+            never_filled &= set(other_outcome.empty_fields)
+        if len(outcomes) < 2 or sum(o.items_total for o in outcomes) < 10:
+            never_filled = set()
+        for name in sorted(never_filled - {"currency"}):
+            problems.append(
+                f"field '{name}' produced no value on any advert of the {len(outcomes)} sample "
+                "page(s); fix its selector/regex to match the page text, or drop the field"
+            )
         if not problems and outcome.items_valid == 0:
             problems.append("no valid adverts were extracted")
         if not problems:
@@ -645,7 +707,15 @@ class RuleInductionService:
             task, fingerprint, self._llm.model, prompt_version
         )
         if cached is not None and cached.response is not None:
+            await self._log.info("llm answer reused from the decision ledger", task=task)
             return _Answer(dict(cached.response), cached.id, True, cached.raw_text)
+        await self._log.debug(
+            "llm request",
+            task=task,
+            model=self._llm.model,
+            prompt_chars=sum(len(m.content) for m in messages),
+            messages=len(messages),
+        )
         response = await self._llm.complete(
             messages, schema=schema, tool_name=tool_name, tool_description=tool_description
         )
@@ -670,7 +740,9 @@ class RuleInductionService:
             tokens_out=response.tokens_out,
             latency_ms=response.latency_ms,
             parsed=response.data is not None,
+            decision_id=str(decision.id),
         )
+        await self._log.debug("llm reply", task=task, reply=response.raw_text[:2000])
         return _Answer(response.data, decision.id, False, response.raw_text)
 
     async def _settle(self, answer: _Answer, *, valid: bool, error: str | None) -> None:

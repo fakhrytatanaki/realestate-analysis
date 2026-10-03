@@ -18,6 +18,14 @@ Archive sources (rule graphs + LLM induction):
     python -m realestate.cli rules show --source olx_eg_wayback --domain extraction
     python -m realestate.cli rules gaps --source olx_eg_wayback
     python -m realestate.cli parse --source olx_eg_wayback --unrecognised
+
+Long crawls: ``crawl --rounds 0`` keeps going until a budget is spent or a round
+makes no progress; Ctrl-C stops it safely and re-running resumes. Add ``-v`` for
+debug logs (every archive request, LLM prompt size and reply, parse outcome),
+``--log-json`` for JSON lines. Logs also go to ``var/log/app.log``.
+
+The Ollama API key is read from ``REALESTATE__LLM__API_KEY``, then ``[llm]
+api_key`` in ``etc/settings.toml``, then ``OLLAMA_API_KEY``.
 """
 
 from __future__ import annotations
@@ -25,25 +33,48 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from datetime import UTC, datetime, timedelta
 
 from realestate.bootstrap import Container
+from realestate.config.settings import Settings, load_settings
 from realestate.domain.enums import GapStatus, ListingType, RuleDomain, RunTrigger
 from realestate.domain.models import FetchContext
 from realestate.domain.query import ListingQuery
 
 
+def _logging_options(*, suppress: bool) -> argparse.ArgumentParser:
+    """Logging flags, accepted before or after the subcommand."""
+    options = argparse.ArgumentParser(
+        add_help=False, argument_default=argparse.SUPPRESS if suppress else None
+    )
+    options.add_argument(
+        "-v", "--verbose", action="store_true", help="debug logs (same as --log-level DEBUG)"
+    )
+    options.add_argument(
+        "--log-level", choices=["DEBUG", "INFO", "WARNING", "ERROR"], type=str.upper
+    )
+    options.add_argument("--log-json", action="store_true", help="log JSON lines to stdout")
+    return options
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="realestate", description=__doc__)
+    common = _logging_options(suppress=True)
+    parser = argparse.ArgumentParser(
+        prog="realestate",
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        parents=[_logging_options(suppress=False)],
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    subparsers.add_parser("sources", help="list registered data sources")
+    subparsers.add_parser("sources", parents=[common], help="list registered data sources")
 
-    scrape = subparsers.add_parser("scrape", help="fetch and parse one source")
+    scrape = subparsers.add_parser("scrape", parents=[common], help="fetch and parse one source")
     scrape.add_argument("--source", required=True, help="source key, e.g. fixture")
     scrape.add_argument("--max-items", type=int, default=None, help="cap payloads fetched")
 
-    parse = subparsers.add_parser("parse", help="parse archived payloads")
+    parse = subparsers.add_parser("parse", parents=[common], help="parse archived payloads")
     parse.add_argument("--source", default=None, help="restrict to one source key")
     parse.add_argument("--limit", type=int, default=200)
     parse.add_argument(
@@ -64,11 +95,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     crawl = subparsers.add_parser(
-        "crawl", help="crawl an archive source: route, induce rules, fetch, parse"
+        "crawl", parents=[common], help="crawl an archive source: route, induce rules, fetch, parse"
     )
     crawl.add_argument("--source", required=True)
-    crawl.add_argument("--rounds", type=int, default=3)
+    crawl.add_argument(
+        "--rounds", type=int, default=3, help="rounds to run; 0 = until a budget or idle"
+    )
     crawl.add_argument("--max-fetches", type=int, default=60, help="captures fetched, all rounds")
+    crawl.add_argument(
+        "--fetches-per-round",
+        type=int,
+        default=None,
+        help="default: max-fetches / rounds (50 with --rounds 0)",
+    )
     crawl.add_argument("--max-llm-calls", type=int, default=10, help="model calls, all rounds")
     crawl.add_argument(
         "--max-enumeration-pages",
@@ -77,36 +116,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="cap CDX pages when the frontier is empty (each holds up to 5000 captures)",
     )
 
-    archive = subparsers.add_parser("archive", help="archive frontier operations")
+    archive = subparsers.add_parser("archive", parents=[common], help="archive frontier operations")
     archive_commands = archive.add_subparsers(dest="archive_command", required=True)
     enumerate_ = archive_commands.add_parser(
-        "enumerate", help="copy the CDX index into the frontier"
+        "enumerate", parents=[common], help="copy the CDX index into the frontier"
     )
     enumerate_.add_argument("--source", required=True)
     enumerate_.add_argument("--from-year", type=int, default=None)
     enumerate_.add_argument("--to-year", type=int, default=None)
     enumerate_.add_argument("--max-pages", type=int, default=None)
-    route = archive_commands.add_parser("route", help="route discovered captures")
+    route = archive_commands.add_parser("route", parents=[common], help="route discovered captures")
     route.add_argument("--source", required=True)
-    status = archive_commands.add_parser("status", help="frontier, graphs, gaps, LLM usage")
+    status = archive_commands.add_parser(
+        "status", parents=[common], help="frontier, graphs, gaps, LLM usage"
+    )
     status.add_argument("--source", required=True)
 
-    rules = subparsers.add_parser("rules", help="rule graphs and induction")
+    rules = subparsers.add_parser("rules", parents=[common], help="rule graphs and induction")
     rules_commands = rules.add_subparsers(dest="rules_command", required=True)
-    induce = rules_commands.add_parser("induce", help="collect gaps and ask the LLM for rules")
+    induce = rules_commands.add_parser(
+        "induce", parents=[common], help="collect gaps and ask the LLM for rules"
+    )
     induce.add_argument("--source", required=True)
     induce.add_argument("--domain", choices=["navigation", "extraction", "all"], default="all")
     induce.add_argument("--max-calls", type=int, default=5)
-    show = rules_commands.add_parser("show", help="print a rule graph version")
+    show = rules_commands.add_parser("show", parents=[common], help="print a rule graph version")
     show.add_argument("--source", required=True)
     show.add_argument("--domain", choices=["navigation", "extraction"], default="extraction")
     show.add_argument("--version", type=int, default=None)
     show.add_argument("--json", action="store_true", help="dump nodes and edges as JSON")
-    gaps = rules_commands.add_parser("gaps", help="list open and failed gaps")
+    gaps = rules_commands.add_parser("gaps", parents=[common], help="list open and failed gaps")
     gaps.add_argument("--source", required=True)
     gaps.add_argument("--domain", choices=["navigation", "extraction"], default=None)
 
-    search = subparsers.add_parser("search", help="query aggregated listings")
+    search = subparsers.add_parser("search", parents=[common], help="query aggregated listings")
     search.add_argument("--listing-type", choices=[t.value for t in ListingType], default=None)
     search.add_argument("--city", default=None)
     search.add_argument("--limit", type=int, default=10)
@@ -114,8 +157,38 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _settings_for(args: argparse.Namespace) -> Settings:
+    """Settings with the command line's logging flags applied on top."""
+    settings = load_settings()
+    level = "DEBUG" if args.verbose else args.log_level
+    if level:
+        settings.logging.level = level
+    if args.log_json:
+        settings.logging.stdout_json = True
+    return settings
+
+
+async def _announce_llm(container: Container, max_calls: int) -> None:
+    """Say which model and key will be used, so a bad setup shows up at once."""
+    config = container.settings.llm
+    source = container.llm_api_key_source()
+    await container.log.info(
+        "llm configured",
+        model=config.model,
+        base_url=config.base_url,
+        api_key=source or "missing",
+        max_concurrency=config.max_concurrency,
+    )
+    if max_calls > 0 and source is None and "ollama.com" in config.base_url:
+        await container.log.warning(
+            "no Ollama API key: rule induction will fail; set OLLAMA_API_KEY or "
+            "[llm] api_key in etc/settings.toml (routing and parsing with existing rules "
+            "still run)"
+        )
+
+
 async def run(args: argparse.Namespace) -> int:
-    container = Container()
+    container = Container(_settings_for(args))
     await container.init_db()
     try:
         match args.command:
@@ -169,20 +242,20 @@ async def run(args: argparse.Namespace) -> int:
                         args.source, since=since, limit=args.limit
                     )
                 else:
-                    outcome = await container.ingestion.parse_pending(
-                        args.source, limit=args.limit
-                    )
+                    outcome = await container.ingestion.parse_pending(args.source, limit=args.limit)
                 print(
                     f"created {outcome.created}, updated {outcome.updated}, "
                     f"unchanged {outcome.unchanged}"
                 )
 
             case "crawl":
+                await _announce_llm(container, args.max_llm_calls)
                 report = await container.crawler.crawl(
                     args.source,
                     rounds=args.rounds,
                     max_fetches=args.max_fetches,
                     max_llm_calls=args.max_llm_calls,
+                    fetches_per_round=args.fetches_per_round,
                     max_enumeration_pages=args.max_enumeration_pages,
                 )
                 if report.enumeration:
@@ -205,6 +278,7 @@ async def run(args: argparse.Namespace) -> int:
                     )
                     for note in round_.navigation.notes + round_.extraction.notes:
                         print(f"  note: {note}")
+                print(f"stopped: {report.stopped}")
                 await _print_status(container, args.source)
 
             case "archive":
@@ -233,6 +307,7 @@ async def run(args: argparse.Namespace) -> int:
             case "rules":
                 match args.rules_command:
                     case "induce":
+                        await _announce_llm(container, args.max_calls)
                         domain = _domain(args.domain)
                         if domain in (None, RuleDomain.NAVIGATION):
                             shapes = await container.induction.collect_navigation_gaps(args.source)
@@ -276,9 +351,7 @@ async def run(args: argparse.Namespace) -> int:
             case "search":
                 page = await container.queries.search(
                     ListingQuery(
-                        listing_type=ListingType(args.listing_type)
-                        if args.listing_type
-                        else None,
+                        listing_type=ListingType(args.listing_type) if args.listing_type else None,
                         city=args.city,
                         limit=args.limit,
                     )
@@ -291,8 +364,10 @@ async def run(args: argparse.Namespace) -> int:
                         if listing.price.amount is not None
                         else "on request"
                     )
-                    print(f"  [{listing.source_key}] {listing.title} -- {price} "
-                          f"-- {listing.location.name}")
+                    print(
+                        f"  [{listing.source_key}] {listing.title} -- {price} "
+                        f"-- {listing.location.name}"
+                    )
     finally:
         await container.aclose()
     return 0
@@ -307,8 +382,7 @@ def _domain(name: str | None) -> RuleDomain | None:
 async def _print_status(container: Container, source_key: str) -> None:
     counts = await container.frontier.counts(source_key)
     print(
-        "frontier: "
-        + ", ".join(f"{status.value.lower()} {n}" for status, n in counts.items() if n)
+        "frontier: " + ", ".join(f"{status.value.lower()} {n}" for status, n in counts.items() if n)
     )
     for domain in (RuleDomain.NAVIGATION, RuleDomain.EXTRACTION):
         graph = await container.rule_graphs.active(source_key, domain)
@@ -387,7 +461,16 @@ async def _print_graph(container: Container, args: argparse.Namespace) -> None:
 
 def main() -> None:
     args = build_parser().parse_args()
-    raise SystemExit(asyncio.run(run(args)))
+    try:
+        code = asyncio.run(run(args))
+    except KeyboardInterrupt:
+        print(
+            "\ninterrupted: progress is saved (frontier, rules, archived pages); "
+            "re-run the same command to resume",
+            file=sys.stderr,
+        )
+        code = 130
+    raise SystemExit(code)
 
 
 if __name__ == "__main__":

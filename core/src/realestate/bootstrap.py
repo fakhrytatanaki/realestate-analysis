@@ -136,6 +136,16 @@ class Container:
     def rule_engine(self) -> RuleEngine:
         return HtmlRuleEngine()
 
+    def llm_api_key_source(self) -> str | None:
+        """Where the LLM API key comes from, for diagnostics (never the key)."""
+        if os.environ.get("REALESTATE__LLM__API_KEY"):
+            return "env REALESTATE__LLM__API_KEY"
+        if self.settings.llm.api_key:
+            return "[llm] api_key in etc/settings.toml"
+        if os.environ.get("OLLAMA_API_KEY"):
+            return "env OLLAMA_API_KEY"
+        return None
+
     @cached_property
     def llm(self) -> StructuredLlm:
         config = self.settings.llm

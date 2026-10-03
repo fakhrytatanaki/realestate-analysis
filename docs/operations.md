@@ -133,6 +133,33 @@ re-parses them. Without an API key, induction reports "model unavailable" and th
 rest of the crawl still runs on existing rules. Every model answer is in
 `llm_decision` (tokens, validity, error); `rules gaps` shows what keeps failing.
 
+**Ollama API key.** Read from, in order: `REALESTATE__LLM__API_KEY`, `[llm] api_key`
+in `core/etc/settings.toml` (gitignored), then `OLLAMA_API_KEY`. `crawl` and
+`rules induce` log `llm configured ... api_key=<where it came from|missing>` at
+start, never the key itself.
+
+**Long runs.** `--rounds 0` keeps crawling until `--max-fetches` is spent or a round
+makes no progress (nothing queued and no new rules); `--fetches-per-round` sets the
+batch (default 50 in that mode). Ctrl-C is safe: the frontier, rule graphs and
+archived pages are persisted, an interrupted ingestion run is closed as `FAILED`
+("interrupted before completion"), and the next `crawl` first parses payloads the
+interrupted run archived but never parsed. Run it detached and watch from elsewhere:
+
+```bash
+nohup ./venv/bin/python -m realestate.cli crawl --source olx_eg_wayback \
+  --rounds 0 --max-fetches 2000 --max-llm-calls 40 -v > var/log/crawl.out 2>&1 &
+tail -f var/log/crawl.out                      # or var/log/app.log (file sink)
+./venv/bin/python -m realestate.cli archive status --source olx_eg_wayback
+```
+
+**Logs.** INFO shows each round, routing totals, gap clusters, every LLM question
+and its outcome (accepted rules with their regex, rejected proposals and why,
+template repair attempts), each fetched capture with progress, and parse totals.
+`-v` (or `--log-level DEBUG`, or `REALESTATE__LOGGING__LEVEL=DEBUG`) adds every
+archive request (status, bytes, ms), CDX pages, LLM prompt size and raw reply,
+Ollama mode (tool call / JSON) and per-document parse or unrecognised outcomes.
+`--log-json` emits JSON lines. Warnings go to stderr.
+
 ## Local database helpers
 
 `scripts/db_up.sh` starts PostgreSQL and waits for health; `db_psql.sh` opens a

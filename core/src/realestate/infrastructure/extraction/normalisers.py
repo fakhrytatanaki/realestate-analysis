@@ -18,6 +18,11 @@ from realestate.infrastructure.extraction.text import clean_text, normalise_digi
 
 #: Largest value the ``listing.price`` column (DECIMAL(14,2)) can hold.
 _MAX_PRICE = Decimal("999999999999")
+#: Below this a figure is a placeholder ("1.00", "2", "8") posted to dodge a
+#: required price field, not a price; per-night/week/m² figures can be smaller.
+_MIN_PRICE = Decimal(100)
+_MIN_UNIT_PRICE = Decimal(5)
+_UNIT_PRICE_TYPES = frozenset({PriceType.PER_NIGHT, PriceType.PER_WEEK, PriceType.PER_SQM})
 
 _NUMBER = re.compile(r"(?<![\d.])(\d{1,3}(?:[,\s]\d{3})+|\d+)(?:\.(\d+))?")
 
@@ -132,7 +137,8 @@ def parse_price(
 
     With several numbers, the one closest to the currency marker wins (so
     ``"3b , Red Sea - 126322 GBP"`` gives 126322, not 3); without a marker, the
-    largest does. A zero or missing amount is ``UNKNOWN`` rather than free.
+    largest does. A zero, missing or placeholder amount (below 100, or 5 for
+    per-night/week/m² prices) is ``UNKNOWN`` rather than a real price.
     """
     raw = normalise_digits(clean_text(text))
     explicit_type: PriceType | None = None
@@ -154,6 +160,10 @@ def parse_price(
             amount = max(numbers, key=lambda item: item[0])[0]
     if amount is not None and (amount <= 0 or amount > _MAX_PRICE):
         amount = None
+    if amount is not None:
+        floor = _MIN_UNIT_PRICE if explicit_type in _UNIT_PRICE_TYPES else _MIN_PRICE
+        if amount < floor:
+            amount = None
 
     if amount is None:
         price_type = (

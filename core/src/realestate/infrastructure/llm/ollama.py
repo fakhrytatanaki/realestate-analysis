@@ -90,6 +90,13 @@ class OllamaLlm(StructuredLlm):
     ) -> LlmResponse:
         async with self._semaphore:
             body = self._body(messages, schema, tool_name, tool_description)
+            await self._log.debug(
+                "ollama request",
+                url=f"{self._settings.base_url.rstrip('/')}/api/chat",
+                mode="tool call" if self._use_tools else "json reply",
+                tool=tool_name,
+                authenticated=bool(self._settings.api_key),
+            )
             started = time.monotonic()
             try:
                 payload = await self._post(body)
@@ -101,6 +108,13 @@ class OllamaLlm(StructuredLlm):
             latency_ms = int((time.monotonic() - started) * 1000)
 
         message = payload.get("message") or {}
+        await self._log.debug(
+            "ollama response",
+            latency_ms=latency_ms,
+            done_reason=payload.get("done_reason"),
+            tool_calls=len(message.get("tool_calls") or []),
+            content_chars=len(str(message.get("content") or "")),
+        )
         data = _from_tool_calls(message.get("tool_calls"), tool_name)
         if data is None:
             data = extract_json_object(str(message.get("content") or ""))

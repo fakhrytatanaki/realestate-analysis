@@ -12,6 +12,7 @@ and replayed over months of stored payloads without touching the network again.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
@@ -100,6 +101,7 @@ class IngestionService:
         errors = 0
         result = UpsertResult()
         error_message: str | None = None
+        interrupted: asyncio.CancelledError | None = None
 
         try:
             documents, fetch_errors = await self._fetch_stage(
@@ -110,6 +112,13 @@ class IngestionService:
 
             result, parse_errors = await self._parse_documents(source, documents, log)
             errors += parse_errors
+        except asyncio.CancelledError as exc:
+            # Ctrl-C / shutdown: close the run record honestly, then let the
+            # cancellation continue. Archived payloads stay PENDING for replay.
+            status = RunStatus.FAILED
+            error_message = "interrupted before completion"
+            interrupted = exc
+            await log.warning("ingestion interrupted", documents_fetched=fetched)
         except Exception as exc:
             status = RunStatus.FAILED
             error_message = f"{type(exc).__name__}: {exc}"
@@ -137,6 +146,8 @@ class IngestionService:
             unchanged=result.unchanged,
             errors=errors,
         )
+        if interrupted is not None:
+            raise interrupted
         return finished
 
     async def parse_pending(
@@ -286,6 +297,12 @@ class IngestionService:
                 # Not a failure: rule induction will learn this page design.
                 unrecognised += 1
                 await self._documents.mark_unrecognised(document.id, str(exc))
+                await log.debug(
+                    "document unrecognised",
+                    document_id=str(document.id),
+                    url=document.source_url,
+                    reason=str(exc),
+                )
                 continue
             except Exception as exc:
                 # The payload is safe in the blob store, so a failure here is
@@ -302,6 +319,7 @@ class IngestionService:
             await log.debug(
                 "parsed document",
                 document_id=str(document.id),
+                url=document.source_url,
                 drafts=len(drafts),
                 created=result.created,
                 updated=result.updated,
@@ -335,7 +353,13 @@ class IngestionService:
         try:
             links = await source.discover_links(payload)
             if links:
-                await self._links.offer(document.source_key, links)
+                matched = await self._links.offer(document.source_key, links)
+                await log.debug(
+                    "links offered to the frontier",
+                    document_id=str(document.id),
+                    links=len(links),
+                    matched_urls=matched,
+                )
         except Exception as exc:
             await log.exception("link discovery failed", exc, document_id=str(document.id))
 
