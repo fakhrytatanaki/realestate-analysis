@@ -7,6 +7,8 @@ see the [2026-10-03 performance assessment](wayback-performance-assessment.md)
 and its "Status after fixes" section. Successful workflow states alone do not
 establish extraction accuracy or coverage across years; `archive audit` and
 `archive coverage` measure both (see [Measuring quality](#measuring-quality)).
+Known problems with the induction loop itself, and the plan to fix them, are in the
+[rule induction review](rule-induction-review.md).
 
 The historical OLX crawler learns reusable rules for deciding **which archived
 pages to fetch** and **how to extract property adverts from them**. It asks an
