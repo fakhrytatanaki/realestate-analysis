@@ -139,9 +139,13 @@ Install Dubizzle's reviewed initial graphs explicitly before enumeration/routing
 including operator edits; it never calls the LLM or archive. It currently supports
 only `dubizzle_eg_wayback`. Run it before `archive route` or `crawl`, because those
 commands can create a generic navigation graph that seeding will then retain.
-The initial extraction scope is complete category JSON lists; detail and HTML
-fallback mappings, remaining fixture evidence and replay-provenance hardening
-are still required before the [Dubizzle pilot](dubizzle-eg-wayback-plan.md).
+The packaged extraction scope includes complete category JSON lists, observed
+2023 JSON detail and the 2023 English sales-card fallback. Remaining fixture
+evidence, mapping audits and replay-provenance hardening are still required
+before the [Dubizzle pilot](dubizzle-eg-wayback-plan.md). Updating packaged seeds
+does not upgrade an installed graph: repeated seeding preserves its active
+version, and successful old parses require explicit replay after a reviewed
+graph change.
 
 Enumeration resumes per year (`crawl_cursor`). Routing retries `UNROUTED` captures
 each time, so new navigation rules apply to old misses. Documents no template

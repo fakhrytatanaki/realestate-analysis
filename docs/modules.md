@@ -99,7 +99,8 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [infrastructure/extraction/conditions.py](../core/src/realestate/infrastructure/extraction/conditions.py) | Condition types (DOM, regex, JSON path, spaCy, fingerprint, evidence, capture range) |
 | [infrastructure/extraction/template.py](../core/src/realestate/infrastructure/extraction/template.py) | Template execution: items, field alternatives, vocabulary, drafts and links |
 | [infrastructure/extraction/normalisers.py](../core/src/realestate/infrastructure/extraction/normalisers.py) | Deterministic price/currency/area/rooms/date parsing, Arabic and English, capture-anchored dates |
-| [infrastructure/extraction/jsondata.py](../core/src/realestate/infrastructure/extraction/jsondata.py) | Embedded JSON discovery (`window.x =`, ld+json, data attributes), path resolution, summaries |
+| [infrastructure/extraction/jsondata.py](../core/src/realestate/infrastructure/extraction/jsondata.py) | Embedded JSON discovery and decode diagnostics, paths/array selection, advert-first summaries |
+| [infrastructure/extraction/privacy.py](../core/src/realestate/infrastructure/extraction/privacy.py) | Contact/runtime redaction for induction prompt copies; captured data remains independent |
 | [infrastructure/extraction/prompt_view.py](../core/src/realestate/infrastructure/extraction/prompt_view.py) | Compact DOM rendering for prompts: collapsed repeats, trimmed attributes, budget |
 | [infrastructure/extraction/fingerprint.py](../core/src/realestate/infrastructure/extraction/fingerprint.py) | Structural simhash of page designs and Hamming distance |
 | [infrastructure/extraction/document.py](../core/src/realestate/infrastructure/extraction/document.py) | Lazily parsed document views and safe CSS selection |
@@ -142,6 +143,7 @@ Services depend on domain ports. DTOs own transport validation and serialization
 | [archive_fakes.py](../core/tests/archive_fakes.py) | In-memory archive/rule repositories, scripted LLM, fixture index and loaders |
 | [test_archive_domain.py](../core/tests/test_archive_domain.py) | SURT keys vs live CDX, URL shapes, graph walks, versions, seed graph |
 | [test_extraction_engine.py](../core/tests/test_extraction_engine.py) | Normalisers; templates for every archived OLX generation; fall-through; conditions; fingerprints; prompt view |
+| [test_extraction_jsondata.py](../core/tests/test_extraction_jsondata.py) | Typed array selection, malformed-state diagnostics, advert-prioritized summaries and prompt redaction |
 | [test_wayback_and_llm_clients.py](../core/tests/test_wayback_and_llm_clients.py) | Wayback 429/404/replay/CDX paging, archive source pinning, Ollama tools/fallback/retries |
 | [test_rule_induction_and_crawl.py](../core/tests/test_rule_induction_and_crawl.py) | Navigation and template induction, repair feedback, cache reuse, end-to-end crawl with evidence |
 | [test_archive_repositories_integration.py](../core/tests/test_archive_repositories_integration.py) | Real DB frontier, graphs, gaps, ledger; observation-ordered upserts |

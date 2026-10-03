@@ -139,6 +139,12 @@ class RuleEngine(ABC):
     ) -> ExtractionOutcome | None:
         """Walk the extraction graph for one document; ``None`` is a miss."""
 
+    def explain_miss(
+        self, graph: RuleGraph, document: ArchivedDocument, *, country_code: str | None
+    ) -> list[str]:
+        """Bounded non-contact diagnostics for a miss; engines may provide none."""
+        return []
+
     @abstractmethod
     def evaluate_candidate(
         self,

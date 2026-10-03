@@ -69,11 +69,22 @@ class VocabEntry(BaseModel):
         return value.upper() if isinstance(value, str) else value
 
 
+class JsonSelection(BaseModel):
+    """Select array members by one scalar field, without executing expressions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1, max_length=200)
+    field: str = Field(min_length=1, max_length=200)
+    equals: str | int | float | bool
+
+
 class JsonItemFilter(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     path: str = Field(min_length=1, max_length=200)
     pattern: str = Field(min_length=1, max_length=400)
+    select: JsonSelection | None = None
 
     @field_validator("pattern")
     @classmethod
@@ -99,6 +110,7 @@ class TemplateProposal(BaseModel):
     required_fields: list[str] = Field(default_factory=list)
     strict_classification: bool = False
     allow_title_price: bool = True
+    identity_url_pattern: str | None = Field(default=None, max_length=400)
     vocab: dict[str, list[VocabEntry]] = Field(default_factory=dict)
 
     @field_validator("items")
@@ -112,9 +124,31 @@ class TemplateProposal(BaseModel):
             value = {
                 **value,
                 "filters": [
-                    JsonItemFilter.model_validate(rule).model_dump() for rule in value["filters"]
+                    JsonItemFilter.model_validate(rule).model_dump(exclude_none=True)
+                    for rule in value["filters"]
                 ],
             }
+        return value
+
+    @field_validator("identity_url_pattern")
+    @classmethod
+    def _identity_pattern(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                pattern = re.compile(value)
+            except re.error as exc:
+                raise ValueError(f"identity URL regex does not compile: {exc}") from exc
+            if pattern.groups != 1:
+                raise ValueError("identity URL pattern needs exactly one ID capture group")
+        return value
+
+    @field_validator("fields")
+    @classmethod
+    def _selections(cls, value: dict[str, list[dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
+        for alternatives in value.values():
+            for spec in alternatives:
+                if "select" in spec:
+                    spec["select"] = JsonSelection.model_validate(spec["select"]).model_dump()
         return value
 
     @model_validator(mode="after")
@@ -189,6 +223,7 @@ class TemplateProposal(BaseModel):
             "required_fields": self.required_fields,
             "strict_classification": self.strict_classification,
             "allow_title_price": self.allow_title_price,
+            "identity_url_pattern": self.identity_url_pattern,
             "name": self.name,
         }
 

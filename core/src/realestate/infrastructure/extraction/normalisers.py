@@ -196,6 +196,21 @@ _AREA_UNITS: tuple[tuple[re.Pattern[str], Decimal], ...] = (
 )
 
 
+def parse_rental_period(text: str | None) -> PriceType | None:
+    """Only an unambiguous explicit rental period; never interpret an amount."""
+    raw = normalise_digits(clean_text(text))
+    periods = {
+        price_type
+        for price_type, pattern in _PRICE_TYPES
+        if price_type
+        in {PriceType.PER_NIGHT, PriceType.PER_WEEK, PriceType.PER_MONTH, PriceType.PER_YEAR}
+        and pattern.search(raw)
+    }
+    if re.search(r"\bdaily\b", raw, re.IGNORECASE):
+        periods.add(PriceType.PER_NIGHT)
+    return next(iter(periods)) if len(periods) == 1 else None
+
+
 def parse_area(text: str | None) -> Decimal | None:
     """Area in square metres; plain numbers are taken to be m²."""
     raw = normalise_digits(clean_text(text))

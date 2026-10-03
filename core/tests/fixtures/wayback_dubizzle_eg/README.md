@@ -12,7 +12,8 @@ Missing CDX digests and response headers are explicitly null: fixture SHA-256 is
 an integrity checksum, not an Internet Archive digest. `original_bytes` records
 the response size before sanitization; `sanitized_bytes` records fixture size.
 The 2023 sales script intentionally ends inside an unterminated JSON string.
-Its retained cards are expected evidence for the later HTML fallback tests.
+Its retained cards exercise the reviewed HTML fallback; all 45 expected
+IDs, prices and areas agree with the labelled cards.
 
 Expected IDs, amounts, sale/rent and areas are recorded independently of the
 rule engine from the retained JSON fields or labelled HTML cards. The detail
@@ -29,6 +30,15 @@ the actual 2026 response was 5,167,456 bytes before sanitization.
 Still required for the fixture gate: an independently retrieved complete 2023
 sales response, a real same-ad list/detail pair, labelled rental-period and
 installment examples, and a broader field audit. Do not infer payment-code or
-subtype-code meanings from these samples. Seed v1 intentionally supports only
-complete apartment/duplex category JSON lists; detail, truncated, empty and
-challenge pages remain extraction gaps.
+subtype-code meanings from these samples. The packaged seeds support complete
+apartment/duplex category JSON lists, the observed 2023 JSON-detail shape, and
+the 2023 English sales-card fallback. Detail URL/ID agreement and unique category
+and location levels are required. Daily text in the observed detail title sets
+the basis without replacing its amount. The synthetic empty-page signal tests a
+narrow guard; it is not evidence of every historic empty-results design.
+
+Decoded list arrays remain authoritative even when empty or all items are
+rejected: HTML cannot override their taxonomy. Missing/malformed/non-array state
+can use the validated fallback. Challenges and unsupported detail/HTML variants
+remain gaps. The synthetic pair tests identity semantics, while a real matching
+pair and independently held-out captures remain required before the pilot.

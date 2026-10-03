@@ -110,7 +110,7 @@ def compile_seed_bundle(data: dict[str, Any], *, source_key: str) -> tuple[RuleG
         vocab={
             key: [entry.model_dump() for entry in entries] for key, entries in bundle.vocab.items()
         },
-        notes="reviewed complete category JSON lists; other layouts remain extraction gaps",
+        notes="reviewed JSON lists, 2023 detail and sales HTML fallback; unknowns are gaps",
     )
     return navigation, extraction
 

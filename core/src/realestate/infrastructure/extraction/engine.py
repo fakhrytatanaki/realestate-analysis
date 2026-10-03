@@ -89,6 +89,25 @@ class HtmlRuleEngine(RuleEngine):
             return CandidateReport(document_ref, matched, None, error=f"template error: {exc}")
         return CandidateReport(document_ref, matched, outcome)
 
+    def explain_miss(
+        self, graph: RuleGraph, document: ArchivedDocument, *, country_code: str | None
+    ) -> list[str]:
+        parsed = ParsedDocument(document)
+        ctx = EvalContext(url=document.url, document=parsed, captured_at=document.captured_at)
+        problems = list(parsed.script_problems[:20])
+        for node, path in graph.candidates(lambda condition: evaluate(condition, ctx)):
+            if node.kind is not NodeKind.TEMPLATE:
+                continue
+            try:
+                outcome = _execute(graph, node, parsed, country_code=country_code, path=path)
+            except (TemplateError, SelectorError, ValueError):
+                problems.append(f"{node.key}: template error")
+            else:
+                problems.extend(f"{node.key}: {problem}" for problem in outcome.problems[:20])
+            if len(problems) >= 20:
+                break
+        return problems[:20]
+
     def check_condition(self, condition: Mapping[str, Any]) -> list[str]:
         problems: list[str] = []
         _check_tree(condition, problems)
@@ -150,6 +169,7 @@ def _execute(
         vocab_misses=result.vocab_misses,
         path=path,
         empty_fields=result.empty_fields,
+        diagnostics=[*parsed.script_problems, *result.diagnostics],
     )
 
 

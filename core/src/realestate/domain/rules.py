@@ -213,6 +213,8 @@ class ExtractionOutcome:
     path: list[str] = field(default_factory=list)
     #: Fields the template declares that produced no value on any item.
     empty_fields: list[str] = field(default_factory=list)
+    #: Non-fatal extraction evidence, separate from normalized business values.
+    diagnostics: list[str] = field(default_factory=list)
 
     @property
     def succeeded(self) -> bool:

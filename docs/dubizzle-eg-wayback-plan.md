@@ -19,12 +19,23 @@ Implemented starting slice:
   `OTHER`; raw codes and down payment are retained without asserting their meaning.
 - Fixed shared Wayback extraction caching to retain the payload object, preventing
   reused Python object IDs from returning another document's extraction result.
+- Added 2023 JSON-detail rules with URL/ID agreement, per-level category/location
+  selection, valid coordinates and explicit daily-period text independent of amount.
+- Added the observed 2023 English sales-card fallback: all 45 fixture IDs, prices
+  and areas match. Decoded list arrays always take precedence, including empty or
+  rejected arrays; broader HTML layouts still need evidence.
+- Added a narrow explicit empty-result guard, malformed-JSON and rejection
+  diagnostics in structured source logs, and advert-first induction summaries
+  with contact/runtime redaction in the prompt copy. Existing OLX/live behavior
+  passes regression checks; parsing remains offline and graph-pinned.
 
 The step 1 evidence gate remains open for a complete 2023 sales capture, a real
 matching list/detail pair, period/payment examples and broader field auditing.
-Step 2's source/seed infrastructure is implemented. Step 3's detail/HTML fallback,
-diagnostics, structured mappings and induction summaries, and replay-provenance
-hardening before step 4 remain outstanding. No bounded pilot has been run.
+Step 2's source/seed infrastructure is implemented. Step 3 now handles the
+observed detail and truncated-list shapes, but its acceptance gate remains open:
+independent held-out captures, validated subtype/period/payment codes and broader
+field auditing are still required. Replay-provenance hardening before step 4
+also remains outstanding. No bounded pilot has been run.
 
 ## Recommendation
 

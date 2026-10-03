@@ -14,7 +14,7 @@ parameters. `enabled=false` still permits manual runs of implemented sources.
 | `dubizzle_eg` | HTTP collector and parser for Elasticsearch `_msearch` responses | Implemented; disabled in example settings |
 | `zillow` | Registered stub; fetch/parse raise `DataSourceNotImplementedError` | Cannot run; HTTP trigger returns 501 |
 | `olx_eg_wayback` | OLX Egypt 2010-2023 from the Wayback Machine; navigation and extraction rules induced by an LLM and stored as rule graphs | `params.domain`, `from_year`, `to_year`, `user_agent`, `min_delay_seconds`, `max_fetches_per_run`; crawl with `cli crawl` |
-| `dubizzle_eg_wayback` | Separate Dubizzle Egypt archive, 2023-2026; reviewed initial navigation and complete category JSON-list rules | Disabled by default; same archive parameters; explicitly install rules with `cli rules seed --source dubizzle_eg_wayback` |
+| `dubizzle_eg_wayback` | Separate Dubizzle Egypt archive, 2023-2026; reviewed JSON-list rules plus observed 2023 JSON detail and sales-card fallback | Disabled by default; same archive parameters; explicitly install rules with `cli rules seed --source dubizzle_eg_wayback` |
 
 The shared fixture directory currently contains both generic `results` fixtures
 and `dubizzle_eg_apartments_sale.json` in Dubizzle's format. A full `fixture` run
@@ -72,11 +72,21 @@ JSON lists (`state.algolia.content.hits`). It validates each item's property
 taxonomy, reads `extraFields.price`, deduplicates numeric external IDs, and uses
 the original language path. Missing rental periods remain `UNKNOWN` with their
 known amount. Subtypes remain `OTHER` until code meanings are validated; raw
-subtype/payment/down-payment fields are retained as attributes. Detail pages,
-truncated JSON, empty results and challenges remain extraction gaps. The fixture
-README records remaining evidence requirements. The full fallback, detail and
-replay-provenance work in the [Dubizzle plan](dubizzle-eg-wayback-plan.md) precedes
-the bounded pilot.
+subtype/payment/down-payment fields are retained as attributes. The observed
+2023 detail shape (`state.ad.data`) requires matching numeric URL/advert IDs,
+selects unique category/location levels and maps valid coordinates. Explicit
+daily-period text sets price basis independently of amount; JSON-LD cannot
+override the advert's taxonomy or price.
+
+The 2023 English sales-card fallback recovers labelled cards when list state is
+missing, malformed or not an array. Its guard excludes every decoded list array,
+so HTML cannot override JSON, including rejected taxonomy or empty arrays. A
+narrow empty-results rule requires an empty array, zero count, explicit visible
+signal and no cards. Unsupported designs and challenges remain gaps. Structured
+`archive extraction`/`archive extraction gap` logs report template, counts,
+bounded rejection reasons, malformed state, unknown basis and category/purpose
+conflicts. The fixture README and [Dubizzle plan](dubizzle-eg-wayback-plan.md)
+record remaining evidence and replay-provenance gates before the bounded pilot.
 
 Observations carry the capture time (`observed_at`); the listing row always reflects
 the newest capture and `listing_observation` keeps one row per capture (price
@@ -100,6 +110,13 @@ Deterministic engine rules the templates rely on:
   no price field value, a title price is used only if it carries a currency marker.
   `allow_title_price=false` disables that fallback; `default_rental_price_type`
   controls whether a missing rental period defaults to monthly or stays unknown.
+- `price_period` parses explicit period text independently of amount. JSON fields
+  and filters may select a unique array member with `select: {path, field, equals}`;
+  missing or duplicate levels fail. `identity_url_pattern` requires URL/ID agreement,
+  including the original page URL for detail templates. Coordinate pairs must be
+  finite and within WGS-84 bounds.
+- Induction summaries prioritize advert arrays and singleton detail objects;
+  prompt copies redact contacts and runtime fields while retaining captured bytes.
 - Induction rejects a field that stays empty on every advert of 2+ sample pages.
 
 See [the plan](historical-sources-plan.md) for the investigation behind this.

@@ -355,7 +355,7 @@
       }
     ],
     "state_decodes": true,
-    "extraction_supported": false,
+    "extraction_supported": true,
     "curation": "Allowlisted advert state and captured cards; contacts/runtime scripts removed. Expectations describe retained advert values, not full mapping certification.",
     "fixture_sha256": "0592fce90f85b5d13410cb3f5f4a5b6b05dc266ddd0ac248b5542e8ceea98ae9",
     "sanitized_bytes": 1363
@@ -689,7 +689,7 @@
       }
     ],
     "state_decodes": false,
-    "extraction_supported": false,
+    "extraction_supported": true,
     "curation": "Allowlisted advert state and captured cards; contacts/runtime scripts removed. Expectations describe retained advert values, not full mapping certification.",
     "fixture_sha256": "5b64c9fc9d5417372004d9d555368449bdb5c7d2b336cc82d2448ed3fc90ed2c",
     "sanitized_bytes": 108521
@@ -1795,7 +1795,7 @@
     "memento_datetime": null,
     "expected": [],
     "state_decodes": true,
-    "extraction_supported": false,
+    "extraction_supported": true,
     "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
     "fixture_sha256": "e31d2f55e341ee2836f8b50570290e2be2de94233b291ba80b3b455ccc421de8",
     "sanitized_bytes": 147
@@ -1927,7 +1927,7 @@
       }
     ],
     "state_decodes": true,
-    "extraction_supported": false,
+    "extraction_supported": true,
     "curation": "Derived from sanitized 2023 rental shapes; not a captured page.",
     "fixture_sha256": "4463c22126f9e6f77b08689edd63fc64872ba8ded03d1c5228eb4fd4e612f2b4",
     "sanitized_bytes": 1245

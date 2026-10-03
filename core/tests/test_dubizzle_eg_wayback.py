@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 from copy import deepcopy
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
@@ -22,7 +23,7 @@ from realestate.application.services.rule_seed_service import RuleSeedService
 from realestate.bootstrap import Container
 from realestate.config.settings import Settings, SourceSettings
 from realestate.domain.archive import ArchivedDocument, Capture, parse_timestamp, surt_key
-from realestate.domain.enums import PriceType, PropertyType, RawDocumentKind, RuleDomain
+from realestate.domain.enums import PageKind, PriceType, PropertyType, RawDocumentKind, RuleDomain
 from realestate.domain.enums import RouteDecision as Decision
 from realestate.domain.exceptions import UnrecognisedDocumentError
 from realestate.domain.models import RawPayload
@@ -116,9 +117,12 @@ async def test_unsupported_seed_source_does_not_write_any_graph() -> None:
         "2026_sale",
         "mixed_categories",
         "large_payload",
+        "2023_sale",
+        "2023_detail",
+        "same_ad_detail",
     ],
 )
-def test_reviewed_json_lists_match_expected_values(name: str) -> None:
+def test_reviewed_extraction_matches_expected_values(name: str) -> None:
     document = fixture_document(name)
     outcome = ENGINE.extract(SEEDS.load(SOURCE)[1], document, country_code="EG")
     assert outcome is not None
@@ -132,7 +136,10 @@ def test_reviewed_json_lists_match_expected_values(name: str) -> None:
         }
         for draft in outcome.drafts
     ]
-    assert actual == INDEX[name]["expected"]
+    assert actual == [
+        {key: value for key, value in expected.items() if key != "price_type"}
+        for expected in INDEX[name]["expected"]
+    ]
     for draft in outcome.drafts:
         assert draft.observed_at == document.captured_at
         assert not draft.is_active
@@ -142,7 +149,9 @@ def test_reviewed_json_lists_match_expected_values(name: str) -> None:
         assert draft.property_type is PropertyType.OTHER  # subtype codes remain unvalidated
         assert draft.description is None
         if draft.listing_type.value == "RENT":
-            assert draft.price.price_type is PriceType.UNKNOWN
+            assert draft.price.price_type is (
+                PriceType.PER_NIGHT if name == "2023_detail" else PriceType.UNKNOWN
+            )
         if draft.listed_at:
             assert draft.listed_at <= document.captured_at
     if name == "mixed_categories":
@@ -154,14 +163,10 @@ def test_reviewed_json_lists_match_expected_values(name: str) -> None:
 @pytest.mark.parametrize(
     "name",
     [
-        "2023_sale",
-        "2023_detail",
         "non_property",
         "missing_identity",
         "missing_state",
-        "empty_results",
         "challenge",
-        "same_ad_detail",
     ],
 )
 def test_unvalidated_or_unusable_layouts_remain_gaps(name: str) -> None:
@@ -334,8 +339,10 @@ async def test_explicit_enumeration_uses_source_scope_and_independent_cursors() 
     assert {row.source_key for row in frontier.rows.values()} == {SOURCE, "olx_eg_wayback"}
 
 
+@pytest.mark.parametrize("name", ["2023_rent", "2023_sale", "2023_detail"])
 async def test_offline_parse_is_pinned_repeatable_and_unknown_layout_raises(
     monkeypatch: pytest.MonkeyPatch,
+    name: str,
 ) -> None:
     monkeypatch.setattr(
         httpx.AsyncClient, "request", AsyncMock(side_effect=AssertionError("network"))
@@ -348,13 +355,13 @@ async def test_offline_parse_is_pinned_repeatable_and_unknown_layout_raises(
         graphs=graphs,
         engine=ENGINE,
     )
-    doc = fixture_document("2023_rent")
+    doc = fixture_document(name)
     payload = RawPayload(
         content=doc.content,
         kind=RawDocumentKind.HTML,
         content_type="text/html",
         source_url=doc.url,
-        meta={"timestamp": INDEX["2023_rent"]["served_timestamp"]},
+        meta={"timestamp": INDEX[name]["served_timestamp"]},
     )
     first = await source.parse(payload)
     graph = await graphs.active(SOURCE, RuleDomain.EXTRACTION)
@@ -370,7 +377,7 @@ async def test_offline_parse_is_pinned_repeatable_and_unknown_layout_raises(
     )
     assert first == repeated
     assert first[0].attributes["_extraction"]["graph_version"] == 1
-    broken = fixture_document("2023_sale")
+    broken = fixture_document("challenge")
     with pytest.raises(UnrecognisedDocumentError):
         await source.parse(
             RawPayload(
@@ -453,3 +460,221 @@ def test_placeholder_amount_cannot_be_replaced_by_a_title_number() -> None:
     assert outcome is not None and len(outcome.drafts) == 1
     assert outcome.drafts[0].price.amount is None
     assert outcome.drafts[0].price.price_type is PriceType.UNKNOWN
+
+
+def modified_state(name: str, state: dict, *, url: str | None = None) -> ArchivedDocument:
+    doc = fixture_document(name)
+    return ArchivedDocument(
+        f"<script>window.state = {json.dumps(state)};</script>".encode(),
+        url or doc.url,
+        captured_at=doc.captured_at,
+    )
+
+
+def test_detail_uses_level_selection_and_captured_price_not_jsonld() -> None:
+    doc = fixture_document("2023_detail")
+    outcome = ENGINE.extract(SEEDS.load(SOURCE)[1], doc, country_code="EG")
+    assert outcome is not None and outcome.page_kind is PageKind.DETAIL
+    draft = outcome.drafts[0]
+    assert draft.price.amount == Decimal("200")
+    assert draft.price.price_type is PriceType.PER_NIGHT
+    assert draft.location.city == "الإسكندرية"
+    assert draft.location.district == "ميامي"
+    assert draft.location.point.latitude == Decimal("31.26527")
+    assert draft.location.point.longitude == Decimal("30.00177")
+    state = ParsedDocument(doc).scripts["state"]
+    state["ad"]["data"]["location"].reverse()
+    state["ad"]["data"]["category"].reverse()
+    reordered = ENGINE.extract(
+        SEEDS.load(SOURCE)[1], modified_state("2023_detail", state), country_code="EG"
+    )
+    assert reordered.drafts == outcome.drafts
+
+
+@pytest.mark.parametrize(
+    "mutation", ["id", "missing_id", "non_property", "duplicate_level", "home_url"]
+)
+def test_detail_rejects_unsafe_identity_or_taxonomy(mutation: str) -> None:
+    doc = fixture_document("2023_detail")
+    state = deepcopy(ParsedDocument(doc).scripts["state"])
+    ad = state["ad"]["data"]
+    url = doc.url
+    if mutation == "id":
+        ad["externalID"] = "123"
+    elif mutation == "missing_id":
+        del ad["externalID"]
+    elif mutation == "non_property":
+        ad["category"][0]["slug"] = "vehicles"
+    elif mutation == "duplicate_level":
+        ad["category"].append(deepcopy(ad["category"][1]))
+    else:
+        url = "https://www.dubizzle.com.eg/"
+    assert (
+        ENGINE.extract(
+            SEEDS.load(SOURCE)[1], modified_state("2023_detail", state, url=url), country_code="EG"
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("latitude", "longitude"), [(91, 30), (31, 181), ("NaN", 30), (31, "Infinity"), ("bad", 30)]
+)
+def test_invalid_coordinates_preserve_the_advert_without_a_point(latitude, longitude) -> None:
+    state = deepcopy(ParsedDocument(fixture_document("2023_detail")).scripts["state"])
+    state["ad"]["data"]["geography"] = {"lat": latitude, "lng": longitude}
+    outcome = ENGINE.extract(
+        SEEDS.load(SOURCE)[1], modified_state("2023_detail", state), country_code="EG"
+    )
+    assert outcome is not None and outcome.drafts[0].location.point is None
+    assert "invalid_coordinates" in outcome.diagnostics
+
+
+def test_synthetic_list_detail_pair_and_language_variants_preserve_identity() -> None:
+    graph = SEEDS.load(SOURCE)[1]
+    listing = ENGINE.extract(graph, fixture_document("same_ad_list"), country_code="EG").drafts[0]
+    doc = fixture_document("same_ad_detail")
+    detail = ENGINE.extract(graph, doc, country_code="EG").drafts[0]
+    english = ENGINE.extract(
+        graph,
+        ArchivedDocument(
+            doc.content, doc.url.replace("/ad/", "/en/ad/"), captured_at=doc.captured_at
+        ),
+        country_code="EG",
+    ).drafts[0]
+    for draft in (detail, english):
+        assert draft.external_id == listing.external_id
+        assert draft.price == listing.price
+        assert draft.area_sqm == listing.area_sqm
+        assert draft.location.city == listing.location.city
+        assert draft.location.district == listing.location.district
+        assert draft.observed_at == listing.observed_at
+
+
+def test_truncated_list_fallback_recovers_all_labelled_cards() -> None:
+    outcome = ENGINE.extract(
+        SEEDS.load(SOURCE)[1], fixture_document("2023_sale"), country_code="EG"
+    )
+    assert outcome is not None and outcome.items_total == outcome.items_valid == 45
+    assert outcome.problems == []
+    assert outcome.diagnostics == ["malformed_json:state", "html"]
+    assert all(draft.listed_at is not None for draft in outcome.drafts)
+    assert all(
+        draft.bedrooms is not None and draft.bathrooms is not None for draft in outcome.drafts
+    )
+
+
+@pytest.mark.parametrize(
+    "hits", [[], [{"externalID": "123", "title": "Car", "category.lvl0": {"slug": "vehicles"}}]]
+)
+def test_decoded_list_taxonomy_cannot_be_overridden_by_html(hits: list) -> None:
+    doc = fixture_document("2023_sale")
+    content = doc.content.replace(b'window.state = {"algolia":', b'ignored = {"algolia":')
+    state = json.dumps({"algolia": {"content": {"hits": hits}}})
+    content += f"</script><script>window.state = {state};</script>".encode()
+    assert (
+        ENGINE.extract(
+            SEEDS.load(SOURCE)[1],
+            ArchivedDocument(content, doc.url, captured_at=doc.captured_at),
+            country_code="EG",
+        )
+        is None
+    )
+
+
+def test_usable_json_wins_even_when_html_has_more_cards() -> None:
+    graph = SEEDS.load(SOURCE)[1]
+    doc = fixture_document("2023_sale")
+    hit = deepcopy(
+        ParsedDocument(fixture_document("2024_sale")).scripts["state"]["algolia"]["content"][
+            "hits"
+        ][0]
+    )
+    hit["extraFields"]["price"] = 987654
+    state = json.dumps({"algolia": {"content": {"hits": [hit]}}})
+    content = doc.content + f"</script><script>window.state = {state};</script>".encode()
+    outcome = ENGINE.extract(
+        graph, ArchivedDocument(content, doc.url, captured_at=doc.captured_at), country_code="EG"
+    )
+    assert outcome is not None and len(outcome.drafts) == 1
+    assert outcome.template_key == "seed.category_json_en"
+    assert outcome.drafts[0].price.amount == Decimal("987654")
+
+
+def test_empty_results_need_both_decoded_counts_and_explicit_visible_signal() -> None:
+    doc = fixture_document("empty_results")
+    graph = SEEDS.load(SOURCE)[1]
+    outcome = ENGINE.extract(graph, doc, country_code="EG")
+    assert outcome is not None and outcome.page_kind is PageKind.OTHER
+    assert not outcome.drafts and not outcome.links
+    for content in (
+        doc.content.replace(b"No results found", b""),
+        doc.content.replace(b'"nbHits": 0', b'"nbHits": 1'),
+        doc.content.replace(b'"hits": []', b'"other": []'),
+    ):
+        assert (
+            ENGINE.extract(
+                graph,
+                ArchivedDocument(content, doc.url, captured_at=doc.captured_at),
+                country_code="EG",
+            )
+            is None
+        )
+
+
+async def test_parse_logs_bounded_rejections_and_unknown_basis_without_changing_drafts() -> None:
+    log = NullLogProvider()
+    graphs = InMemoryGraphs()
+    await RuleSeedService(graphs=graphs, seeds=SEEDS).seed(SOURCE)
+    source = DubizzleEgWaybackDataSource(
+        log=log, frontier=InMemoryFrontier(), graphs=graphs, engine=ENGINE
+    )
+    doc = fixture_document("mixed_categories")
+    payload = RawPayload(
+        content=doc.content,
+        kind=RawDocumentKind.HTML,
+        content_type="text/html",
+        source_url=doc.url,
+        meta={"timestamp": INDEX["mixed_categories"]["served_timestamp"]},
+    )
+    assert (
+        await source.parse(payload)
+        == ENGINE.extract(SEEDS.load(SOURCE)[1], doc, country_code="EG").drafts
+    )
+    record = next(fields for _, message, fields in log.records if message == "archive extraction")
+    assert record["items_total"] == 4 and record["items_valid"] == 2
+    assert record["problems_count"] == 1
+    assert record["problems"] == ["item 1: item filter rejected"]
+    assert record["diagnostics"] == {
+        "embedded_json": 1,
+        "unknown_rental_basis": 1,
+        "duplicate_identity": 1,
+        "category_purpose_conflict": 2,
+    }
+    await source.aclose()
+
+
+async def test_rejected_detail_reports_identity_problem_in_gap_logs() -> None:
+    graphs = InMemoryGraphs()
+    await RuleSeedService(graphs=graphs, seeds=SEEDS).seed(SOURCE)
+    log = NullLogProvider()
+    source = DubizzleEgWaybackDataSource(
+        log=log, frontier=InMemoryFrontier(), graphs=graphs, engine=ENGINE
+    )
+    state = deepcopy(ParsedDocument(fixture_document("2023_detail")).scripts["state"])
+    state["ad"]["data"]["externalID"] = "123"
+    doc = modified_state("2023_detail", state)
+    payload = RawPayload(
+        content=doc.content,
+        kind=RawDocumentKind.HTML,
+        content_type="text/html",
+        source_url=doc.url,
+        meta={"timestamp": INDEX["2023_detail"]["served_timestamp"]},
+    )
+    with pytest.raises(UnrecognisedDocumentError, match="URL identity mismatch"):
+        await source.parse(payload)
+    fields = next(
+        fields for _, message, fields in log.records if message == "archive extraction gap"
+    )
+    assert fields["problems"] == ["seed.detail_json_ar_2023: item 0: URL identity mismatch"]
+    await source.aclose()

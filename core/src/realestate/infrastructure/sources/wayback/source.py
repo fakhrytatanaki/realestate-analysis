@@ -15,6 +15,7 @@ The pipeline invariants hold:
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any, ClassVar
 
@@ -135,10 +136,35 @@ class WaybackDataSource(ArchiveDataSource):
         graph = await self._extraction_graph()
         outcome = self._extract(payload, graph)
         if outcome is None:
-            fingerprint = self._engine.fingerprint(_document(payload))
+            document = _document(payload)
+            fingerprint = self._engine.fingerprint(document)
+            problems = self._engine.explain_miss(graph, document, country_code=self.country_code)
+            await self._log.warning(
+                "archive extraction gap",
+                url=document.url,
+                captured_at=payload.meta.get("timestamp"),
+                graph_version=graph.version,
+                fingerprint=fingerprint,
+                problems=problems,
+            )
+            detail = f"; {'; '.join(problems[:3])}" if problems else ""
             raise UnrecognisedDocumentError(
                 f"no extraction rule matched (graph v{graph.version}, fingerprint {fingerprint})"
+                f"{detail}"
             )
+        await self._log.info(
+            "archive extraction",
+            url=payload.source_url,
+            captured_at=payload.meta.get("timestamp"),
+            graph_version=graph.version,
+            template=outcome.template_key,
+            items_total=outcome.items_total,
+            items_valid=outcome.items_valid,
+            problems_count=len(outcome.problems),
+            problems=outcome.problems[:20],
+            empty_fields=outcome.empty_fields,
+            diagnostics=dict(Counter(outcome.diagnostics)),
+        )
         return outcome.drafts
 
     async def discover_links(self, payload: RawPayload) -> Sequence[DiscoveredLink]:
