@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 import httpx
 import pytest
 
 from realestate import cli
-from realestate.domain.archive import ArchiveScope, Capture, surt_key
+from realestate.domain.archive import ArchiveScope, Capture, capture_quarter, surt_key
 from realestate.domain.enums import CrawlStatus, RunStatus
 from realestate.domain.exceptions import ConfigurationError
 from realestate.domain.models import FetchContext
@@ -209,3 +210,32 @@ def test_fetch_progress_is_isolated_between_contexts() -> None:
     first.progress.attempts = 1
     first.progress.failures = 1
     assert second.progress.attempts == second.progress.failures == 0
+
+
+async def test_successive_crawls_move_on_to_quarters_earlier_crawls_did_not_reach(
+    tmp_path: Path,
+) -> None:
+    # 32 quarters, three captures each, and crawls of 10: every crawl used to
+    # take the same ten oldest quarters again.
+    rows = [
+        Capture(surt_key(url), f"{year}{month:02d}15000000", url, f"digest-{year}{month}-{n}")
+        for year in range(2005, 2013)
+        for month in (1, 4, 7, 10)
+        for n in range(3)
+        for url in [f"http://www.olx.com.eg/houses-apartments-for-sale-cat-367-p-{year}{month}{n}"]
+    ]
+    harness = Harness(tmp_path, ScriptedLlm(), rows, years=(2005, 2012))
+    await harness.crawler.enumerate(SOURCE)
+    await harness.frontier.set_route(list(harness.frontier.rows), status=CrawlStatus.QUEUED)
+
+    fetched: Counter[str] = Counter()
+    for _ in range(3):
+        await harness.crawler.crawl(
+            SOURCE, rounds=1, max_fetches=10, max_llm_calls=0, enumerate_missing=False
+        )
+        fetched = Counter(
+            capture_quarter(entry.timestamp)
+            for entry in harness.frontier.by_status(CrawlStatus.FETCHED)
+        )
+    assert sum(fetched.values()) == 30
+    assert len(fetched) == 30 and set(fetched.values()) == {1}

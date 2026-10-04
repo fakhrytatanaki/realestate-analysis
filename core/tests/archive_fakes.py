@@ -12,10 +12,12 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from realestate.domain.archive import (
+    SERVED_STATUSES,
     ArchivedDocument,
     Capture,
     FrontierEntry,
     LinkRequest,
+    capture_month,
     capture_quarter,
     parse_timestamp,
     stratified_order,
@@ -153,15 +155,19 @@ class InMemoryFrontier(CrawlFrontierRepository):
             and e.status is CrawlStatus.QUEUED
             and (e.id not in self.retry_at or self.retry_at[e.id] <= now)
         ]
+        served: dict[str, int] = {}
         taken: dict[str, int] = {}
         for e in self.rows.values():
-            if e.source_key == source_key and e.status in (
-                CrawlStatus.FETCHED,
-                CrawlStatus.FETCHING,
-            ):
+            if e.source_key != source_key or e.status not in SERVED_STATUSES:
+                continue
+            month = capture_month(e.timestamp)
+            served[month] = served.get(month, 0) + 1
+            if e.status is not CrawlStatus.FAILED:
                 quarter = capture_quarter(e.timestamp)
                 taken[quarter] = taken.get(quarter, 0) + 1
-        ordered = stratified_order(queued, taken=taken, per_stratum=per_quarter)[:limit]
+        ordered = stratified_order(
+            queued, served=served, taken=taken, per_stratum=per_quarter
+        )[:limit]
         for entry_id in ordered:
             self.rows[entry_id] = replace(self.rows[entry_id], status=CrawlStatus.FETCHING)
             self.claimed_at[entry_id] = now

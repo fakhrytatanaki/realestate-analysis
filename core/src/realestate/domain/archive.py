@@ -167,42 +167,93 @@ def capture_year(timestamp: str) -> int:
     return int(timestamp[:4])
 
 
+def capture_month(timestamp: str) -> str:
+    """``"20131027..."`` -> ``"201310"``; a bare year counts as January."""
+    month = int(timestamp[4:6] or "1") if len(timestamp) >= 6 else 1
+    return f"{timestamp[:4]}{max(1, min(12, month)):02d}"
+
+
 def capture_quarter(timestamp: str) -> str:
     """``"20131027..."`` -> ``"2013Q4"``: the stratum fetch order rotates through."""
-    month = int(timestamp[4:6] or "1") if len(timestamp) >= 6 else 1
-    return f"{timestamp[:4]}Q{(max(1, min(12, month)) - 1) // 3 + 1}"
+    month = int(capture_month(timestamp)[4:])
+    return f"{timestamp[:4]}Q{(month - 1) // 3 + 1}"
+
+
+#: Captures a fetch has spent archive time on: what fetch order balances.
+SERVED_STATUSES = (CrawlStatus.FETCHED, CrawlStatus.FETCHING, CrawlStatus.FAILED)
 
 
 def stratified_order(
     rows: Sequence[tuple[int, str, int]],
     *,
+    served: Mapping[str, int] | None = None,
     taken: Mapping[str, int] | None = None,
     per_stratum: int | None = None,
 ) -> list[int]:
-    """Frontier ids in fetch order: round-robin across capture quarters.
+    """Frontier ids in fetch order: the least-served capture quarters first.
 
-    ``rows`` are ``(id, timestamp, priority)``. Within a quarter, higher
-    priority then older first; across quarters, each quarter's first pick,
-    then each one's second, and so on -- so a dense month cannot starve a
-    sparse one of a bounded fetch budget. ``per_stratum`` caps each quarter's
-    total including ``taken`` (already fetched), for breadth pilots.
+    ``rows`` are ``(id, timestamp, priority)``; ``served`` counts captures
+    already in :data:`SERVED_STATUSES` per capture month. That history is the
+    crawl's cursor: a quarter's k-th pick ranks at its served count plus k, so
+    each claim, and each run, continues with the quarters earlier ones reached
+    least instead of starting over at the oldest -- and a dense quarter cannot
+    starve a sparse one of a bounded budget. Ties go to higher priority, then
+    the older quarter.
+
+    Within a quarter, higher priority first, then months least-served first,
+    then a fixed pseudo-random order inside a month: picks spread over the
+    quarter rather than piling onto its first days, whose snapshots repeat the
+    same adverts. ``per_stratum`` caps each quarter's total including ``taken``
+    (fetched plus claimed per quarter), for breadth pilots.
     """
+    served = served or {}
+    served_quarters: dict[str, int] = {}
+    for month, count in served.items():
+        quarter = capture_quarter(month)
+        served_quarters[quarter] = served_quarters.get(quarter, 0) + count
     by_stratum: dict[str, list[tuple[int, str, int]]] = {}
     for entry_id, timestamp, priority in rows:
         by_stratum.setdefault(capture_quarter(timestamp), []).append(
-            (-priority, timestamp, entry_id)
+            (entry_id, capture_month(timestamp), priority)
         )
     ranked: list[tuple[int, int, str, int]] = []
     for stratum, entries in by_stratum.items():
-        entries.sort()
+        picks = _spread(entries, served)
         if per_stratum is not None:
-            entries = entries[: max(0, per_stratum - (taken or {}).get(stratum, 0))]
+            picks = picks[: max(0, per_stratum - (taken or {}).get(stratum, 0))]
+        start = served_quarters.get(stratum, 0)
         ranked.extend(
-            (rank, negative, timestamp, entry_id)
-            for rank, (negative, timestamp, entry_id) in enumerate(entries)
+            (start + rank, -priority, stratum, entry_id)
+            for rank, (entry_id, priority) in enumerate(picks)
         )
     ranked.sort()
     return [entry_id for *_, entry_id in ranked]
+
+
+def _spread(
+    entries: Sequence[tuple[int, str, int]], served: Mapping[str, int]
+) -> list[tuple[int, int]]:
+    """One quarter's ``(id, priority)`` in pick order: priority, then months in turn."""
+    by_month: dict[tuple[int, str], list[int]] = {}
+    for entry_id, month, priority in entries:
+        by_month.setdefault((priority, month), []).append(entry_id)
+    keyed: list[tuple[int, int, str, int, int]] = []
+    for (priority, month), ids in by_month.items():
+        start = served.get(month, 0)
+        keyed.extend(
+            (-priority, start + rank, month, draw, entry_id)
+            for rank, (draw, entry_id) in enumerate(sorted((_scramble(i), i) for i in ids))
+        )
+    keyed.sort()
+    return [(entry_id, -negative) for negative, *_, entry_id in keyed]
+
+
+def _scramble(entry_id: int) -> int:
+    """A fixed pseudo-random rank for a frontier id (Fibonacci hashing).
+
+    Cheap enough for every queued row on every claim, and reproducible.
+    """
+    return (entry_id * 0x9E3779B97F4A7C15) % 2**64
 
 
 @dataclass(frozen=True, slots=True)

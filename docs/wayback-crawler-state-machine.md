@@ -336,10 +336,21 @@ first and last when the budget is at least two. Unselected captures get a
 route-node marker ending in `#capture-cap`; `archive route --reopen-capped`
 sends them back to routing after a cap change.
 
-Claimed captures are fetched in **stratified order**: round-robin across capture
-quarters (highest route priority, then oldest, within each), so a dense month
-cannot exhaust a bounded budget. The source parameter `max_fetches_per_quarter`
-caps fetched-plus-claimed captures per quarter for breadth pilots.
+Claimed captures are fetched in **stratified order**: least-served capture
+quarters first, so a dense month cannot exhaust a bounded budget. A quarter's
+served count is its `FETCHED`, `FETCHING` and `FAILED` captures; that persisted
+history is the crawl's cursor. Every claim, in every run, continues with the
+quarters earlier ones reached least instead of restarting at the oldest. A
+newly enumerated year therefore goes to the front, and a quarter whose captures
+keep failing stops winning the budget. Ties go to higher route priority, then
+to the older quarter.
+
+Within a quarter, the highest route priority comes first. Months are then
+filled least-served first, in a fixed pseudo-random order inside each month, so
+picks spread over the quarter instead of taking its first days. Snapshots of
+those first days repeat the same adverts. The source parameter
+`max_fetches_per_quarter` caps fetched-plus-claimed captures per quarter for
+breadth pilots.
 
 The document lifecycle starts separately when bytes are archived:
 

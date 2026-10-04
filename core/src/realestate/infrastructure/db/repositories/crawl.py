@@ -12,9 +12,11 @@ from tortoise.expressions import Q
 
 from realestate.domain.archive import (
     CAPTURE_CAP,
+    SERVED_STATUSES,
     Capture,
     FrontierEntry,
     LinkRequest,
+    capture_month,
     capture_quarter,
     stratified_order,
 )
@@ -137,15 +139,10 @@ class TortoiseCrawlFrontierRepository(CrawlFrontierRepository):
             source_key=source_key,
             status=CrawlStatus.QUEUED,
         ).values_list("id", "timestamp", "priority")
-        taken: Counter[str] = Counter()
-        if per_quarter is not None:
-            for (timestamp,) in await CrawlFrontierModel.filter(
-                source_key=source_key,
-                status__in=[CrawlStatus.FETCHED, CrawlStatus.FETCHING],
-            ).values_list("timestamp"):
-                taken[capture_quarter(str(timestamp))] += 1
+        served, taken = await self._served(source_key)
         ordered = stratified_order(
             [(int(i), str(t), int(p)) for i, t, p in candidates],
+            served=served,
             taken=taken,
             per_stratum=per_quarter,
         )[:limit]
@@ -160,6 +157,23 @@ class TortoiseCrawlFrontierRepository(CrawlFrontierRepository):
         )
         position = {entry_id: index for index, entry_id in enumerate(ordered)}
         return [_to_entry(row) for row in sorted(rows, key=lambda row: position[row.id])]
+
+    async def _served(self, source_key: str) -> tuple[Counter[str], Counter[str]]:
+        """Served captures per capture month, and fetched-plus-claimed per quarter."""
+        rows = await Tortoise.get_connection("default").execute_query_dict(
+            'SELECT left("timestamp", 6) AS "month", "status", count(*) AS "n" '
+            'FROM "crawl_frontier" WHERE "source_key" = $1 AND "status" = ANY($2::text[]) '
+            "GROUP BY 1, 2",
+            [source_key, [status.value for status in SERVED_STATUSES]],
+        )
+        served: Counter[str] = Counter()
+        taken: Counter[str] = Counter()
+        for row in rows:
+            month, count = capture_month(str(row["month"])), int(row["n"])
+            served[month] += count
+            if row["status"] != CrawlStatus.FAILED:
+                taken[capture_quarter(month)] += count
+        return served, taken
 
     async def release_stale_claims(self, source_key: str, *, claimed_before: datetime) -> int:
         return await CrawlFrontierModel.filter(

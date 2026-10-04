@@ -147,6 +147,11 @@ seed --dry-run`) before applying them: `PARSED` only means a rule matched.
   source claims rows (`FETCHING`) and `IngestionService` calls
   `source.acknowledge()` after the blob and raw document are stored. Do not move
   `mark_fetched` back into `fetch()`.
+- **Fetch order must rank on served history.** `claim_queued` runs once per batch
+  of 25, so `stratified_order` gets each quarter's served count (`SERVED_STATUSES`
+  per month) and ranks a quarter's picks after it. A rotation that restarts at
+  the oldest quarter on every claim took the same 20 OpenSooq quarters for 18
+  runs, and 2013–2026 got no fetches at all.
 - **Archive request spacing is a database row.** `WaybackClient` reserves
   slots from `archive_rate_gate` (`PostgresRateGate`) when given a gate; tests
   pass `LocalRateGate` or none. Do not drop the gate from `defaults.py` or

@@ -138,6 +138,45 @@ async def test_frontier_lifecycle() -> None:
     assert await cursors.get("s", "cdx:2013") == (None, True)
 
 
+async def test_claims_resume_with_the_least_served_quarter() -> None:
+    frontier = TortoiseCrawlFrontierRepository()
+    captures = [
+        Capture(f"eg,com,olx)/{name}", timestamp, f"http://olx.com.eg/{name}", name)
+        for name, timestamp in [
+            ("old-fetched", "20100105000000"),
+            ("old-failed", "20100210000000"),
+            ("old-next", "20100320000000"),
+            ("old-extra", "20100110000000"),
+            ("new", "20150320000000"),
+            ("other-source", "20100101000000"),
+        ]
+    ]
+    await frontier.add_captures("s", captures[:5])
+    await frontier.add_captures("t", captures[5:])
+    ids = {
+        entry.url_key.rsplit("/", 1)[1]: entry.id
+        for entry in await frontier.captures_for("s", [c.url_key for c in captures[:5]])
+    }
+    await frontier.set_route(list(ids.values()), status=CrawlStatus.QUEUED)
+    now = datetime.now(UTC)
+    # 2010Q1 has had a fetch and a permanent failure; 2015Q1 nothing yet.
+    await frontier.set_route([ids["old-fetched"]], status=CrawlStatus.FETCHED)
+    await frontier.mark_failed(ids["old-failed"], "gone")
+    # Another source's history does not count.
+    other = (await frontier.captures_for("t", [captures[5].url_key]))[0]
+    await frontier.set_route([other.id], status=CrawlStatus.FETCHED)
+
+    claimed = await frontier.claim_queued("s", limit=1, now=now)
+    assert [entry.id for entry in claimed] == [ids["new"]]
+    # Within 2010Q1, March has nothing served yet; January has a fetch.
+    claimed = await frontier.claim_queued("s", limit=1, now=now)
+    assert [entry.id for entry in claimed] == [ids["old-next"]]
+    # The breadth cap counts fetched plus claimed, not failures.
+    assert await frontier.claim_queued("s", limit=1, now=now, per_quarter=2) == []
+    claimed = await frontier.claim_queued("s", limit=1, now=now, per_quarter=3)
+    assert [entry.id for entry in claimed] == [ids["old-extra"]]
+
+
 async def test_rule_graph_versions_round_trip() -> None:
     graphs = TortoiseRuleGraphRepository()
     assert await graphs.active("s", RuleDomain.NAVIGATION) is None
