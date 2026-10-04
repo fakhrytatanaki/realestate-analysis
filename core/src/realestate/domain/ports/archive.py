@@ -98,8 +98,10 @@ class CrawlFrontierRepository(ABC):
     ) -> list[FrontierEntry]:
         """Claim captures to fetch next (status ``FETCHING``), in :func:`stratified_order`.
 
-        Skips captures waiting out a retry (``next_retry_at`` after ``now``);
-        ``per_quarter`` caps fetched-plus-claimed captures per capture quarter.
+        The order is fed the source's served captures per month, so claims
+        resume with the quarters and months earlier claims and runs reached
+        least. Skips captures waiting out a retry (``next_retry_at`` after
+        ``now``); ``per_quarter`` caps fetched-plus-claimed captures per quarter.
         """
 
     @abstractmethod

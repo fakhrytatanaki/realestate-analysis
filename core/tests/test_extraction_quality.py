@@ -13,6 +13,7 @@ import pytest
 from realestate.domain.archive import (
     ArchivedDocument,
     IdentityPolicy,
+    capture_month,
     capture_quarter,
     is_site_root,
     parse_timestamp,
@@ -117,10 +118,53 @@ def test_capture_quarters_and_stratified_order() -> None:
         (5, "20110601000000", 10),
     ]
     order = stratified_order(rows)
-    # Each quarter's best first (priority, then age), then the rest of 2013Q4.
-    assert order[:3] == [3, 5, 4] and order[3:] == [1, 2]
+    # Each quarter's best first (priority, then the older quarter), then the
+    # rest of 2013Q4.
+    assert order[:3] == [3, 5, 4] and sorted(order[3:]) == [1, 2]
     capped = stratified_order(rows, taken={"2013Q4": 1}, per_stratum=2)
     assert capped.count(1) + capped.count(2) + capped.count(3) == 1
+    assert capture_month("20131027120000") == "201310" and capture_month("2011") == "201101"
+
+
+def _quarters(count: int) -> list[str]:
+    return [f"{2000 + index // 4}{(index % 4) * 3 + 1:02d}15000000" for index in range(count)]
+
+
+def test_fetch_order_resumes_from_served_history_instead_of_the_oldest_quarter() -> None:
+    # 30 quarters with 5 queued captures each, claimed 10 at a time: each
+    # claim must move on to quarters earlier claims did not reach.
+    queued = {
+        entry_id: (entry_id, timestamp, 90)
+        for entry_id, timestamp in enumerate(
+            (timestamp for timestamp in _quarters(30) for _ in range(5)), start=1
+        )
+    }
+    served: dict[str, int] = {}
+    for _ in range(3):
+        for entry_id in stratified_order(list(queued.values()), served=served)[:10]:
+            month = capture_month(queued.pop(entry_id)[1])
+            served[month] = served.get(month, 0) + 1
+    assert len(served) == 30 and set(served.values()) == {1}
+
+    # A quarter with history waits behind one that has none, whatever its age.
+    rows = [(1, "20100105000000", 90), (2, "20150105000000", 90)]
+    assert stratified_order(rows, served={"201001": 3}) == [2, 1]
+
+
+def test_fetch_order_spreads_picks_over_a_quarters_months() -> None:
+    january = [(entry_id, f"201301{entry_id:02d}000000", 50) for entry_id in range(1, 6)]
+    rows = [*january, (6, "20130210000000", 50), (7, "20130320000000", 50)]
+    months = {entry_id: capture_month(timestamp) for entry_id, timestamp, _ in rows}
+
+    def first_months(count: int, **kwargs: dict[str, int]) -> set[str]:
+        return {months[entry_id] for entry_id in stratified_order(rows, **kwargs)[:count]}
+
+    # Not the quarter's five oldest captures: one from each month first.
+    assert first_months(3) == {"201301", "201302", "201303"}
+    # A month already served waits for the others.
+    assert first_months(2, served={"201302": 1}) == {"201301", "201303"}
+    # Priority still decides first within the quarter.
+    assert stratified_order([*rows, (8, "20130101000000", 90)])[0] == 8
 
 
 def test_revised_graph_retires_states_with_their_edges() -> None:
