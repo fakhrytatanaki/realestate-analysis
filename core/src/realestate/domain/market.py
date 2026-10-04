@@ -6,6 +6,7 @@ repository; these types only say what is being asked for and what comes back.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -39,16 +40,48 @@ COMPARABLE_PRICE_TYPE: dict[ListingType, PriceType] = {
 
 
 @dataclass(frozen=True, slots=True)
+class Place:
+    """A whole city, or one district of it."""
+
+    city: str
+    district: str | None = None
+
+    @property
+    def label(self) -> str:
+        return f"{self.city} · {self.district}" if self.district else self.city
+
+    def covers(self, other: Place) -> bool:
+        """Whether every listing in ``other`` is also in this place."""
+        return self.city == other.city and self.district in (None, other.district)
+
+
+def pool_places(places: Iterable[Place]) -> tuple[Place, ...]:
+    """Drop repeats and places another one already covers, keeping first-seen order.
+
+    Pooling is a union, so ``Cairo`` plus ``Cairo · Maadi`` is just ``Cairo``.
+    """
+    pooled = list(dict.fromkeys(places))
+    return tuple(
+        place
+        for place in pooled
+        if not any(other != place and other.covers(place) for other in pooled)
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class TrendQuery:
-    """One region's price series over ``[date_from, date_to)``."""
+    """One region's price series over ``[date_from, date_to)``.
+
+    A region is the union of ``places``, pooled into one median; no places means
+    the whole country.
+    """
 
     country_code: str
-    city: str
     listing_type: ListingType
     currency: str
     date_from: datetime
     date_to: datetime
-    district: str | None = None
+    places: tuple[Place, ...] = ()
     property_types: tuple[PropertyType, ...] = ()
     metric: TrendMetric = TrendMetric.MEDIAN_PRICE
     interval: TrendInterval = TrendInterval.MONTH
@@ -62,7 +95,7 @@ class TrendQuery:
 
     @property
     def region_label(self) -> str:
-        return f"{self.city} · {self.district}" if self.district else self.city
+        return " + ".join(place.label for place in self.places) or f"All of {self.country_code}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,8 +114,7 @@ class TrendSeries:
     """A region's points plus enough of the query to label them."""
 
     region_label: str
-    city: str
-    district: str | None
+    places: tuple[Place, ...]
     metric: TrendMetric
     interval: TrendInterval
     currency: str

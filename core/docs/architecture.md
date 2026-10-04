@@ -195,6 +195,13 @@ capture date. `TortoiseMarketStatsRepository` runs one SQL statement per series
    Buckets below `min_samples` return null figures, so the client draws gaps
    instead of medians of two adverts.
 
+A series covers a region: the union of its `place` parameters (`City` or
+`City/District`), or the whole country when there are none. The places become
+one `WHERE` predicate, so a listing counts once even where places overlap, and
+`pool_places` drops any place another one already covers. Pooling is how a
+region is assembled from the free-text `city` column, which mixes governorates
+(`Cairo`) with neighbourhoods filed as cities (`Nasr City`).
+
 Only one price reading per listing type is comparable: `SALE` uses `TOTAL` and
 `RENT` uses `PER_MONTH` (`COMPARABLE_PRICE_TYPE`). Instalment, per-night and
 unknown prices are excluded. Price per m² divides by `listing.area_sqm`, because

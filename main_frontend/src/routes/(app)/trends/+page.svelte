@@ -14,22 +14,28 @@
     SERIES_COLORS,
     formatDay,
     mergeSeries,
+    regionLabel,
     stateToSearch,
     summarise,
+    type Line,
     type TrendState
   } from '$lib/trends';
-  import type { TrendSeries } from '$lib/types';
   import type { PageProps } from './$types';
 
   let { data }: PageProps = $props();
 
   const state = $derived(data.state);
-  const loaded = $derived(data.series.filter((item): item is TrendSeries => item !== null));
-  const chart = $derived(mergeSeries(loaded, state.interval));
-  const currency = $derived(loaded[0]?.currency ?? 'EGP');
-  const summaries = $derived(
-    data.series.flatMap((item, index) => (item ? [summarise(item, SERIES_COLORS[index])] : []))
+  // Labels and colours follow the line's slot, so a failed request leaves no colour shift.
+  const lines = $derived(
+    data.series.flatMap((series, index): Line[] =>
+      series
+        ? [{ series, label: regionLabel(state.regions[index]), color: SERIES_COLORS[index] }]
+        : []
+    )
   );
+  const chart = $derived(mergeSeries(lines, state.interval));
+  const currency = $derived(lines[0]?.series.currency ?? 'EGP');
+  const summaries = $derived(lines.map(summarise));
   const hasValues = $derived(
     chart.rows.some((row) => chart.keys.some(({ key }) => row[key] !== null))
   );
@@ -55,8 +61,9 @@
       <h1>Price trends, <em>by region.</em></h1>
     </div>
     <p class="lede">
-      Median asking prices from archived and live classifieds. Each advert counts once per period;
-      thin periods are left as gaps rather than guessed.
+      Median asking prices from archived and live classifieds, for the whole country or any mix of
+      cities and districts. Each advert counts once per period; thin periods are left as gaps rather
+      than guessed.
     </p>
   </header>
 
@@ -153,7 +160,7 @@
     {:else if !hasValues}
       <div class="empty">
         <p>Not enough adverts in this range.</p>
-        <span>Try a wider date range, a coarser interval, or the whole city.</span>
+        <span>Try a wider date range, a coarser interval, or combine nearby places.</span>
       </div>
     {:else}
       <PriceTrendChart

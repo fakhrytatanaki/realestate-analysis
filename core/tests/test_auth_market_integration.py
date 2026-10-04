@@ -10,7 +10,7 @@ import pytest
 
 from realestate.domain.enums import ListingType, PriceType, PropertyType
 from realestate.domain.exceptions import ConflictError
-from realestate.domain.market import TrendInterval, TrendMetric, TrendQuery
+from realestate.domain.market import Place, TrendInterval, TrendMetric, TrendQuery
 from realestate.domain.models import Location, Price, Session, User
 from realestate.infrastructure.db.repositories.listing import TortoiseListingRepository
 from realestate.infrastructure.db.repositories.market import TortoiseMarketStatsRepository
@@ -75,6 +75,7 @@ async def _seed(
     external_id: str,
     observations: list[tuple[datetime, str]],
     *,
+    city: str = "Cairo",
     district: str | None = "Maadi",
     area: str | None = "100",
     listing_type: ListingType = ListingType.SALE,
@@ -88,7 +89,7 @@ async def _seed(
             listing_type=listing_type,
             property_type=property_type,
             price=Price(Decimal(amount), "EGP", price_type),
-            location=Location(name="x", country_code="EG", city="Cairo", district=district),
+            location=Location(name="x", country_code="EG", city=city, district=district),
             area_sqm=Decimal(area) if area else None,
             observed_at=observed_at,
         )
@@ -98,7 +99,7 @@ async def _seed(
 def _query(**overrides: object) -> TrendQuery:
     base: dict[str, object] = {
         "country_code": "EG",
-        "city": "Cairo",
+        "places": (Place("Cairo"),),
         "listing_type": ListingType.SALE,
         "currency": "EGP",
         "date_from": datetime(2013, 1, 1, tzinfo=UTC),
@@ -135,10 +136,10 @@ async def test_price_trend_filters() -> None:
     stats = TortoiseMarketStatsRepository()
 
     maadi = await stats.price_trend(
-        _query(district="Maadi", property_types=(PropertyType.APARTMENT,))
+        _query(places=(Place("Cairo", "Maadi"),), property_types=(PropertyType.APARTMENT,))
     )
     per_sqm = await stats.price_trend(
-        _query(district="Maadi", metric=TrendMetric.MEDIAN_PRICE_PER_SQM)
+        _query(places=(Place("Cairo", "Maadi"),), metric=TrendMetric.MEDIAN_PRICE_PER_SQM)
     )
     rent = await stats.price_trend(_query(listing_type=ListingType.RENT))
     by_quarter = await stats.price_trend(_query(interval=TrendInterval.QUARTER))
@@ -147,6 +148,27 @@ async def test_price_trend_filters() -> None:
     assert [p.value for p in per_sqm] == [Decimal("35.00")]  # median of 1000/50 and 5000/100
     assert [p.value for p in rent] == [Decimal("10.00")]
     assert [p.sample_size for p in by_quarter] == [4]  # every SALE+TOTAL apartment and villa
+
+
+async def test_price_trend_pools_places_and_covers_the_country() -> None:
+    await _seed("maadi", [(JAN, "100")], district="Maadi")
+    await _seed("zamalek", [(JAN, "200")], district="Zamalek")
+    await _seed("dokki", [(JAN, "300")], city="Giza", district="Dokki")
+    await _seed("agouza", [(JAN, "400")], city="Giza", district="Agouza")
+    await _seed("nasr", [(JAN, "500")], city="Nasr City", district=None)
+    stats = TortoiseMarketStatsRepository()
+
+    async def sample_size(*places: Place) -> int:
+        [point] = await stats.price_trend(_query(places=places))
+        return point.sample_size
+
+    assert await sample_size(Place("Cairo", "Maadi"), Place("Giza", "Dokki")) == 2
+    assert await sample_size(Place("Cairo"), Place("Nasr City")) == 3
+    # Overlapping places are a union: Maadi is not counted a second time.
+    assert await sample_size(Place("Cairo"), Place("Cairo", "Maadi")) == 2
+    assert await sample_size() == 5
+    # A district only matches inside its own city.
+    assert await stats.price_trend(_query(places=(Place("Giza", "Maadi"),))) == []
 
 
 async def test_price_trend_hides_thin_buckets() -> None:

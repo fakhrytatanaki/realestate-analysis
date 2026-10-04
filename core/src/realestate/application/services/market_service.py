@@ -26,8 +26,7 @@ class MarketTrendService:
         points = await self._stats.price_trend(query)
         return TrendSeries(
             region_label=query.region_label,
-            city=query.city,
-            district=query.district,
+            places=query.places,
             metric=query.metric,
             interval=query.interval,
             currency=query.currency,

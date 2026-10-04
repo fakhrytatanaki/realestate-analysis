@@ -10,6 +10,9 @@ import type {
 export const MAX_REGIONS = 4;
 /** Must not exceed MAX_RANGE_YEARS in core/application/dto/market.py. */
 export const MAX_RANGE_YEARS = 25;
+/** Places combined into one line; must not exceed MAX_PLACES in the same module. */
+export const MAX_PLACES = 50;
+export const COUNTRY_LABEL = 'All of Egypt';
 /**
  * Validated with the dataviz palette checker against the card surface (#fbfcf8),
  * all pairs: the landing's muted hues re-stepped for chroma and separation.
@@ -29,7 +32,10 @@ export const PROPERTY_TYPES = [
   ['SHOP', 'Shops']
 ] as const;
 
-export type RegionRef = { city: string; district: string | null };
+/** A whole city when `district` is null. */
+export type Place = { city: string; district: string | null };
+/** One chart line: its places pooled into one median. Empty means the whole country. */
+export type Region = Place[];
 
 export type TrendState = {
   type: ListingType;
@@ -38,7 +44,7 @@ export type TrendState = {
   ptype: string;
   from: string | null;
   to: string | null;
-  regions: RegionRef[];
+  regions: Region[];
 };
 
 export type City = {
@@ -52,31 +58,75 @@ const oneOf = <T extends string>(value: string | null, allowed: readonly T[], fa
 
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
 
-export function regionKey(region: RegionRef): string {
-  return region.district ? `${region.city}/${region.district}` : region.city;
+/** `City` or `City/District`: the core API's `place` parameter. */
+export function placeKey(place: Place): string {
+  return place.district ? `${place.city}/${place.district}` : place.city;
 }
 
-export function regionLabel(region: RegionRef): string {
-  return region.district ? `${region.city} · ${region.district}` : region.city;
+export function placeLabel(place: Place): string {
+  return place.district ? `${place.city} · ${place.district}` : place.city;
 }
 
-function parseRegion(raw: string): RegionRef | null {
+/** Whether every advert in `inner` is also in `outer`. */
+export function covers(outer: Place, inner: Place): boolean {
+  return (
+    outer.city === inner.city && (outer.district === null || outer.district === inner.district)
+  );
+}
+
+/**
+ * Drop repeats and places another one already covers, keeping first-seen order;
+ * mirrors `pool_places` in core. Pooling is a union, so Cairo + Cairo · Maadi is Cairo.
+ */
+export function poolPlaces(places: Place[]): Region {
+  const unique = [...new Map(places.map((place) => [placeKey(place), place])).values()];
+  return unique.filter((place) => !unique.some((other) => other !== place && covers(other, place)));
+}
+
+/** Order-insensitive identity: the same places in another order are the same line. */
+export function regionId(region: Region): string {
+  return region.map(placeKey).sort().join('|') || '*';
+}
+
+export function regionLabel(region: Region): string {
+  return region.map(placeLabel).join(' + ') || COUNTRY_LABEL;
+}
+
+/** Drop lines that repeat an earlier one. */
+export function uniqueRegions(regions: Region[]): Region[] {
+  const seen = new Set<string>();
+  return regions.filter((region) => {
+    const id = regionId(region);
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
+function parsePlace(raw: string): Place | null {
   const [city, ...rest] = raw.split('/');
   if (!city?.trim()) return null;
   const district = rest.join('/').trim();
   return { city: city.trim(), district: district || null };
 }
 
+/** URL form: places joined by `|`, or `*` for the whole country. */
+function encodeRegion(region: Region): string {
+  return region.map(placeKey).join('|') || '*';
+}
+
+function parseRegion(raw: string): Region | null {
+  if (raw.trim() === '*') return [];
+  const places = raw.split('|').flatMap((part) => parsePlace(part) ?? []);
+  return places.length ? poolPlaces(places).slice(0, MAX_PLACES) : null;
+}
+
 export function parseState(params: URLSearchParams): TrendState {
-  const seen = new Set<string>();
-  const regions: RegionRef[] = [];
-  for (const raw of params.getAll('region')) {
+  const parsed = params.getAll('region').flatMap((raw) => {
     const region = parseRegion(raw);
-    if (region && !seen.has(regionKey(region)) && regions.length < MAX_REGIONS) {
-      seen.add(regionKey(region));
-      regions.push(region);
-    }
-  }
+    return region ? [region] : [];
+  });
+  const regions = uniqueRegions(parsed).slice(0, MAX_REGIONS);
   const from = params.get('from');
   const to = params.get('to');
   return {
@@ -101,7 +151,9 @@ export function parseState(params: URLSearchParams): TrendState {
 /** Inverse of parseState; defaults are omitted to keep shared URLs short. */
 export function stateToSearch(state: TrendState): string {
   const params = new URLSearchParams();
-  for (const region of state.regions) params.append('region', regionKey(region));
+  const countryOnly = state.regions.length === 1 && !state.regions[0].length;
+  if (!countryOnly)
+    for (const region of state.regions) params.append('region', encodeRegion(region));
   if (state.type !== 'SALE') params.set('type', state.type);
   if (state.metric !== 'median_price') params.set('metric', state.metric);
   if (state.interval !== 'quarter') params.set('interval', state.interval);
@@ -130,13 +182,10 @@ export function buildCities(regions: RegionSummary[]): City[] {
 /** Observed date span (YYYY-MM-DD) of the given regions, or of everything when none match. */
 export function dataSpan(
   regions: RegionSummary[],
-  selected: RegionRef[]
+  selected: Region[]
 ): { first: string; last: string } | null {
-  const matches = (region: RegionSummary) =>
-    selected.some(
-      (ref) =>
-        ref.city === region.city && (ref.district === null || ref.district === region.district)
-    );
+  const matches = (summary: RegionSummary) =>
+    selected.some((region) => !region.length || region.some((place) => covers(place, summary)));
   const pool = regions.filter(matches).length ? regions.filter(matches) : regions;
   if (!pool.length) return null;
   const first = pool.reduce(
@@ -165,6 +214,8 @@ export function clampRange(from: string, to: string): { from: string; to: string
 // -- chart data ---------------------------------------------------------------
 
 export type ChartSeries = { key: string; label: string; color: string };
+/** A loaded series with the label and colour of the line it was requested for. */
+export type Line = { series: TrendSeries; label: string; color: string };
 export type ChartRow = { date: Date } & Record<string, number | null | Date>;
 
 function nextPeriod(date: Date, interval: TrendInterval): Date {
@@ -182,16 +233,12 @@ function nextPeriod(date: Date, interval: TrendInterval): Date {
  * straight across years of missing data as if prices moved smoothly through them.
  */
 export function mergeSeries(
-  series: TrendSeries[],
+  lines: Line[],
   interval: TrendInterval
 ): { rows: ChartRow[]; keys: ChartSeries[] } {
   const rows = new Map<number, ChartRow>();
-  const keys = series.map((item, index) => ({
-    key: `s${index}`,
-    label: item.region_label,
-    color: SERIES_COLORS[index % SERIES_COLORS.length]
-  }));
-  series.forEach((item, index) => {
+  const keys = lines.map(({ label, color }, index) => ({ key: `s${index}`, label, color }));
+  lines.forEach(({ series: item }, index) => {
     for (const point of item.points) {
       const date = new Date(point.period_start);
       const row = rows.get(date.getTime()) ?? ({ date } as ChartRow);
@@ -232,12 +279,12 @@ export type SeriesSummary = {
   hidden: number;
 };
 
-export function summarise(item: TrendSeries, color: string): SeriesSummary {
+export function summarise({ series: item, label, color }: Line): SeriesSummary {
   const valued = item.points.filter((point) => point.value !== null);
   const first = valued[0];
   const last = valued[valued.length - 1];
   return {
-    label: item.region_label,
+    label,
     color,
     latest: last ? Number(last.value) : null,
     latestDate: last ? new Date(last.period_start) : null,

@@ -14,6 +14,7 @@ from tortoise import Tortoise
 
 from realestate.domain.enums import ListingType
 from realestate.domain.market import (
+    Place,
     RegionSummary,
     TrendInterval,
     TrendMetric,
@@ -40,6 +41,28 @@ def _money(value: Any) -> Decimal | None:
     return None if value is None else Decimal(str(value)).quantize(_CENT, ROUND_HALF_UP)
 
 
+def _places_filter(places: tuple[Place, ...], values: list[Any]) -> str:
+    """One predicate matching any of ``places``, binding its arrays onto ``values``.
+
+    Arrays keep the parameter count fixed however many places are pooled. Being
+    a single ``WHERE`` predicate, overlapping places cannot count a listing twice.
+    """
+    cities = [place.city for place in places if place.district is None]
+    districts = [place for place in places if place.district is not None]
+    clauses: list[str] = []
+    if cities:
+        values.append(cities)
+        clauses.append(f"l.city = ANY(${len(values)}::text[])")
+    if districts:
+        values.append([place.city for place in districts])
+        values.append([place.district for place in districts])
+        clauses.append(
+            f"(l.city, l.district) IN "
+            f"(SELECT * FROM unnest(${len(values) - 1}::text[], ${len(values)}::text[]))"
+        )
+    return f"({' OR '.join(clauses)})"
+
+
 class TortoiseMarketStatsRepository(MarketStatsRepository):
     """Aggregates computed in the database, one round trip per series."""
 
@@ -47,7 +70,6 @@ class TortoiseMarketStatsRepository(MarketStatsRepository):
         values: list[Any] = [
             _INTERVAL_SQL[query.interval],
             query.country_code,
-            query.city,
             query.listing_type.value,
             query.currency,
             query.price_type.value,
@@ -56,17 +78,15 @@ class TortoiseMarketStatsRepository(MarketStatsRepository):
         ]
         filters = [
             "l.country_code = $2",
-            "l.city = $3",
-            "l.listing_type = $4",
-            "o.currency = $5",
-            "o.price_type = $6",
-            "o.observed_at >= $7",
-            "o.observed_at < $8",
+            "l.listing_type = $3",
+            "o.currency = $4",
+            "o.price_type = $5",
+            "o.observed_at >= $6",
+            "o.observed_at < $7",
             "o.price > 0",
         ]
-        if query.district is not None:
-            values.append(query.district)
-            filters.append(f"l.district = ${len(values)}")
+        if query.places:
+            filters.append(_places_filter(query.places, values))
         if query.property_types:
             values.append([kind.value for kind in query.property_types])
             filters.append(f"l.property_type = ANY(${len(values)}::text[])")

@@ -5,21 +5,26 @@ from __future__ import annotations
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from realestate.domain.enums import ListingType, PropertyType
 from realestate.domain.market import (
+    Place,
     RegionSummary,
     TrendInterval,
     TrendMetric,
     TrendPoint,
     TrendQuery,
     TrendSeries,
+    pool_places,
 )
 
 #: Wider ranges are allowed by the data but make weekly series unreadable and
 #: the query needlessly heavy.
 MAX_RANGE_YEARS = 25
+#: Places pooled into one series: more than any real grouping needs.
+MAX_PLACES = 50
+_MAX_NAME = 128
 
 
 def _midnight_utc(day: date) -> datetime:
@@ -33,14 +38,28 @@ def _years_before(day: date, years: int) -> date:
         return day.replace(year=day.year - years, day=28)
 
 
+def parse_place(raw: str) -> Place:
+    """``City`` or ``City/District``; the district may itself contain ``/``."""
+    city, _, district = (part.strip() for part in raw.partition("/"))
+    if not city:
+        raise ValueError(f"place {raw!r} has no city")
+    if len(city) > _MAX_NAME or len(district) > _MAX_NAME:
+        raise ValueError(f"city and district are at most {_MAX_NAME} characters each")
+    return Place(city=city, district=district or None)
+
+
 class TrendQueryParams(BaseModel):
     """Every filter ``GET /markets/trends`` accepts."""
 
     model_config = ConfigDict(extra="forbid")
 
     country_code: str = Field(default="EG", min_length=2, max_length=2)
-    city: str = Field(min_length=1, max_length=128)
-    district: str | None = Field(default=None, max_length=128)
+    place: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_PLACES,
+        description="`City` or `City/District`. Repeat to pool several places into one "
+        "series; omit for the whole country.",
+    )
     listing_type: ListingType = ListingType.SALE
     property_type: list[PropertyType] = Field(default_factory=list)
     currency: str = Field(default="EGP", min_length=3, max_length=3)
@@ -51,6 +70,13 @@ class TrendQueryParams(BaseModel):
     )
     date_to: date | None = Field(default=None, description="Inclusive; defaults to today")
     min_samples: int = Field(default=5, ge=1, le=1000)
+
+    @field_validator("place")
+    @classmethod
+    def _check_places(cls, value: list[str]) -> list[str]:
+        for raw in value:
+            parse_place(raw)
+        return value
 
     @model_validator(mode="after")
     def _check_range(self) -> TrendQueryParams:
@@ -67,8 +93,7 @@ class TrendQueryParams(BaseModel):
         first = self.date_from or _years_before(last, MAX_RANGE_YEARS)
         return TrendQuery(
             country_code=self.country_code.upper(),
-            city=self.city.strip(),
-            district=self.district.strip() if self.district else None,
+            places=pool_places(parse_place(raw) for raw in self.place),
             listing_type=self.listing_type,
             property_types=tuple(self.property_type),
             currency=self.currency.upper(),
@@ -100,12 +125,18 @@ class TrendPointRead(BaseModel):
         )
 
 
-class TrendSeriesRead(BaseModel):
-    """A region's price series."""
+class PlaceRead(BaseModel):
+    """A whole city when ``district`` is null."""
 
-    region_label: str
     city: str
     district: str | None = None
+
+
+class TrendSeriesRead(BaseModel):
+    """A region's price series. ``places`` is empty for the whole country."""
+
+    region_label: str
+    places: list[PlaceRead]
     metric: TrendMetric
     interval: TrendInterval
     currency: str
@@ -115,8 +146,7 @@ class TrendSeriesRead(BaseModel):
     def from_domain(cls, series: TrendSeries) -> TrendSeriesRead:
         return cls(
             region_label=series.region_label,
-            city=series.city,
-            district=series.district,
+            places=[PlaceRead(city=place.city, district=place.district) for place in series.places],
             metric=series.metric,
             interval=series.interval,
             currency=series.currency,

@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { api, ApiError } from '$lib/server/api';
-import { buildCities, clampRange, dataSpan, parseState } from '$lib/trends';
+import { buildCities, clampRange, dataSpan, parseState, placeKey, regionLabel } from '$lib/trends';
 import type { RegionSummary, TrendSeries } from '$lib/types';
 import type { PageServerLoad } from './$types';
 
@@ -19,8 +19,7 @@ export const load: PageServerLoad = async (event) => {
   }
 
   const cities = buildCities(regions);
-  if (!state.regions.length && cities[0])
-    state.regions = [{ city: cities[0].name, district: null }];
+  if (!state.regions.length) state.regions = [[]];
 
   const span = dataSpan(regions, state.regions);
   if (span) {
@@ -29,17 +28,17 @@ export const load: PageServerLoad = async (event) => {
     state.to = range.to;
   }
 
-  // One request per region, in parallel; a failing region does not sink the others.
+  // One request per line, in parallel; a failing line does not sink the others.
+  // A line's places are pooled by the API; a line without places is the whole country.
   const results = await Promise.allSettled(
     state.regions.map((region) => {
       const query = new URLSearchParams({
         country_code: 'EG',
-        city: region.city,
         listing_type: state.type,
         metric: state.metric,
         interval: state.interval
       });
-      if (region.district) query.set('district', region.district);
+      for (const place of region) query.append('place', placeKey(place));
       if (state.ptype) query.set('property_type', state.ptype);
       if (state.from) query.set('date_from', state.from);
       if (state.to) query.set('date_to', state.to);
@@ -50,7 +49,7 @@ export const load: PageServerLoad = async (event) => {
   const errors = results.flatMap((result, index) =>
     result.status === 'rejected'
       ? [
-          `${state.regions[index].district ?? state.regions[index].city}: ${
+          `${regionLabel(state.regions[index])}: ${
             result.reason instanceof ApiError ? result.reason.detail : 'request failed'
           }`
         ]

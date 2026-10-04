@@ -29,7 +29,7 @@ async def list_regions(
     return [RegionRead.from_domain(region) for region in regions]
 
 
-@router.get("/trends", response_model=TrendSeriesRead, summary="Price trend for one region")
+@router.get("/trends", response_model=TrendSeriesRead, summary="Price trend for a region")
 async def price_trend(
     _: CurrentUserDep,
     params: Annotated[TrendQueryParams, Query()],
@@ -37,6 +37,9 @@ async def price_trend(
 ) -> TrendSeriesRead:
     """Median asking price (or price per m²) per interval bucket, with the
     interquartile range.
+
+    The region is every ``place`` pooled into one series (each listing counts
+    once, even where places overlap), or the whole country when none is given.
 
     Built from the observation history, so archived captures contribute at
     their capture date. Each listing counts once per bucket. Sale prices are
