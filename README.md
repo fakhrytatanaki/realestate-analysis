@@ -57,9 +57,10 @@ curl -X POST -H "content-type: application/json" \
   -d '{"email":"ada@example.com","password":"at-least-10-chars"}' \
   "localhost:8000/api/v1/auth/register"
 
-# Median sale price per quarter in a district (needs the bearer token)
+# Median sale price per quarter in a district (needs the bearer token); repeat
+# `place` to pool several places into one series, or omit it for the whole country
 curl -H "Authorization: Bearer $TOKEN" \
-  "localhost:8000/api/v1/markets/trends?city=Cairo&district=New%20Cairo&interval=quarter"
+  "localhost:8000/api/v1/markets/trends?place=Cairo/New%20Cairo&interval=quarter"
 
 # Trigger a run (202 + run id; poll /runs/{id})
 curl -X POST -H "X-Admin-Key: dev-admin-key" \

@@ -165,7 +165,7 @@ def test_me_requires_a_valid_bearer(client: TestClient, header: str | None) -> N
     assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
 
 
-@pytest.mark.parametrize("path", ["/api/v1/markets/regions", "/api/v1/markets/trends?city=Cairo"])
+@pytest.mark.parametrize("path", ["/api/v1/markets/regions", "/api/v1/markets/trends?place=Cairo"])
 def test_markets_require_login(client: TestClient, path: str) -> None:
     assert client.get(path).status_code == 401
 
@@ -183,8 +183,7 @@ def test_trends_returns_series_with_gaps(client: TestClient, stats: FakeMarketSt
     response = client.get(
         "/api/v1/markets/trends",
         params={
-            "city": "Cairo",
-            "district": "Maadi",
+            "place": ["Cairo/Maadi", "Giza"],
             "listing_type": "SALE",
             "property_type": ["APARTMENT", "VILLA"],
             "metric": "median_price_per_sqm",
@@ -196,7 +195,11 @@ def test_trends_returns_series_with_gaps(client: TestClient, stats: FakeMarketSt
 
     body = response.json()
     assert response.status_code == 200, response.text
-    assert body["region_label"] == "Cairo · Maadi"
+    assert body["region_label"] == "Cairo · Maadi + Giza"
+    assert body["places"] == [
+        {"city": "Cairo", "district": "Maadi"},
+        {"city": "Giza", "district": None},
+    ]
     assert body["points"][0]["value"] == "1500000.00"
     assert body["points"][1]["value"] is None
     query = stats.queries[0]
@@ -205,11 +208,22 @@ def test_trends_returns_series_with_gaps(client: TestClient, stats: FakeMarketSt
     assert len(query.property_types) == 2
 
 
+def test_trends_without_places_cover_the_country(
+    client: TestClient, stats: FakeMarketStats
+) -> None:
+    token = _register(client)
+    response = client.get("/api/v1/markets/trends", headers=_bearer(token))
+
+    assert response.status_code == 200, response.text
+    assert response.json()["places"] == []
+    assert stats.queries[0].places == ()
+
+
 def test_trends_rejects_inverted_range(client: TestClient) -> None:
     token = _register(client)
     response = client.get(
         "/api/v1/markets/trends",
-        params={"city": "Cairo", "date_from": "2016-01-01", "date_to": "2015-01-01"},
+        params={"place": "Cairo", "date_from": "2016-01-01", "date_to": "2015-01-01"},
         headers=_bearer(token),
     )
 

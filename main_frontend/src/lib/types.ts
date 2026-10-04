@@ -38,8 +38,8 @@ export type TrendPoint = {
 
 export type TrendSeries = {
   region_label: string;
-  city: string;
-  district: string | null;
+  /** Pooled into one series; empty for the whole country. */
+  places: { city: string; district: string | null }[];
   metric: TrendMetric;
   interval: TrendInterval;
   currency: string;

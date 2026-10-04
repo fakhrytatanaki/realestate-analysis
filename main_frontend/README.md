@@ -44,15 +44,21 @@ API as well as the cookie.
 
 ## The trends page
 
-All of the page's state lives in the URL: `region` (repeatable, `City` or
-`City/District`), `type`, `metric`, `interval`, `ptype`, `from` and `to`. Views
-are therefore shareable and work with the back button. The server load fetches
-`/markets/regions`, then makes one `/markets/trends` call per region in
-parallel.
+All of the page's state lives in the URL: `region`, `type`, `metric`,
+`interval`, `ptype`, `from` and `to`. Views are therefore shareable and work
+with the back button. The server load fetches `/markets/regions`, then makes
+one `/markets/trends` call per line in parallel.
+
+Each `region` parameter is one line on the chart (up to four). Its places are
+`City` or `City/District`, joined by `|` and pooled into one median, and `*`
+stands for all of Egypt, the default. For example,
+`?region=Cairo|Giza/Sheikh Zayed&region=*` compares Cairo plus Sheikh Zayed
+with the whole country. In the picker, "Combine with…" adds a place to an
+existing line and "As a new line" starts another one.
 
 Chart behaviour:
 
-- Each series is the median asking price per period. A single region also
+- Each series is the median asking price per period. A single line also
   shows its interquartile band.
 - Periods with fewer than 5 adverts, or with no data at all, are drawn as gaps
   rather than interpolated across.
