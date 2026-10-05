@@ -210,13 +210,6 @@ def test_pilot_cli_accepts_enumeration_completion_gate() -> None:
     assert args.require_complete_enumeration and args.max_fetches == 50 and args.max_llm_calls == 0
 
 
-@pytest.fixture
-def no_settings_file(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Keep the developer's etc/settings.toml out: TOML sources merge into init values."""
-    monkeypatch.setitem(Settings.model_config, "toml_file", tmp_path / "absent.toml")
-
-
-@pytest.mark.usefixtures("no_settings_file")
 def test_model_budget_setting_falls_back_from_source_to_archive() -> None:
     assert Settings(sources={}).max_llm_calls("olx_eg_wayback") == 10
     settings = Settings(
@@ -235,7 +228,6 @@ def test_model_budget_setting_falls_back_from_source_to_archive() -> None:
         ArchiveSettings(max_llm_calls=-1)
 
 
-@pytest.mark.usefixtures("no_settings_file")
 async def test_crawl_cli_takes_the_model_budget_from_settings_unless_given(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
