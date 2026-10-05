@@ -17,8 +17,12 @@ import httpx
 import pytest
 
 from realestate import cli
+from realestate.application.rules.seeds import seed_navigation_graph
 from realestate.application.services.archive_crawl_service import ArchiveCrawlService, cursor_key
-from realestate.application.services.initial_rule_seed_service import InitialRuleSeedService
+from realestate.application.services.initial_rule_seed_service import (
+    InitialRuleSeedService,
+    same_rules,
+)
 from realestate.bootstrap import Container
 from realestate.config.settings import Settings, SourceSettings
 from realestate.domain.archive import ArchivedDocument, Capture, parse_timestamp, surt_key
@@ -26,15 +30,18 @@ from realestate.domain.enums import (
     CrawlStatus,
     LinkRel,
     ListingType,
+    NodeKind,
     PageKind,
     PriceType,
     PropertyType,
     RawDocumentKind,
     RouteDecision,
     RuleDomain,
+    RuleOrigin,
 )
-from realestate.domain.exceptions import UnrecognisedDocumentError
+from realestate.domain.exceptions import ConfigurationError, UnrecognisedDocumentError
 from realestate.domain.models import FetchContext, RawPayload
+from realestate.domain.rules import ROOT_KEY, RuleEdge, RuleGraph, RuleNode
 from realestate.infrastructure.archive.wayback import (
     REPLAY_PREFIX,
     WaybackCdxIndex,
@@ -358,6 +365,111 @@ async def test_rules_seed_cli_is_explicit_offline_and_retains_active_graphs(
     installed = tuple(graphs.saved)
     assert await cli.run(args) == 0 and tuple(graphs.saved) == installed
     assert "llm" not in container.__dict__ and "wayback" not in container.__dict__
+
+
+ADVERT = "https://eg.opensooq.com/ar/search/280210947"
+
+
+def induced_graphs() -> tuple[RuleGraph, RuleGraph]:
+    """What a crawl run before seeding leaves: an LLM advert rule and template."""
+    navigation = seed_navigation_graph(SOURCE).extended(
+        nodes=[
+            RuleNode(
+                "nav.v2.1",
+                NodeKind.ROUTE,
+                {"decision": "FETCH", "priority": 90, "page_kind": "LIST"},
+                origin=RuleOrigin.LLM,
+            )
+        ],
+        edges=[RuleEdge(ROOT_KEY, "nav.v2.1", {"type": "url_regex", "pattern": r"/search/\d+/?"})],
+        notes="llm: 1 navigation rule",
+    )
+    extraction = RuleGraph.empty(SOURCE, RuleDomain.EXTRACTION).extended(
+        nodes=[
+            RuleNode(
+                "tpl.v1.cars", NodeKind.TEMPLATE, {"page_kind": "OTHER"}, origin=RuleOrigin.LLM
+            )
+        ],
+        edges=[RuleEdge(ROOT_KEY, "tpl.v1.cars", {"type": "dom_css", "css": "#main_img_eg"})],
+        notes="llm: template",
+    )
+    return navigation, extraction
+
+
+async def test_replace_supersedes_graphs_a_crawl_induced_before_seeding() -> None:
+    graphs = InMemoryGraphs()
+    old_nav, old_ext = [await graphs.save_version(graph) for graph in induced_graphs()]
+    service = InitialRuleSeedService(graphs=graphs, seeds=SEEDS)
+    before = tuple(graphs.saved)
+    kept = await service.seed(SOURCE)
+    assert kept.retained == (RuleDomain.NAVIGATION, RuleDomain.EXTRACTION) and not kept.replaced
+    dry = await service.seed(SOURCE, dry_run=True, replace_active=True)
+    assert dry.replaced == ((RuleDomain.NAVIGATION, 2, 3), (RuleDomain.EXTRACTION, 1, 2))
+    assert tuple(graphs.saved) == before
+
+    report = await service.seed(SOURCE, replace_active=True)
+
+    assert report.replaced == dry.replaced and not report.installed
+    reviewed_nav, reviewed_ext = SEEDS.load(SOURCE)
+    navigation = await graphs.active(SOURCE, RuleDomain.NAVIGATION)
+    extraction = await graphs.active(SOURCE, RuleDomain.EXTRACTION)
+    assert navigation is not None and extraction is not None
+    assert (navigation.version, navigation.parent_id) == (3, old_nav.id)
+    assert (extraction.version, extraction.parent_id) == (2, old_ext.id)
+    assert same_rules(navigation, reviewed_nav) and same_rules(extraction, reviewed_ext)
+    assert "replaces v2" in (navigation.notes or "")
+    # The induced rule fetched every advert as a list; the reviewed one defers it.
+    assert ENGINE.route(old_nav, ADVERT, {}).decision is RouteDecision.FETCH  # type: ignore[union-attr]
+    assert ENGINE.route(navigation, ADVERT, {}).decision is RouteDecision.DEFER  # type: ignore[union-attr]
+    saved = tuple(graphs.saved)
+    again = await service.seed(SOURCE, replace_active=True)
+    assert not again.replaced and len(again.retained) == 2 and tuple(graphs.saved) == saved
+
+
+async def test_rules_seed_cli_replace_reroutes_what_the_superseded_rules_queued(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    graphs, frontier = InMemoryGraphs(), InMemoryFrontier()
+    for graph in induced_graphs():
+        await graphs.save_version(graph)
+    await frontier.add_captures(SOURCE, [Capture(surt_key(ADVERT), "20260516145205", ADVERT, "D")])
+    await frontier.set_route(
+        [1], status=CrawlStatus.QUEUED, route_node="nav.v2.1", priority=90, page_kind=PageKind.LIST
+    )
+    crawler = ArchiveCrawlService(
+        registry=Mock(),
+        graphs=graphs,
+        frontier=frontier,
+        cursors=InMemoryCursors(),
+        index=Mock(),
+        engine=ENGINE,
+        ingestion=Mock(),
+        induction=Mock(),
+        log=NullLogProvider(),
+    )
+    container = Container(Settings())
+    container.__dict__.update(log=NullLogProvider(), rule_graphs=graphs, crawler=crawler)
+    monkeypatch.setattr(cli, "Container", lambda _: container)
+    monkeypatch.setattr(container, "init_db", AsyncMock())
+    monkeypatch.setattr(container, "aclose", AsyncMock())
+    command = ["rules", "seed", "--source", SOURCE, "--replace"]
+
+    assert await cli.run(cli.build_parser().parse_args([*command, "--dry-run"])) == 0
+    assert "would replace NAVIGATION v2 with the reviewed graph as v3" in capsys.readouterr().out
+    assert len(graphs.saved) == 2 and frontier.rows[1].status is CrawlStatus.QUEUED
+
+    assert await cli.run(cli.build_parser().parse_args(command)) == 0
+    output = capsys.readouterr().out
+    assert "replaced EXTRACTION v1 with the reviewed graph as v2" in output
+    assert "reopened 1 captures of removed rules" in output
+    assert f"parse --source {SOURCE} --stale" in output
+    assert (frontier.rows[1].status, frontier.rows[1].route_node) == (
+        CrawlStatus.DEFERRED,
+        "seed.navigation.4",
+    )
+    curated = ["rules", "seed", "--source", "olx_eg_wayback", "--replace"]
+    with pytest.raises(ConfigurationError):
+        await cli.run(cli.build_parser().parse_args(curated))
 
 
 async def test_enumeration_discovers_redirect_destinations_directly_under_the_egypt_host() -> None:

@@ -253,6 +253,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="KIND=PATTERN",
         help="induced vocabulary entries to remove, e.g. 'listing_type=sale|بيع'",
     )
+    seed.add_argument(
+        "--replace",
+        action="store_true",
+        help="packaged reviewed rules: supersede active graphs, then re-route the frontier",
+    )
     seed.add_argument("--dry-run", action="store_true", help="audit the candidate graph only")
     seed.add_argument("--out", default=None, help="audit report path (default var/audit/...)")
     compact = rules_commands.add_parser(
@@ -556,14 +561,32 @@ async def run(args: argparse.Namespace) -> int:
                                     "--retire and --out require curated extraction templates"
                                 )
                             seeded = await container.rule_seeds.seed(
-                                args.source, dry_run=args.dry_run
+                                args.source, dry_run=args.dry_run, replace_active=args.replace
                             )
                             seed_label = "would install" if args.dry_run else "installed"
                             print(
                                 f"{seed_label}: {', '.join(seeded.installed) or 'none'}; "
                                 f"retained active graphs: {', '.join(seeded.retained) or 'none'}"
                             )
+                            for domain, old, new in seeded.replaced:
+                                verb = "would replace" if args.dry_run else "replaced"
+                                print(f"{verb} {domain} v{old} with the reviewed graph as v{new}")
+                            if args.dry_run:
+                                return 0
+                            replaced = {domain for domain, _, _ in seeded.replaced}
+                            if RuleDomain.NAVIGATION in replaced:
+                                # Captures the old rules queued, skipped or deferred.
+                                _print_routed(
+                                    await container.crawler.route(args.source, reopen_removed=True)
+                                )
+                            if RuleDomain.EXTRACTION in replaced | set(seeded.installed):
+                                print(f"run `parse --source {args.source} --stale` to apply it")
                             return 0
+                        if args.replace:
+                            raise ConfigurationError(
+                                "--replace swaps in packaged reviewed graphs; curated "
+                                "extraction templates supersede induced ones with --retire"
+                            )
                         plan = await container.seeder.plan(
                             args.source,
                             retire=args.retire,

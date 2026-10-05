@@ -55,7 +55,8 @@ Integration with `main` preserves its crawl reliability and quality machinery:
 atomic claims and archive acknowledgements, retry backoff, domain/year cursors,
 per-year capture allocation, shared rate gates, parse reports, full observation
 snapshots and audited curated-rule updates. Dubizzle's initial graph installation
-remains separate and retains active graphs; both workflows use `rules seed`.
+remains separate and retains active graphs unless `--replace` is given; both
+workflows use `rules seed`.
 Known city aliases use the shared canonical names (for example `Alexandria`),
 with captured city/district labels retained in `_raw`. The existing migration
 sequence and operational scripts are unchanged by the Dubizzle integration.
