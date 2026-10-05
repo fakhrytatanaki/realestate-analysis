@@ -8,6 +8,7 @@ them into PostgreSQL, and exposes a filterable FastAPI API. The backend lives in
 
 | Guide | Use it for |
 |---|---|
+| [Backend onboarding](backend-onboarding.md) | New to the backend: a guided tour with code and runnable examples covering layers, the pipeline, data sources, the LLM-built rule graphs and caching |
 | [Development](development.md) | Local setup, code practices, tests, and an agent checklist |
 | [Architecture](architecture.md) | Layers, data flow, persistence rules, and current limits |
 | [Module map](modules.md) | Find the owner of a behavior; every Python implementation module |
@@ -20,8 +21,9 @@ them into PostgreSQL, and exposes a filterable FastAPI API. The backend lives in
 | [Dubizzle Egypt archive plan](dubizzle-eg-wayback-plan.md) | Capture investigation and implementation plan for a separate 2023-onward Dubizzle Wayback source |
 | [OpenSooq Egypt archive](opensooq-eg-wayback.md) | `/view/` and `/ar/` discovery, initial extraction rules, fixture evidence and crawl instructions |
 
-For a first change, read the architecture, locate the relevant module and tests,
-then follow the development checklist. For exact request schemas, run the API and
+New engineers should start with the backend onboarding guide. For a first change,
+read the architecture, locate the relevant module and tests, then follow the
+development checklist. For exact request schemas, run the API and
 open `/docs` or `/openapi.json`.
 
 These guides describe the current working-tree implementation, including the
