@@ -143,6 +143,10 @@ class ArchiveSettings(BaseModel):
     #: frontier, and how far from the linking capture a found capture may be.
     link_lookups_per_round: int = 10
     link_lookup_window_days: int = 183
+    #: Model calls per crawl, all rounds, when neither the command line nor the
+    #: source (``[sources.<key>] max_llm_calls``) sets one. 0 crawls with the
+    #: existing rules only.
+    max_llm_calls: int = Field(default=10, ge=0)
     #: Hand-checked extraction answers (see ``infrastructure/gold``).
     gold_dir: str = "var/gold"
 
@@ -158,6 +162,8 @@ class SourceSettings(BaseModel):
     interval_minutes: float | None = None
     crontab: str | None = None
     max_items: int | None = None
+    #: Archive sources: model calls per crawl; unset uses ``[archive] max_llm_calls``.
+    max_llm_calls: int | None = Field(default=None, ge=0)
     params: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -196,6 +202,11 @@ class Settings(BaseSettings):
     def source(self, key: str) -> SourceSettings:
         """Configuration for one source, defaulting to disabled when absent."""
         return self.sources.get(key, SourceSettings())
+
+    def max_llm_calls(self, key: str) -> int:
+        """An archive crawl's model budget: the source's own, else ``[archive]``'s."""
+        own = self.source(key).max_llm_calls
+        return own if own is not None else self.archive.max_llm_calls
 
 
 def load_settings() -> Settings:

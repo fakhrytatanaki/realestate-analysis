@@ -55,7 +55,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-fetches", type=_nonnegative, default=60, help="archive attempt budget"
     )
     parser.add_argument(
-        "--max-llm-calls", type=_nonnegative, default=10, help="archive model budget"
+        "--max-llm-calls",
+        type=_nonnegative,
+        help="archive model budget; defaults to settings",
     )
     parser.add_argument("--max-enumeration-pages", type=_positive, help="archive CDX page budget")
     parser.add_argument("--max-link-lookups", type=_nonnegative, help="archive linked-URL budget")
@@ -147,7 +149,11 @@ async def run(args: argparse.Namespace) -> int:
                     options = dict(
                         rounds=args.rounds,
                         max_fetches=args.max_fetches,
-                        max_llm_calls=args.max_llm_calls,
+                        max_llm_calls=(
+                            args.max_llm_calls
+                            if args.max_llm_calls is not None
+                            else container.settings.max_llm_calls(key)
+                        ),
                         max_enumeration_pages=args.max_enumeration_pages,
                         max_link_lookups=args.max_link_lookups,
                         require_complete_enumeration=args.require_complete_enumeration,

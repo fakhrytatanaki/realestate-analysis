@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from collections import Counter
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from realestate import cli
+from realestate.application.services.archive_crawl_service import CrawlReport
+from realestate.bootstrap import Container
+from realestate.config.settings import ArchiveSettings, Settings, SourceSettings
 from realestate.domain.archive import ArchiveScope, Capture, capture_quarter, surt_key
 from realestate.domain.enums import CrawlStatus, RunStatus
 from realestate.domain.exceptions import ConfigurationError
@@ -203,6 +208,50 @@ def test_pilot_cli_accepts_enumeration_completion_gate() -> None:
         ]
     )
     assert args.require_complete_enumeration and args.max_fetches == 50 and args.max_llm_calls == 0
+
+
+def test_model_budget_setting_falls_back_from_source_to_archive() -> None:
+    assert Settings(sources={}).max_llm_calls("olx_eg_wayback") == 10
+    settings = Settings(
+        archive=ArchiveSettings(max_llm_calls=4),
+        sources={
+            "dubizzle_eg_wayback": SourceSettings(max_llm_calls=0),
+            "olx_eg_wayback": SourceSettings(enabled=True),
+        },
+    )
+    assert settings.max_llm_calls("dubizzle_eg_wayback") == 0
+    assert settings.max_llm_calls("olx_eg_wayback") == 4
+    assert settings.max_llm_calls("unconfigured") == 4
+    with pytest.raises(ValidationError):
+        SourceSettings(max_llm_calls=-1)
+    with pytest.raises(ValidationError):
+        ArchiveSettings(max_llm_calls=-1)
+
+
+async def test_crawl_cli_takes_the_model_budget_from_settings_unless_given(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    container = Container(
+        Settings(
+            archive=ArchiveSettings(max_llm_calls=4),
+            sources={"dubizzle_eg_wayback": SourceSettings(max_llm_calls=0)},
+        )
+    )
+    crawl = AsyncMock(return_value=CrawlReport(stopped="idle"))
+    container.__dict__.update(log=NullLogProvider(), crawler=Mock(crawl=crawl))
+    monkeypatch.setattr(cli, "Container", lambda _: container)
+    monkeypatch.setattr(cli, "_print_status", AsyncMock())
+    monkeypatch.setattr(container, "init_db", AsyncMock())
+    monkeypatch.setattr(container, "aclose", AsyncMock())
+    cases = [
+        ("dubizzle_eg_wayback", [], 0),
+        ("olx_eg_wayback", [], 4),
+        ("dubizzle_eg_wayback", ["--max-llm-calls", "2"], 2),
+    ]
+    for source, flag, expected in cases:
+        args = cli.build_parser().parse_args(["crawl", "--source", source, *flag])
+        assert await cli.run(args) == 0
+        assert crawl.call_args.kwargs["max_llm_calls"] == expected
 
 
 def test_fetch_progress_is_isolated_between_contexts() -> None:

@@ -147,7 +147,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="default: max-fetches / rounds (50 with --rounds 0)",
     )
-    crawl.add_argument("--max-llm-calls", type=int, default=10, help="model calls, all rounds")
+    crawl.add_argument(
+        "--max-llm-calls",
+        type=int,
+        default=None,
+        help="model calls, all rounds (default: [sources.<key>] or [archive] max_llm_calls)",
+    )
     crawl.add_argument(
         "--max-enumeration-pages",
         type=int,
@@ -389,12 +394,17 @@ async def run(args: argparse.Namespace) -> int:
                 )
 
             case "crawl":
-                await _announce_llm(container, args.max_llm_calls)
+                max_llm_calls = (
+                    args.max_llm_calls
+                    if args.max_llm_calls is not None
+                    else container.settings.max_llm_calls(args.source)
+                )
+                await _announce_llm(container, max_llm_calls)
                 report = await container.crawler.crawl(
                     args.source,
                     rounds=args.rounds,
                     max_fetches=args.max_fetches,
-                    max_llm_calls=args.max_llm_calls,
+                    max_llm_calls=max_llm_calls,
                     fetches_per_round=args.fetches_per_round,
                     max_enumeration_pages=args.max_enumeration_pages,
                     max_link_lookups=args.max_link_lookups,
