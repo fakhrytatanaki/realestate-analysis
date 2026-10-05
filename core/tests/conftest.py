@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+from realestate.config.settings import Settings
 from realestate.domain.enums import ListingType, PriceType, PropertyType, SortOrder
 from realestate.domain.exceptions import ConflictError
 from realestate.domain.models import (
@@ -227,6 +228,20 @@ def make_draft(
     }
     base.update(overrides)
     return ListingDraft(**base)  # type: ignore[arg-type]
+
+
+@pytest.fixture(autouse=True)
+def isolated_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Build every ``Settings`` from code defaults and the test's own values.
+
+    ``Settings()`` merges ``etc/settings.toml`` and ``REALESTATE__*`` variables
+    into explicit init values, so a developer's local config (an enabled source,
+    a model budget) used to change test outcomes. A path that is not a regular
+    file is skipped, so ``os.devnull`` stands for "no settings file".
+    """
+    monkeypatch.setitem(Settings.model_config, "toml_file", os.devnull)
+    for name in [name for name in os.environ if name.startswith("REALESTATE__")]:
+        monkeypatch.delenv(name)
 
 
 @pytest.fixture
