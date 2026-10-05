@@ -1,0 +1,233 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_list (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/c1e49619f7394beab7ce90af7c055636.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://www.olx.com.eg:80/vacation-rentals-cat-388",
+    "meta": {
+      "digest": "HBXDIJRGHRUQ7VKD73WV4TQDYAESON3L",
+      "url_key": "eg,com,olx)/vacation-rentals-cat-388",
+      "timestamp": "20130115102521",
+      "replay_url": "https://web.archive.org/web/20130115102521id_/http://www.olx.com.eg:80/vacation-rentals-cat-388",
+      "route_node": "nav.v2.1",
+      "captured_at": "2013-01-15T10:25:21+00:00",
+      "frontier_id": 1546,
+      "original_url": "http://www.olx.com.eg:80/vacation-rentals-cat-388",
+      "page_kind_hint": "LIST"
+    },
+    "raw_document_id": "f7b6333d-6976-4329-87be-00619f7d8283"
+  },
+  "items": [
+    {
+      "external_id": "470329146",
+      "title": "Vacation Rental in El Gouna, Al Bahr al Ahmar, Ref# 1759376",
+      "amount": "250.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "457568445",
+      "title": "A wonderful villa in Sidi Kirair",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "455378635",
+      "title": "Heliopolis, Egypt: Large 3 bedroom apartment for 8 people",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "442755541",
+      "title": "Large 3 bedroom apartment for 4 in Zamalek, Egypt",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "439216534",
+      "title": "Medium 2 bedroom apartment for 6 people in Sharm El Sheikh, Egypt",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "421467291",
+      "title": "Nice Chalet on Mediterranean coast - marina - Egypt",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "406475269",
+      "title": "Vacation Rental in Hurghada, Al Bahr al Ahmar, Ref# 1430243",
+      "amount": "150.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "403262776",
+      "title": "Large 5 bedroom house for 10 in Al Jizah, Egypt",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "403262762",
+      "title": "Large 2 bedroom apartment for 4 people in Sheraton Heliopolis, Cairo, Egypt",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "358537009",
+      "title": "Vacation Rental in Hurghada, Makadi Bay, Al Bahr al Ahmar, Ref# 1314403",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "403259597",
+      "title": "Qesm Marsa Alam, Egypt: Large 4 bedroom apartment for 2 people",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "318138303",
+      "title": "Vacation Rental in Hurghada Red Sea, Al Bahr al Ahmar, Ref# 1192684",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "318138314",
+      "title": "Vacation Rental in Hurghada Red Sea, Al Bahr al Ahmar, Ref# 1192707",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "444595334",
+      "title": "my apartment 200 meter i have 2 pathrooms big kitchen also 2 bed room and extra one for library",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "300047621",
+      "title": "Vacation Rental in Sharm El Sheikh, Janub Sina, Ref# 1130478",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "295810134",
+      "title": "Vacation Rental in Hurghada, Al Bahr al Ahmar, Ref# 1105894",
+      "amount": "500.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "277034448",
+      "title": "The View Villa Consists of Four Spacious and Comfortable Apartments",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "277034452",
+      "title": "Fabulous Vacation Apartment in Hurghada",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "258758742",
+      "title": "Vacation apartment rental in El Gouna/west Golf",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "231032156",
+      "title": "Vacation house rental in El Gouna/white Villas",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "228166210",
+      "title": "Vacation apartment rental in El Gouna/west Golf",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "225966640",
+      "title": "Vacation apartment rental in El Gouna/west Golf",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "225656696",
+      "title": "Vacation house rental in El Gouna/sabina",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "223232629",
+      "title": "Vacation apartment rental in El Gouna/marina",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "219349623",
+      "title": "Vacation house rental in El Gouna/white Villas",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "215799243",
+      "title": "Vacation Rental in Hurghada, Al Bahr al Ahmar, Ref# 800391",
+      "amount": "250.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "214567650",
+      "title": "Beautiful Apartment in Cairo",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "212727638",
+      "title": "Vacation apartment rental in El Gouna/west Golf",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "212632914",
+      "title": "Vacation Rental in Hurghada, Al Bahr al Ahmar, Ref# 794617",
+      "amount": "250.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "212632417",
+      "title": "Vacation Rental in 6th of October City, Al Qahirah, Ref# 790656",
+      "amount": "4500.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    }
+  ]
+}

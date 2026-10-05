@@ -1,0 +1,30 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_detail_item (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/f4f27c5d820f404d89eea2655fe5dc01.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://cairo.olx.com.eg:80/store-23m-for-sale-in-porto-cairo-mall-23-iid-149432478",
+    "meta": {
+      "digest": "EVNKDBWDK2I622WAZUYRRFWM6V6HW6XX",
+      "url_key": "eg,com,olx,cairo)/store-23m-for-sale-in-porto-cairo-mall-23-iid-149432478",
+      "timestamp": "20130101042130",
+      "replay_url": "https://web.archive.org/web/20130101042130id_/http://cairo.olx.com.eg:80/store-23m-for-sale-in-porto-cairo-mall-23-iid-149432478",
+      "route_node": "seed.follow_links_from_recognised_pages",
+      "captured_at": "2013-01-01T04:21:30+00:00",
+      "frontier_id": 3190,
+      "original_url": "http://cairo.olx.com.eg:80/store-23m-for-sale-in-porto-cairo-mall-23-iid-149432478",
+      "page_kind_hint": "DETAIL"
+    },
+    "raw_document_id": "d8c0d385-cca6-46b7-b15b-76d1561ab17b"
+  },
+  "items": [
+    {
+      "external_id": "149432478",
+      "title": "Store 23m for sale in Porto Cairo mall",
+      "amount": "702.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    }
+  ]
+}

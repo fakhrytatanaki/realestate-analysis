@@ -1,0 +1,30 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_detail_item (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/c654d8cbb98a49cf99c67ad4011d3e9a.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://cairo.olx.com.eg:80/store-47m-for-sale-in-porto-cairo-mall-1st-floor-iid-149432403",
+    "meta": {
+      "digest": "QKPIF6GXVZCD4MPCY3C3Z6FNCNCRNKWN",
+      "url_key": "eg,com,olx,cairo)/store-47m-for-sale-in-porto-cairo-mall-1st-floor-iid-149432403",
+      "timestamp": "20130104125817",
+      "replay_url": "https://web.archive.org/web/20130104125817id_/http://cairo.olx.com.eg:80/store-47m-for-sale-in-porto-cairo-mall-1st-floor-iid-149432403",
+      "route_node": "seed.follow_links_from_recognised_pages",
+      "captured_at": "2013-01-04T12:58:17+00:00",
+      "frontier_id": 3192,
+      "original_url": "http://cairo.olx.com.eg:80/store-47m-for-sale-in-porto-cairo-mall-1st-floor-iid-149432403",
+      "page_kind_hint": "DETAIL"
+    },
+    "raw_document_id": "5d054863-4321-4a0e-b17b-b1a0d4653594"
+  },
+  "items": [
+    {
+      "external_id": "149432403",
+      "title": "Store 47m for sale in Porto Cairo Mall 1st floor",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    }
+  ]
+}

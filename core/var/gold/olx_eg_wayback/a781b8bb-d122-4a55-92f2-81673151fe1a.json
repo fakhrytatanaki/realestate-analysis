@@ -1,0 +1,30 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_detail_item (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/7ef745250b6641039db1c39c79ffe62e.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://www.olx.com.eg:80/2b-1ba-in-hurghada-al-buhayrah-17385-gbp-iid-476601119",
+    "meta": {
+      "digest": "X2575C4EBLGFL3RJPDREJFZVV45DCEL2",
+      "url_key": "eg,com,olx)/2b-1ba-in-hurghada-al-buhayrah-17385-gbp-iid-476601119",
+      "timestamp": "20130201213738",
+      "replay_url": "https://web.archive.org/web/20130201213738id_/http://www.olx.com.eg:80/2b-1ba-in-hurghada-al-buhayrah-17385-gbp-iid-476601119",
+      "route_node": "seed.follow_links_from_recognised_pages",
+      "captured_at": "2013-02-01T21:37:38+00:00",
+      "frontier_id": 50,
+      "original_url": "http://www.olx.com.eg:80/2b-1ba-in-hurghada-al-buhayrah-17385-gbp-iid-476601119",
+      "page_kind_hint": "DETAIL"
+    },
+    "raw_document_id": "a781b8bb-d122-4a55-92f2-81673151fe1a"
+  },
+  "items": [
+    {
+      "external_id": "476601119",
+      "title": "2b , 1ba in Hurghada, Al Buhayrah - 17385 GBP",
+      "amount": "17385.00",
+      "currency": "GBP",
+      "listing_type": "SALE"
+    }
+  ]
+}

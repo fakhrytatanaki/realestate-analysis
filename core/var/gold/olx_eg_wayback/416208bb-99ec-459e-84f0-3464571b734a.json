@@ -1,0 +1,37 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_list (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/aa1454d6afa544319bac25ccaaf14125.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://gizehcity.olx.com.eg:80/real-estate-cat-16",
+    "meta": {
+      "digest": "4OCZHJ5KRZC64XXRWFQFJYD23IM4IDGY",
+      "url_key": "eg,com,olx,gizehcity)/real-estate-cat-16",
+      "timestamp": "20130604095945",
+      "replay_url": "https://web.archive.org/web/20130604095945id_/http://gizehcity.olx.com.eg:80/real-estate-cat-16",
+      "route_node": "nav.v2.1",
+      "captured_at": "2013-06-04T09:59:45+00:00",
+      "frontier_id": 4433,
+      "original_url": "http://gizehcity.olx.com.eg:80/real-estate-cat-16",
+      "page_kind_hint": "LIST"
+    },
+    "raw_document_id": "416208bb-99ec-459e-84f0-3464571b734a"
+  },
+  "items": [
+    {
+      "external_id": "469788835",
+      "title": "Storage Facility 100 m2 al Koom al Akhdar for sale",
+      "amount": "160000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "442699240",
+      "title": "For Sale Flat in Cairo Gizah with Balcony",
+      "amount": "1500000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    }
+  ]
+}

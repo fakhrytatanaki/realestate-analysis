@@ -1,0 +1,30 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_detail_item (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/2d63bdf9ab824ab48b401eb802942eac.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://cairo.olx.com.eg:80/apartment-for-rent-in-cairo-al-qahirah-ref-1781220-iid-474829332",
+    "meta": {
+      "digest": "KDPSYYVCHMFIVEO4CIQOZ26T5R3N62OH",
+      "url_key": "eg,com,olx,cairo)/apartment-for-rent-in-cairo-al-qahirah-ref-1781220-iid-474829332",
+      "timestamp": "20130202224811",
+      "replay_url": "https://web.archive.org/web/20130202224811id_/http://cairo.olx.com.eg:80/apartment-for-rent-in-cairo-al-qahirah-ref-1781220-iid-474829332",
+      "route_node": "seed.follow_links_from_recognised_pages",
+      "captured_at": "2013-02-02T22:48:11+00:00",
+      "frontier_id": 2162,
+      "original_url": "http://cairo.olx.com.eg:80/apartment-for-rent-in-cairo-al-qahirah-ref-1781220-iid-474829332",
+      "page_kind_hint": "DETAIL"
+    },
+    "raw_document_id": "0a51ab88-2bab-4d2d-9d64-09d05423641e"
+  },
+  "items": [
+    {
+      "external_id": "474829332",
+      "title": "Apartment for Rent in Cairo, Al Qahirah, Ref# 1781220",
+      "amount": "1200.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    }
+  ]
+}

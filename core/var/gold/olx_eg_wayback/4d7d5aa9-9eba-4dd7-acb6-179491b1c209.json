@@ -1,0 +1,30 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_list (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/729bce640dfc494abcb50a6ea770f2e1.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://elfaiyumcity.olx.com.eg/real-estate-cat-16",
+    "meta": {
+      "digest": "PI3XY5CRVMEOOXMTDV247KXBNVPRB5YI",
+      "url_key": "eg,com,olx,elfaiyumcity)/real-estate-cat-16",
+      "timestamp": "20131012022932",
+      "replay_url": "https://web.archive.org/web/20131012022932id_/http://elfaiyumcity.olx.com.eg/real-estate-cat-16",
+      "route_node": "nav.v2.1",
+      "captured_at": "2013-10-12T02:29:32+00:00",
+      "frontier_id": 3775,
+      "original_url": "http://elfaiyumcity.olx.com.eg/real-estate-cat-16",
+      "page_kind_hint": "LIST"
+    },
+    "raw_document_id": "4d7d5aa9-9eba-4dd7-acb6-179491b1c209"
+  },
+  "items": [
+    {
+      "external_id": "139976909",
+      "title": "Apartment for Sale in Fayoum, Al Fayyum, Ref# 301413",
+      "amount": "20000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    }
+  ]
+}

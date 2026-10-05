@@ -1,0 +1,51 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_list (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/24b66b2b676945a481db67536955d65d.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://alexandriacity.olx.com.eg:80/real-estate-cat-16",
+    "meta": {
+      "digest": "ADBEAFEXYKDZJOPSFFFQHLA2F3ZBVAUH",
+      "url_key": "eg,com,olx,alexandriacity)/real-estate-cat-16",
+      "timestamp": "20130302204703",
+      "replay_url": "https://web.archive.org/web/20130302204703id_/http://alexandriacity.olx.com.eg:80/real-estate-cat-16",
+      "route_node": "nav.v2.1",
+      "captured_at": "2013-03-02T20:47:03+00:00",
+      "frontier_id": 1777,
+      "original_url": "http://alexandriacity.olx.com.eg:80/real-estate-cat-16",
+      "page_kind_hint": "LIST"
+    },
+    "raw_document_id": "52cdcd08-3ca0-49dc-86bb-d0bcf9588213"
+  },
+  "items": [
+    {
+      "external_id": "469783372",
+      "title": "Spacious 3Br Duplex Apartment",
+      "amount": "5000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "468333631",
+      "title": "North Coast at Golf Porto Marina",
+      "amount": "900.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "465395417",
+      "title": "Apartment larnaca-cyprus",
+      "amount": "974280.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "457568445",
+      "title": "A wonderful villa in Sidi Kirair",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    }
+  ]
+}

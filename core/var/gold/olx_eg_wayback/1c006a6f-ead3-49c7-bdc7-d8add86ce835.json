@@ -1,0 +1,233 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_list (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/2cfc0b28abab4d48a8fe5bd4a7b7c3cb.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://cairo.olx.com.eg:80/shops-for-rent-sale-cat-415",
+    "meta": {
+      "digest": "T2HR7WOPVHVL7AUOQDWCJ4XDGI53PNLR",
+      "url_key": "eg,com,olx,cairo)/shops-for-rent-sale-cat-415",
+      "timestamp": "20130417010844",
+      "replay_url": "https://web.archive.org/web/20130417010844id_/http://cairo.olx.com.eg:80/shops-for-rent-sale-cat-415",
+      "route_node": "nav.v2.1",
+      "captured_at": "2013-04-17T01:08:44+00:00",
+      "frontier_id": 3171,
+      "original_url": "http://cairo.olx.com.eg:80/shops-for-rent-sale-cat-415",
+      "page_kind_hint": "LIST"
+    },
+    "raw_document_id": "1c006a6f-ead3-49c7-bdc7-d8add86ce835"
+  },
+  "items": [
+    {
+      "external_id": "456340644",
+      "title": "Commercial for Rent in Mohandessin, Al Qahirah, Ref# 1682269",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "456340642",
+      "title": "Commercial for Rent in Mohandessin, Al Qahirah, Ref# 1682268",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "446217159",
+      "title": "Commercial for Rent in Sheikh Zayed, Al Qahirah, Ref# 1629782",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "429382862",
+      "title": "Registered Pharmacy for sale Sepharate 2 صيدلية مرخصة بمدينة نصر السفارات٢ (واحة المنى",
+      "amount": "850000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "366261766",
+      "title": "cafee for sale in Porto cairo mall new cairo 417 sq m (SKY CAFEE)",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "359030366",
+      "title": "Commercial for Rent in Cairo, Al Qahirah, Ref# 1316421",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "359030368",
+      "title": "Commercial for Rent in Cairo, Al Qahirah, Ref# 1316434",
+      "amount": "3375.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "359030307",
+      "title": "Commercial for Rent in Cairo, Al Qahirah, Ref# 1316260",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "347591789",
+      "title": "Ground floor suitable for the purposes of Business & Management in the degla | دور أرضى يصلح للاغراض التجارية و الايداري",
+      "amount": "6000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "329449165",
+      "title": "store for sale in nasr city infront of intercontinental hotel with a competitive price / محل للبيع بمدينه نصر امام فندق",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "328390904",
+      "title": "Commercial for Rent in Mohandessin, Al Qahirah, Ref# 1238853",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "327814898",
+      "title": "Commercial for Rent in Zamalek, Al Qahirah, Ref# 1237078",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "327170504",
+      "title": "Commercial for Rent in Zamalek, Al Qahirah, Ref# 1233757",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "318138301",
+      "title": "Commercial for Rent in Zamalek, Al Qahirah, Ref# 1192646",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "315108929",
+      "title": "Commercial Shope inside Mall for Sale at 1st Sector New Cairo City | محل تجارى داخل مول للبيع بالقطاع الأول القاهرة الجد",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "315108955",
+      "title": "Commercial Store for Rent in Sectors Fifth Avenue | محل تجارى 240متر للإيجار بالقطاعات التجمع الخامس",
+      "amount": "240.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "314540540",
+      "title": "Commercial for Rent in Zamalek, Al Qahirah, Ref# 1183009",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "313514665",
+      "title": "Restaurant in the biggest mall in Cairo for sale 60m | مطعم 60م للبيع بأفضل مول طبي بالقاهرة",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "313514790",
+      "title": "Store suitable for beauty center for sale in New Cairo city | محل يصلح مركز تجميل للبيع بالتجمع الخامس",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "313514842",
+      "title": "Commercial Mall for Sale in 1st Tajamo New cairo City | مول تجارى مرخص للبيع بالتجمع ألاول",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "313514782",
+      "title": "Mall Cafe 40m for sale in 1st Tajamoe | كافية 40م للبيع داخل مول تجاري بالتجمع الأول",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "313514707",
+      "title": "Cafe for sale inside big mall in New Cairo city | كافية للبيع بأكبر مول بالتجمع الخامس",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "313514749",
+      "title": "Commercial shop for sale in Heliopolis | محل تجارى للبيع بمصر الجديدة",
+      "amount": "300.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "313514765",
+      "title": "Big mall commercial store suitable for big super markets for sale in New Cairo city | محل كبير بمول تجاري يصلح للسوبر ما",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "309286613",
+      "title": "Room shop for sale in Porto Cairo mall | محل 347م للبيع بمول بورتو كايرو",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "309286608",
+      "title": "Sky Café Shop 417m for sale in Porto Cairo mall | كافية 417م بمول بورتو كايرو",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "309286501",
+      "title": "Restaurant for rent in Jesr Al-suez | مطعم للإيجار بجسر السويس",
+      "amount": "10000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "309286295",
+      "title": "Store 160m for rent in Heliopolis Ardh Al golf | محل للإيجار بمصر الجديدة أرض الجولف 160م",
+      "amount": "8000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "309286288",
+      "title": "Store for rent in Heliopolis Ardh Al golf | محل للإيجار بمصر الجديدة أرض الجولف",
+      "amount": "9000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "307067024",
+      "title": "Commercial Store inside Mall for Sale in Neighborhoods Service Center New cairo city | محل تجارى داخل مول للبيع فى مركز",
+      "amount": "800.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    }
+  ]
+}

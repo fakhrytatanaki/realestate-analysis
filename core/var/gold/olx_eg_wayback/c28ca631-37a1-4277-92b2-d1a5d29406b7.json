@@ -1,0 +1,233 @@
+{
+  "verified": false,
+  "note": "pre-filled by olx.a2_2013_list (graph v9); check every item against the page, fix values, then set verified",
+  "document": {
+    "blob_key": "olx_eg_wayback/2026/10/03/a3163dff04c74492a8591dbd482b1f1b.html",
+    "content_type": "text/html; charset=utf-8",
+    "source_url": "http://www.olx.com.eg/shops-for-rent-sale-cat-415",
+    "meta": {
+      "digest": "2BZCFNIBZ5CINY76RFXRAUQJUABYJS57",
+      "url_key": "eg,com,olx)/shops-for-rent-sale-cat-415",
+      "timestamp": "20130902154207",
+      "replay_url": "https://web.archive.org/web/20130902154207id_/http://www.olx.com.eg/shops-for-rent-sale-cat-415",
+      "route_node": "nav.v2.1",
+      "captured_at": "2013-09-02T15:42:07+00:00",
+      "frontier_id": 1373,
+      "original_url": "http://www.olx.com.eg/shops-for-rent-sale-cat-415",
+      "page_kind_hint": "LIST"
+    },
+    "raw_document_id": "c28ca631-37a1-4277-92b2-d1a5d29406b7"
+  },
+  "items": [
+    {
+      "external_id": "522812498",
+      "title": "Commercial for Sale in Mohandessien",
+      "amount": "30000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "522812499",
+      "title": "Commercial for Sale in Mohandessien",
+      "amount": "26000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "507017864",
+      "title": "Commercial for Sale or Rent in Mohandessien|مقر ادارى للبيع او للايجار بالمهندسين",
+      "amount": "33900000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017844",
+      "title": "Street Commercial Store for Rent",
+      "amount": "90000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017843",
+      "title": "Mall Commercial Store for Rent in Heliopolis",
+      "amount": "3000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017134",
+      "title": "Mohandeseen Commercial for Shop or Office",
+      "amount": "21000000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017102",
+      "title": "Comercial Large Salon with license for Restaurant for Sale",
+      "amount": "9000000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "507017892",
+      "title": "Egypt, Red Sea, Hurghada Office/Shop For Sale",
+      "amount": "80500.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "507017845",
+      "title": "Mall Commercial Store for Rent Opportunity",
+      "amount": "97250.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017849",
+      "title": "Commercial Building for Rent in El Nozha El Gededa Heliopolis",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017874",
+      "title": "Furniture Show Room for Rent Zamalek",
+      "amount": "250000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017283",
+      "title": "Café for rent in Masr Elgdeda",
+      "amount": "10000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017891",
+      "title": "Hurghada - Office/Shop, For Sale or Rent",
+      "amount": "196000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017116",
+      "title": "Nice Commercial Spot",
+      "amount": "25000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017221",
+      "title": "Boss Cafe And Restaurent",
+      "amount": "3700000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017313",
+      "title": "Retail Shops in Down Town Cairo for rent inside best Mall",
+      "amount": "1000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017068",
+      "title": "Amazing Showroom for sale in Maadi",
+      "amount": "2000000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "507017144",
+      "title": "Mohandeseen Commercial Ground Floor",
+      "amount": "15400000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017147",
+      "title": "Mohandeseen- Agouza Commercial Ground Floor",
+      "amount": "7950000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017852",
+      "title": "Pharmacy For Rent in Sectors Area| صيدلية ممتازة للإيجار",
+      "amount": null,
+      "currency": null,
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "507017846",
+      "title": "Street Commercial Store for Rent in New Cairo",
+      "amount": "140000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "429382862",
+      "title": "Registered Pharmacy for sale Sepharate 2 صيدلية مرخصة بمدينة نصر السفارات٢ (واحة المنى",
+      "amount": "850000.00",
+      "currency": "EGP",
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "366261766",
+      "title": "cafee for sale in Porto cairo mall new cairo 417 sq m (SKY CAFEE)",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "347591789",
+      "title": "Ground floor suitable for the purposes of Business & Management in the degla | دور أرضى يصلح للاغراض التجارية و الايداري",
+      "amount": "6000.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "329449165",
+      "title": "store for sale in nasr city infront of intercontinental hotel with a competitive price / محل للبيع بمدينه نصر امام فندق",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "315108929",
+      "title": "Commercial Shope inside Mall for Sale at 1st Sector New Cairo City | محل تجارى داخل مول للبيع بالقطاع الأول القاهرة الجد",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "315108955",
+      "title": "Commercial Store for Rent in Sectors Fifth Avenue | محل تجارى 240متر للإيجار بالقطاعات التجمع الخامس",
+      "amount": "240.00",
+      "currency": "EGP",
+      "listing_type": "RENT"
+    },
+    {
+      "external_id": "313514665",
+      "title": "Restaurant in the biggest mall in Cairo for sale 60m | مطعم 60م للبيع بأفضل مول طبي بالقاهرة",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "313514790",
+      "title": "Store suitable for beauty center for sale in New Cairo city | محل يصلح مركز تجميل للبيع بالتجمع الخامس",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    },
+    {
+      "external_id": "313514842",
+      "title": "Commercial Mall for Sale in 1st Tajamo New cairo City | مول تجارى مرخص للبيع بالتجمع ألاول",
+      "amount": null,
+      "currency": null,
+      "listing_type": "SALE"
+    }
+  ]
+}
