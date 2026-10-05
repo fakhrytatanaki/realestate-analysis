@@ -474,7 +474,11 @@ completed CDX cursor. The CLI reports the unfinished years and exits with status
 resumes incomplete enumeration up to its page budget, even for a nonempty
 frontier. Explicit `archive enumerate` can finish it before the next crawl.
 `--max-llm-calls` is shared by navigation and extraction, with navigation first.
-Exhausting that budget still permits fetching and parsing with existing rules.
+Without the flag, the budget is the source's `max_llm_calls` under
+`[sources.<key>]` in `etc/settings.toml`, else `[archive] max_llm_calls`
+(default 10); `ingest.sh` resolves it the same way. Set it to 0 for a source whose
+reviewed rules should run without induction. Exhausting the budget still permits
+fetching and parsing with existing rules.
 
 At startup, `crawl` parses up to 10,000 leftover `PENDING` documents. After new
 templates it reparses every `UNRECOGNISED` and older-parsed document, a batch at a

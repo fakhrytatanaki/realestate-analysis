@@ -117,6 +117,23 @@ async def test_enabled_batch_routes_archives_and_overrides_live_cap(container: M
     container.registry.create("archive").aclose.assert_awaited_once()  # type: ignore[attr-defined]
 
 
+async def test_archive_model_budget_comes_from_settings_unless_given(
+    container: MagicMock,
+) -> None:
+    container.settings.archive.max_llm_calls = 4
+    configured = ingest.build_parser().parse_args(["--source", "archive"])
+    assert await ingest.run(configured) == 0
+    assert container.crawler.crawl.call_args.kwargs["max_llm_calls"] == 4
+
+    container.settings.sources["archive"] = SourceSettings(enabled=True, max_llm_calls=0)
+    assert await ingest.run(configured) == 0
+    assert container.crawler.crawl.call_args.kwargs["max_llm_calls"] == 0
+
+    flagged = ingest.build_parser().parse_args(["--source", "archive", "--max-llm-calls", "2"])
+    assert await ingest.run(flagged) == 0
+    assert container.crawler.crawl.call_args.kwargs["max_llm_calls"] == 2
+
+
 async def test_dry_run_deduplicates_without_db_or_ingestion(
     container: MagicMock,
     capsys: pytest.CaptureFixture[str],

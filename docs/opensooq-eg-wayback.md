@@ -32,6 +32,14 @@ local source settings: the explicit enumeration flags do not change the source's
 scope for subsequent crawl commands. Seeding is offline and retains active
 operator graphs; it never overwrites another source's rules or frontier.
 
+Seed **before** the first crawl. A crawl creates a navigation graph on its first
+run and induction extends both domains, so a source crawled first keeps those
+graphs. `rules seed --replace` then saves the reviewed graphs as each domain's
+next version and re-routes the captures the superseded rules queued, skipped or
+deferred; `--dry-run` shows what it would replace. Running it again when the
+reviewed graphs are already active changes nothing. Apply a replaced extraction
+graph with `parse --source opensooq_eg_wayback --stale`.
+
 The first reviewed templates support:
 
 - The 2008 Windows-1256 property sale/rent tables. The observed category codes

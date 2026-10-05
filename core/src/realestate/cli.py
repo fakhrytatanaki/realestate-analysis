@@ -147,7 +147,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="default: max-fetches / rounds (50 with --rounds 0)",
     )
-    crawl.add_argument("--max-llm-calls", type=int, default=10, help="model calls, all rounds")
+    crawl.add_argument(
+        "--max-llm-calls",
+        type=int,
+        default=None,
+        help="model calls, all rounds (default: [sources.<key>] or [archive] max_llm_calls)",
+    )
     crawl.add_argument(
         "--max-enumeration-pages",
         type=int,
@@ -252,6 +257,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=[],
         metavar="KIND=PATTERN",
         help="induced vocabulary entries to remove, e.g. 'listing_type=sale|بيع'",
+    )
+    seed.add_argument(
+        "--replace",
+        action="store_true",
+        help="packaged reviewed rules: supersede active graphs, then re-route the frontier",
     )
     seed.add_argument("--dry-run", action="store_true", help="audit the candidate graph only")
     seed.add_argument("--out", default=None, help="audit report path (default var/audit/...)")
@@ -384,12 +394,17 @@ async def run(args: argparse.Namespace) -> int:
                 )
 
             case "crawl":
-                await _announce_llm(container, args.max_llm_calls)
+                max_llm_calls = (
+                    args.max_llm_calls
+                    if args.max_llm_calls is not None
+                    else container.settings.max_llm_calls(args.source)
+                )
+                await _announce_llm(container, max_llm_calls)
                 report = await container.crawler.crawl(
                     args.source,
                     rounds=args.rounds,
                     max_fetches=args.max_fetches,
-                    max_llm_calls=args.max_llm_calls,
+                    max_llm_calls=max_llm_calls,
                     fetches_per_round=args.fetches_per_round,
                     max_enumeration_pages=args.max_enumeration_pages,
                     max_link_lookups=args.max_link_lookups,
@@ -556,14 +571,32 @@ async def run(args: argparse.Namespace) -> int:
                                     "--retire and --out require curated extraction templates"
                                 )
                             seeded = await container.rule_seeds.seed(
-                                args.source, dry_run=args.dry_run
+                                args.source, dry_run=args.dry_run, replace_active=args.replace
                             )
                             seed_label = "would install" if args.dry_run else "installed"
                             print(
                                 f"{seed_label}: {', '.join(seeded.installed) or 'none'}; "
                                 f"retained active graphs: {', '.join(seeded.retained) or 'none'}"
                             )
+                            for domain, old, new in seeded.replaced:
+                                verb = "would replace" if args.dry_run else "replaced"
+                                print(f"{verb} {domain} v{old} with the reviewed graph as v{new}")
+                            if args.dry_run:
+                                return 0
+                            replaced = {domain for domain, _, _ in seeded.replaced}
+                            if RuleDomain.NAVIGATION in replaced:
+                                # Captures the old rules queued, skipped or deferred.
+                                _print_routed(
+                                    await container.crawler.route(args.source, reopen_removed=True)
+                                )
+                            if RuleDomain.EXTRACTION in replaced | set(seeded.installed):
+                                print(f"run `parse --source {args.source} --stale` to apply it")
                             return 0
+                        if args.replace:
+                            raise ConfigurationError(
+                                "--replace swaps in packaged reviewed graphs; curated "
+                                "extraction templates supersede induced ones with --retire"
+                            )
                         plan = await container.seeder.plan(
                             args.source,
                             retire=args.retire,

@@ -70,7 +70,9 @@ The database must already be running and migrated; no API or worker is required.
 Live sources fetch and parse with their configured `max_items` and `params`;
 `--max-items` overrides that live payload cap. Archive sources run the existing
 crawler with separate fetch/model/enumeration/link budgets. `--max-llm-calls 0`
-disables induction calls. Archive runs retain the crawler's `BACKFILL` trigger.
+disables induction calls. Without the flag, the model budget comes from the
+source's `max_llm_calls` in `etc/settings.toml`, else from `[archive]
+max_llm_calls` (default 10). Archive runs retain the crawler's `BACKFILL` trigger.
 Prepare reviewed archive rules as described below before starting a new archive
 source; this helper does not seed them. Use `--require-complete-enumeration` to
 hold archive processing until all configured years have been enumerated.
