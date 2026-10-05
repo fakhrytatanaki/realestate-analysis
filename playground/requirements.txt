@@ -1,0 +1,14 @@
+# Notebook environment for playground/ (kept apart from core/venv):
+#   python3.14 -m venv playground/.venv
+#   playground/.venv/bin/python -m pip install -r playground/requirements.txt
+jupyter
+nbconvert
+ipykernel
+pandas>=3.0
+numpy
+scipy
+statsmodels
+scikit-learn
+seaborn
+matplotlib
+psycopg[binary]
